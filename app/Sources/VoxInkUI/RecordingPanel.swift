@@ -50,6 +50,7 @@ struct RecordingPanelPlacement {
     }
 
     private func show(presentation: RecordingFeedbackPresentation, content: (CGFloat) -> AnyView) {
+        guard presentation.dismissAfter != .zero else { hide(); return }
         dismissal?.cancel()
         let connected = selectedScreen.map { chosen in NSScreen.screens.contains { $0 == chosen } } ?? false
         if !connected || (!wasBusy && presentation.busy) || !panel.isVisible {

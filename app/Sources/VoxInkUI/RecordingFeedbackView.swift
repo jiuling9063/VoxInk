@@ -21,7 +21,7 @@ public struct RecordingFeedbackPresentation {
     }
 
     var busy: Bool { phase != .ready && phase != .failed }
-    var dismissAfter: Duration? { busy ? nil : .seconds(phase == .failed ? 8 : 3) }
+    var dismissAfter: Duration? { busy ? nil : .seconds(phase == .failed ? 8 : 0) }
     var hint: String {
         switch phase {
         case .loading, .recording, .transcribing:

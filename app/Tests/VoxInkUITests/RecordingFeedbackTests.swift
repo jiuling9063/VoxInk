@@ -23,7 +23,7 @@ import Testing
         for phase in [AppStore.Phase.loading, .recording, .transcribing, .pasting, .cancelling] {
             #expect(RecordingFeedbackPresentation(phase: phase, status: "", target: "").dismissAfter == nil)
         }
-        #expect(RecordingFeedbackPresentation(phase: .ready, status: "", target: "").dismissAfter == .seconds(3))
+        #expect(RecordingFeedbackPresentation(phase: .ready, status: "", target: "").dismissAfter == .zero)
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "").dismissAfter == .seconds(8))
     }
 
@@ -32,6 +32,19 @@ import Testing
         #expect(invalid.safeElapsed == 0); #expect(invalid.safeLevel == 0)
         let excessive = RecordingFeedbackPresentation(phase: .recording, status: "", target: "", elapsed: 80, level: 2)
         #expect(excessive.safeElapsed == 60); #expect(excessive.safeLevel == 1)
+    }
+
+    @Test func completionHidesPanelSynchronouslyAndRepeatedUpdatesStayHidden() {
+        let feedback = RecordingPanel()
+        defer { feedback.hide() }
+        feedback.showPreview(.init(phase: .pasting, status: "正在写入", target: "测试"))
+        #expect(feedback.panel.isVisible)
+        feedback.showPreview(.init(phase: .ready, status: "已发送粘贴", target: "测试"))
+        #expect(!feedback.panel.isVisible)
+        feedback.showPreview(.init(phase: .ready, status: "已取消", target: "测试"))
+        #expect(!feedback.panel.isVisible)
+        feedback.showPreview(.init(phase: .failed, status: "写入失败", target: "测试"))
+        #expect(feedback.panel.isVisible)
     }
 
     @Test func placementFitsOffsetAndNarrowDisplays() {
