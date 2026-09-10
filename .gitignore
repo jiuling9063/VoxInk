@@ -1,0 +1,22 @@
+.DS_Store
+.env
+.env.*
+.codex/
+.playwright-cli/
+.playwright-mcp/
+**/.build/
+**/.swiftpm/
+.superpowers/
+dist/
+output/
+benchmark/corpus/audio/
+benchmark/corpus/manifest.jsonl
+benchmark/results/
+benchmark/models/
+*.wav
+*.pcm
+*.m4a
+*.log
+
+# Python benchmark helpers
+__pycache__/

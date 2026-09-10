@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-09-10",
+  "status": "user-selected warm-writing V2 deepening baseline",
+  "locked_asset": {
+    "path": "assets/logo-rain-impression-v2.png",
+    "sha256": "d7877b35a3b4c68c72282e9502b5fca6578c1487198b106703f090e27f49179a",
+    "width": 1254,
+    "height": 1254
+  },
+  "read_only_references": [
+    {
+      "path": "../design-warm-writing-v1/index.html",
+      "sha256": "50a01d99c6c5b9c569519157eb493145ccd53a5ac5d16815f9a36b8c026dc238"
+    },
+    {
+      "path": "../design-light-tech-v4/index.html",
+      "sha256": "35b6d00051b12f2fa1d7cd507c4b8b73e48769eac844cd80b4499c01fd98dd87"
+    },
+    {
+      "path": "../design-light-tech-v4/assets/logo-concept-v2.png",
+      "sha256": "b15fd592c11e09f2fcda62b9e80a39b3a204b035aa777421fff98a416e67ea3e"
+    }
+  ],
+  "scope": "independent design review only; native app and approved light-tech v4 unchanged"
+}
+

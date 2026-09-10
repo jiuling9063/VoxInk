@@ -1,0 +1,10 @@
+{
+  "status": "visual_direction_approved",
+  "note": "轻盈科技视觉定稿基准；原生实现与生产图标资产仍待完成。",
+  "files": {
+    "docs/design-light-tech-v4/index.html": "35b6d00051b12f2fa1d7cd507c4b8b73e48769eac844cd80b4499c01fd98dd87",
+    "docs/design-light-tech-v4/refinement.css": "ee6887f474ac44aab1944c0a293c50daa284e41e32189aab44cf42617c8668d4",
+    "docs/design-light-tech-v4/build-preview.py": "2d09188830816489f5a4ff62dbb464c38a3d13e1fd3d8cec9a49d498bd8aa05c",
+    "docs/design-light-tech-v4/assets/logo-concept-v2.png": "b15fd592c11e09f2fcda62b9e80a39b3a204b035aa777421fff98a416e67ea3e"
+  }
+}

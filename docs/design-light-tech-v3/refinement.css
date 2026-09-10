@@ -1,0 +1,45 @@
+/* v3: shared alignment rails, grouped actions, less HUD chrome, larger type. */
+.main-window .titlebar { padding:0 24px; height:48px; }
+.main-window .titlebar>button { min-width:54px; text-align:right; }
+.main-window .app-content { padding:24px; min-height:0; }
+.capture-zone { display:grid; gap:14px; }
+.capture-zone .readiness { font-size:11px; line-height:16px; gap:8px; }
+.readiness-divider { height:9px; width:1px; background:var(--line); margin:0 2px; }
+.capture-zone h3 { font-size:22px; line-height:1.4; letter-spacing:-.045em; font-weight:600; }
+.record-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.record-toolbar .keys { gap:6px; }
+.record-toolbar kbd { padding:5px 9px; font-size:11px; }
+.record-toolbar .primary { padding:8px 18px; min-height:36px; font-size:12px; }
+.main-window .result { margin:20px 0 0; padding:18px 0 0; }
+.main-window .result-head { align-items:center; gap:12px; }
+.main-window .result-head h3 { font-size:12px; font-weight:600; letter-spacing:0; }
+.main-window .result-head>span { font-size:11px; }
+.main-window .result blockquote { margin:10px 0 12px; padding:15px 16px; min-height:94px; font-size:15px; line-height:1.85; border:1px solid var(--line); border-radius:11px; background:linear-gradient(135deg,#ffffff80,transparent),var(--soft); }
+.result-toolbar { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:14px; }
+.result-toolbar details { margin:0; min-width:0; padding-top:5px; }
+.result-toolbar details p { overflow-wrap:anywhere; line-height:1.75; padding-top:4px; }
+.result-toolbar summary { width:fit-content; }
+.main-window .result .action-row { gap:6px; justify-content:end; }
+.main-window .result .action-row button { padding:5px 10px; min-height:30px; font-size:11px; }
+.main-window .status-line { margin:12px 0 0; min-height:16px; font-size:10.5px; line-height:1.6; overflow-wrap:anywhere; }
+.window-footer { display:flex; align-items:center; justify-content:space-between; padding:9px 24px; gap:12px; border-top:1px solid var(--line); background:var(--soft); font-size:10px; color:var(--muted); }
+.window-footer button { background:transparent; padding:3px 0; border:0; border-radius:4px; font-size:10px; }
+.window-footer button:hover { color:var(--accent); }
+body[data-theme=dark] .main-window .result blockquote { background:linear-gradient(135deg,#a6deef08,transparent),var(--soft); }
+.hud { --glass-alpha:.68; width:min(288px,100%); min-height:56px; padding:10px 12px; border-radius:17px; border-color:rgba(212,248,255,.24); box-shadow:0 8px 18px -12px #143e526b,inset 0 1px 0 #f0feff2b; }
+.hud-top { gap:8px; min-height:34px; }
+.waves { width:26px; height:24px; gap:2px; filter:drop-shadow(0 0 2px #75ecf133); }
+.waves i { width:2px; max-height:22px; }
+.hud-word strong { font-size:13px; line-height:18px; letter-spacing:0; }
+.hud-word span { font-size:11px; line-height:15px; margin-top:1px; color:#eff7fa; overflow-wrap:anywhere; }
+.hud-time { font-size:10.5px; color:#e4f1f7; }
+.hud-cancel { padding:3px 4px; font-size:10px; border-color:#e1f9ff28; background:transparent; }
+.hud::before { background:radial-gradient(ellipse at var(--pointer-x) var(--pointer-y),rgba(var(--light-rgb),.2),transparent 55%),linear-gradient(90deg,transparent,rgba(9,25,35,.12) 27%,rgba(9,25,35,.12) 73%,transparent); }
+.hud::after { height:1px; left:20%; right:20%; box-shadow:0 0 7px 1px rgba(var(--light-rgb),.26); }
+.hud-actions { margin-top:9px; padding-top:9px; border-top-color:#ffffff24; }
+.hud-actions button { min-height:28px; font-size:11px; }
+body[data-material=glow] .hud { box-shadow:0 8px 20px -12px #163e5280,0 0 17px -8px #51d8e954,inset 0 1px 0 #e8ffff40; }
+.reduce .hud::before { background:linear-gradient(90deg,transparent,rgba(9,25,35,.12) 27%,rgba(9,25,35,.12) 73%,transparent); }
+@media(prefers-reduced-motion:reduce) { .hud::before { background:linear-gradient(90deg,transparent,rgba(9,25,35,.12) 27%,rgba(9,25,35,.12) 73%,transparent); } }
+@media(max-width:680px) { .main-window .app-content { padding:20px; } .main-window .titlebar,.window-footer { padding-left:20px; padding-right:20px; } .hud { padding:10px 12px; } }
+@media(max-width:380px) { .result-toolbar { grid-template-columns:1fr; gap:10px; } .main-window .result .action-row { justify-content:start; } .capture-zone h3 { font-size:21px; } }

@@ -1,0 +1,139 @@
+{
+  "manifest_version": "1",
+  "generated_at": "2026-09-07",
+  "status": "ready_for_smoke_download",
+  "verification_basis": "official_remote_metadata_and_pinned_source_snapshots",
+  "blockers": [],
+  "warnings": [
+    "AutoGLM token service still returned HTTP 503; official GitHub and Hugging Face endpoints were used directly.",
+    "GitHub API remained intermittent, but pinned source snapshots, successful git ls-remote results, and revision-addressed raw files provide the recorded source evidence.",
+    "The current WhisperKit remote support config lists M2, M3, and M4 but does not yet list M5; final acceptance still requires a smoke test and benchmark on the target M5/16GB MacBook Air.",
+    "No multi-gigabyte model weights were downloaded during metadata verification."
+  ],
+  "hash_policy": {
+    "lfs_files": "SHA-256 and byte size from Hugging Face LFS metadata at the pinned repository revision.",
+    "non_lfs_files": "SHA-256 computed from content fetched through a revision-addressed Hugging Face URL; fetched byte count matched repository metadata."
+  },
+  "candidates": [
+    {
+      "id": "qwen3-asr-0.6b-mlx-4bit",
+      "readiness": "ready_for_smoke_download",
+      "engine": {
+        "name": "speech-swift",
+        "source_url": "https://github.com/felixfu824/speech-swift.git",
+        "source_revision": "d603472b11c21f5fb6492e9448a04ee669d0bf64",
+        "version": "unreleased-revision",
+        "license": "Apache-2.0"
+      },
+      "runtime_dependencies": [{"name": "mlx-swift", "source_url": "https://github.com/ml-explore/mlx-swift", "source_revision": "61b9e011e09a62b489f6bd647958f1555bdf2896", "version": "0.31.3"}],
+      "integration_evidence": {
+        "name": "Lamitype",
+        "source_url": "https://github.com/felixfu824/Lamitype.git",
+        "source_revision": "61a4d2fd6d01a00084c19568cd55a4a41e2085e2",
+        "version": "0.5.12",
+        "license": "MIT",
+        "default_model_id": "aufklarer/Qwen3-ASR-0.6B-MLX-4bit"
+      },
+      "model": {
+        "repository": "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+        "revision": "bc441bd1e4295c1f42d9879f056049a925b6e013",
+        "license": "Apache-2.0",
+        "reported_size_bytes": 712777119,
+        "file_count": 6,
+        "files": [
+          {"path": "config.json", "size_bytes": 7187, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/config.json", "sha256": "923618cf5ca452fda0253a6be5c1a17f94a2e4851d3b98beb45848565587bd72", "sha256_source": "content_sha256_at_revision"},
+          {"path": "merges.txt", "size_bytes": 1671853, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/merges.txt", "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", "sha256_source": "content_sha256_at_revision"},
+          {"path": "model.safetensors", "size_bytes": 708236945, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors", "sha256": "70c7e67e588062adce4f10796e47ad42ead51c6671eda61a0987eae38ca95ddf", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "model.safetensors.index.json", "size_bytes": 71814, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors.index.json", "sha256": "e3bb80ef0fd42a5be07b04e90c97d60460bbde8af3531e0bfe9100a61404d81a", "sha256_source": "content_sha256_at_revision"},
+          {"path": "tokenizer_config.json", "size_bytes": 12487, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/tokenizer_config.json", "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c", "sha256_source": "content_sha256_at_revision"},
+          {"path": "vocab.json", "size_bytes": 2776833, "download_url": "https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/vocab.json", "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", "sha256_source": "content_sha256_at_revision"}
+        ]
+      },
+      "validation_limits": ["The current machine is M4/32GB; performance acceptance must be repeated on the target M5/16GB device."]
+    },
+    {
+      "id": "whisperkit-large-v3-turbo",
+      "readiness": "ready_for_smoke_download_on_m4",
+      "engine": {"name": "WhisperKit", "source_url": "https://github.com/argmaxinc/WhisperKit.git", "source_revision": "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef", "version": "0.18.0", "license": "MIT"},
+      "integration_evidence": {"name": "OpenQuack", "source_url": "https://github.com/larryxiao/openquack.git", "source_revision": "d13ebf641442d7b4d3453bc9f112979b97cd5bdd", "locked_engine_revision": "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef", "license": "MIT"},
+      "model": {
+        "repository": "argmaxinc/whisperkit-coreml",
+        "requested_variant": "large-v3-turbo",
+        "resolved_download_argument": "openai_whisper-large-v3_turbo_954MB",
+        "resolved_folder": "openai_whisper-large-v3_turbo_954MB",
+        "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+        "license": "MIT",
+        "reported_size_bytes": 1052848880,
+        "file_count": 22,
+        "files": [
+          {"path": "openai_whisper-large-v3_turbo_954MB/AudioEncoder.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "93aa870aa79eefc6c49d051dff2c60a78e2529e8cebc71ffda1eeef71e1b6d20", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/AudioEncoder.mlmodelc/coremldata.bin", "size_bytes": 348, "sha256": "63b4db8a854c7a64a10b0a0b97048d6d8ee557536367f44dc9fb95fad4bffcf6", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/AudioEncoder.mlmodelc/metadata.json", "size_bytes": 2002, "sha256": "40f609fa22d1ff0a777c2b8b117be9f7bcd3b6eded0eaf3fc52c6e8613157e83", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/AudioEncoder.mlmodelc/model.mil", "size_bytes": 7567996, "sha256": "4438ba7e0ab511d38c054bd94510bdd19ce649f4863a0b1fa0cd9589dec4bdff", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/AudioEncoder.mlmodelc/weights/weight.bin", "size_bytes": 353908416, "sha256": "3c844b37855e47858a41d36ff89f6c6b39352e2455ea1a836b9f3d327113b1e9", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/MelSpectrogram.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "7f478e6afa8fdee3711d97b00728f82ee4dcdf2912f7ff033ee0dfcf57bf28bb", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/MelSpectrogram.mlmodelc/coremldata.bin", "size_bytes": 329, "sha256": "a888718e98af679eee42db9e3609627472c32f77e4fdda28f3735960cbf526b3", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/MelSpectrogram.mlmodelc/metadata.json", "size_bytes": 1878, "sha256": "dcb839ca16e598dfb1720af0294a8e21ab18b3e5afab136093aa2fd5f5cfc923", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/MelSpectrogram.mlmodelc/model.mil", "size_bytes": 10166, "sha256": "6e0c6fc2cb23de4e5b6c25897047c12402da201b5a8717fa5ee9f3108b1cb702", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/MelSpectrogram.mlmodelc/weights/weight.bin", "size_bytes": 373376, "sha256": "9cf464821754e2e0fa9cd2d9c103f3cb840e6c435f8514c557470b52349969de", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoder.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "cfef4289e791f41d286b53ff1e0d1000d72eb7dd1dc29435ff306137de83abe8", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoder.mlmodelc/coremldata.bin", "size_bytes": 637, "sha256": "481a53117fe757fd91e9d754ff31e4a0631a8baaef2f8b9ef91832e840974332", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoder.mlmodelc/metadata.json", "size_bytes": 4959, "sha256": "b3c600cc0a8429301b2729b60fe7068a8ae49c9ba26923db56287291ea967fd1", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoder.mlmodelc/model.mil", "size_bytes": 1943315, "sha256": "5d205bc2127a1c176c4bacf4b928bc249cff80c921a1f8a07041fb90247d4163", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoder.mlmodelc/weights/weight.bin", "size_bytes": 590719924, "sha256": "2cfb2d5996273fada9ecac14219766a3b5d1c3b0f0f13039c2bc177cbef18eeb", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoderContextPrefill.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "352d00fa1b9b29c06b538013f6b2884029d673a2a246abcd783d5581c4f04c83", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoderContextPrefill.mlmodelc/coremldata.bin", "size_bytes": 382, "sha256": "a91550bdd77216fd43a9b00251b6b5aebbcb2a2eee5ca92b2b3cdd0b8aa75971", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoderContextPrefill.mlmodelc/metadata.json", "size_bytes": 2236, "sha256": "d3e0c9240ee80218a6d5ca3e06aab95ed13b41c2fcca126a18ac269d71208010", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoderContextPrefill.mlmodelc/model.mil", "size_bytes": 3779, "sha256": "401b68a4d8a97c1ed03d6253f061ae7c65ea4ee3a3c64bb54f2f64102a11cb0f", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/TextDecoderContextPrefill.mlmodelc/weights/weight.bin", "size_bytes": 98304192, "sha256": "8eab25e68c8eab6f023e2dd2964794c2133fe4af042978e6fbd2b3c8a0f6714e", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/config.json", "size_bytes": 1163, "sha256": "798b69c08cf93b2b03d94bea6eb3eb25fd4712259712d8a62ed2483fdf818a9e", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-large-v3_turbo_954MB/generation_config.json", "size_bytes": 2810, "sha256": "d24f9cca0f448609a71ae044b736023706382f45e9700e0dffb2559d10cf1fea", "sha256_source": "content_sha256_at_revision"}
+        ]
+      },
+      "validation_limits": [
+        "WhisperKit 0.18.0 cannot resolve the original large-v3-turbo argument because the repository uses an underscore before turbo.",
+        "The unqualified large-v3_turbo argument is ambiguous between standard and 954MB folders; the resolved full folder name must be passed.",
+        "The remote device support config does not list M5; final target-device compatibility remains unproven."
+      ]
+    },
+    {
+      "id": "whisperkit-medium",
+      "readiness": "ready_for_smoke_download",
+      "engine": {"name": "WhisperKit", "source_url": "https://github.com/argmaxinc/WhisperKit.git", "source_revision": "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef", "version": "0.18.0", "license": "MIT"},
+      "integration_evidence": {"name": "OpenQuack", "source_url": "https://github.com/larryxiao/openquack.git", "source_revision": "d13ebf641442d7b4d3453bc9f112979b97cd5bdd", "locked_engine_revision": "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef", "license": "MIT"},
+      "model": {
+        "repository": "argmaxinc/whisperkit-coreml",
+        "requested_variant": "medium",
+        "resolved_download_argument": "medium",
+        "resolved_folder": "openai_whisper-medium",
+        "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+        "license": "MIT",
+        "reported_size_bytes": 1529654233,
+        "file_count": 20,
+        "files": [
+          {"path": "openai_whisper-medium/AudioEncoder.mlcomputeplan.json", "size_bytes": 91482, "sha256": "8f163b1d7f16d3f9647e61d015807bec163638495ea5c24f00a4b67771a6e506", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/AudioEncoder.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "1ac17e8f029504f6ecb645f539e039e650428b135cbed2d4234a4e65fde271d5", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/AudioEncoder.mlmodelc/coremldata.bin", "size_bytes": 347, "sha256": "d875fd7e0a389117711940fc2052b29dc4ed0fd07813265a13cb041ae068f805", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/AudioEncoder.mlmodelc/metadata.json", "size_bytes": 1799, "sha256": "0ae579eda748a315d8fa9efb81c3c3de2747441d83581f1c571384148b5ac810", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/AudioEncoder.mlmodelc/model.mil", "size_bytes": 396719, "sha256": "cc283d26dcb5b6e873ab17fa761fb14cb9f240e94fe8a21ae94ce6e33282fc3b", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/AudioEncoder.mlmodelc/weights/weight.bin", "size_bytes": 614460544, "sha256": "577c78ed7e0ae71f9ed6fdb063dc74a0f4c0c44d04118111650458973f7ddae6", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlcomputeplan.json", "size_bytes": 4004, "sha256": "c6fd6ed4c86bc6d9bdcc4e5e9adead3415530019a9f1c9aa88a91900a1b07b14", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "847173d00b238eb63f0d3dab36dc52b7a3fd1d4b31e95d4093975fada8fde2cd", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlmodelc/coremldata.bin", "size_bytes": 328, "sha256": "ebbb4bf9699f7d65018645e168ecedf47541eee154800f9e9766f1ac90746416", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlmodelc/metadata.json", "size_bytes": 1878, "sha256": "ae5fb57757692926faa57f89f2345c8d1efe20b73ac9df535bde195522e3b248", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlmodelc/model.mil", "size_bytes": 10132, "sha256": "646b86a0fa5a89c95b0de55f696751047f18b040fbc183a19c343da8d9d8838b", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/MelSpectrogram.mlmodelc/weights/weight.bin", "size_bytes": 354080, "sha256": "801024dbc7a89c677be1f8b285de3409e35f7d1786c9c8d9d0d6842ac57a1c83", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/TextDecoder.mlcomputeplan.json", "size_bytes": 186396, "sha256": "2987c54dce6bb9b2bbc44c3a128b16f24b4596689f66fc13cffcc7d673deef9e", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/TextDecoder.mlmodelc/analytics/coremldata.bin", "size_bytes": 243, "sha256": "c314ca0a7738acc7ac9f4c04da834cf46972c697bd1a6c5413c18e9d278a3c81", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/TextDecoder.mlmodelc/coremldata.bin", "size_bytes": 637, "sha256": "aed3dffd67cc0be59aa28a552d8963cb27ec29d60996ede9fc74162fa09af0a4", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/TextDecoder.mlmodelc/metadata.json", "size_bytes": 4800, "sha256": "acc50d3b46186a8ad076b51fc0a1094dedc85bc9fdbb1c23f223f90845a81b9a", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/TextDecoder.mlmodelc/model.mil", "size_bytes": 707858, "sha256": "1f4da05ff4415307adb526829834c66d3ddc2c3abe112bfbddbfc0404d50f55a", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/TextDecoder.mlmodelc/weights/weight.bin", "size_bytes": 913428274, "sha256": "283878d285cb0e557eeb1c6a1524eb5fd33cae2c289a114bc9e72ca76c0bfc75", "sha256_source": "huggingface_lfs_metadata"},
+          {"path": "openai_whisper-medium/config.json", "size_bytes": 1472, "sha256": "25857725440d110777730fc27762b9c2415f068282dcc9535cf9d929740f9894", "sha256_source": "content_sha256_at_revision"},
+          {"path": "openai_whisper-medium/generation_config.json", "size_bytes": 2754, "sha256": "9e805015e900f8c96138cc3db93843bccc1912fa17a188abbdefcfbe1bf25734", "sha256_source": "content_sha256_at_revision"}
+        ]
+      },
+      "validation_limits": ["The current machine is M4/32GB; performance acceptance must be repeated on the target M5/16GB device."]
+    }
+  ]
+}

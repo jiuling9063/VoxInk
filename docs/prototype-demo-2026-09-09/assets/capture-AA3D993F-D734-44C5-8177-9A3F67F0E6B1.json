@@ -1,0 +1,13 @@
+{
+  "appearance" : "light",
+  "full_keyboard_access" : false,
+  "height_pixels" : 1550,
+  "height_points" : 775,
+  "image" : "capture-AA3D993F-D734-44C5-8177-9A3F67F0E6B1.png",
+  "phase" : "failed",
+  "simulation" : true,
+  "source" : "NSView cacheDisplay of checker-owned content; not desktop screenshot",
+  "width_pixels" : 1320,
+  "width_points" : 660,
+  "window" : "VoxInk 主窗口检查"
+}

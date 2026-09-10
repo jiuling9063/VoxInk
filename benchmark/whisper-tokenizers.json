@@ -1,0 +1,48 @@
+{
+  "tokenizers": [
+    {
+      "candidate_id": "whisperkit-large-v3-turbo",
+      "repository": "openai/whisper-large-v3",
+      "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1",
+      "files": [
+        {
+          "path": "tokenizer.json",
+          "size_bytes": 2480617,
+          "sha256": "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size_bytes": 282843,
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+        },
+        {
+          "path": "config.json",
+          "size_bytes": 1272,
+          "sha256": "ad0e8d1e46f4d01f7861a21509e5d0f977d6cc1f367a370603c92541d819807b"
+        }
+      ]
+    },
+    {
+      "candidate_id": "whisperkit-medium",
+      "repository": "openai/whisper-medium",
+      "revision": "abdf7c39ab9d0397620ccaea8974cc764cd0953e",
+      "files": [
+        {
+          "path": "tokenizer.json",
+          "size_bytes": 2480466,
+          "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size_bytes": 282683,
+          "sha256": "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce"
+        },
+        {
+          "path": "config.json",
+          "size_bytes": 1991,
+          "sha256": "18706810eb740d1dc54d1db181358d5f8578600d0f449e51dfd4798c0223a1f5"
+        }
+      ]
+    }
+  ]
+}
