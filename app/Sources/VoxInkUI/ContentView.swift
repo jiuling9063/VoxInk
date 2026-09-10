@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct ContentView: View {
+    @Environment(\.colorScheme) private var scheme
+    private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
     @State private var importing = false
     @State private var showingOriginal = false
@@ -40,8 +42,8 @@ public struct ContentView: View {
                 Spacer()
             }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 12)
         }
-        .tint(Color(red: 0.33, green: 0.49, blue: 0.52))
-        .background(Color(nsColor: .windowBackgroundColor))
+        .tint(theme.accent)
+        .background(theme.background)
         .frame(minWidth: 620, minHeight: 520)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
             if case .success(let url) = result { store.importAudio(url) }
@@ -53,7 +55,7 @@ public struct ContentView: View {
             Image("logo-rain-impression-v2", bundle: .module)
                 .resizable().scaledToFit().frame(width: 34, height: 34)
                 .accessibilityLabel("语落 VoxInk")
-            Text("语落").font(.title2.bold())
+            Text("语落").font(.title2.bold()).foregroundStyle(theme.ink)
             Text("VoxInk").foregroundStyle(.secondary)
             Spacer()
             Text("开发预览").font(.caption).foregroundStyle(.secondary)
@@ -64,7 +66,7 @@ public struct ContentView: View {
     private var dailyInstruction: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(store.shortcutMode == .holdToTalk ? "按住说话，松开写入。" : "按一下说话，再按一下写入。")
-                .font(.title.bold())
+                .font(.title.bold()).foregroundStyle(theme.ink)
             Text("先点选输入框，再使用 \(store.shortcutCombination.title)。识别完成后，文字会自动写入。")
                 .foregroundStyle(.secondary)
             HStack {
@@ -88,14 +90,14 @@ public struct ContentView: View {
                 if !store.canStart && store.phase != .recording { ProgressView().controlSize(.small) }
                 else {
                     Image(systemName: store.phase == .failed ? "exclamationmark.circle" : "waveform")
-                        .foregroundStyle(store.phase == .failed ? Color.orange : Color.accentColor)
+                        .foregroundStyle(store.phase == .failed ? Color.orange : theme.accent)
                 }
                 Text(store.status).accessibilityIdentifier("dictationStatus")
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 if store.phase == .recording { Text("\(Int(store.elapsed)) / 60 秒").monospacedDigit() }
             }
-            if store.phase == .recording { ProgressView(value: Double(store.level)).tint(.accentColor) }
+            if store.phase == .recording { ProgressView(value: Double(store.level)).tint(theme.accent) }
             if let recovery = store.recovery {
                 Text(recovery.guidance).font(.callout).foregroundStyle(.secondary)
                 recoveryButton(recovery)
@@ -111,7 +113,7 @@ public struct ContentView: View {
             }
             Text("窗口内试录与导入只展示结果；使用快捷键录音才会自动写入目标应用。")
                 .font(.caption).foregroundStyle(.secondary)
-        }.padding(18).background(.background, in: RoundedRectangle(cornerRadius: 14))
+        }.padding(18).writingSurface()
     }
 
     @ViewBuilder private func recoveryButton(_ recovery: RecoveryAction) -> some View {
@@ -138,7 +140,7 @@ public struct ContentView: View {
                         .disabled(!store.canStart)
                 }
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background, in: RoundedRectangle(cornerRadius: 12))
+                .writingSurface()
         }
         if let warning = store.recoveryStorageWarning {
             Label(warning, systemImage: "exclamationmark.triangle")
@@ -170,8 +172,14 @@ public struct ContentView: View {
                 }.frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 Text(store.transcript).font(.body).lineSpacing(5).textSelection(.enabled)
+                    .foregroundStyle(theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading).padding(16)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                    .writingSurface()
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(theme.accent.opacity(0.45))
+                            .frame(width: 2).padding(.vertical, 18).padding(.leading, 6)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    }
                 if !store.rawTranscript.isEmpty {
                     DisclosureGroup("查看识别原文", isExpanded: $showingOriginal) {
                         if store.rawTranscript == store.transcript {

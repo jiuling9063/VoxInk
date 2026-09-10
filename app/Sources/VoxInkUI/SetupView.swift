@@ -12,7 +12,7 @@ struct ReadinessRow<Actions: View>: View {
             Image(systemName: icon)
                 .font(.title3).foregroundStyle(.tint)
                 .frame(width: 38, height: 38)
-                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
@@ -67,7 +67,7 @@ struct SetupView: View {
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 6)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .writingSurface()
             if let progress = store.modelInstallationProgress {
                 ProgressView(progress.title, value: progress.fraction)
                     .accessibilityLabel("模型准备进度")
