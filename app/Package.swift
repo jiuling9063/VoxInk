@@ -21,7 +21,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "VoxInkCore", dependencies: [.product(name: "OpenCCSwift", package: "opencc-swift")]),
-        .target(name: "VoxInkUI", dependencies: ["VoxInkCore"], resources: [.copy("Resources")]),
+        .target(name: "VoxInkUI", dependencies: ["VoxInkCore"], resources: [.process("Resources")]),
         .executableTarget(name: "VoxInkApp", dependencies: ["VoxInkUI"]),
         .executableTarget(name: "VoxInkFeedbackCheck", dependencies: ["VoxInkUI"]),
         .executableTarget(name: "VoxInkSpeechCheck", dependencies: ["VoxInkCore"]),

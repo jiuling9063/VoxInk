@@ -43,6 +43,18 @@ trap 'rm -rf "$STAGE"' EXIT
 BUNDLE="$STAGE/VoxInk.app"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/Worker"
 cp "$APP_BIN/VoxInk" "$BUNDLE/Contents/MacOS/VoxInk"
+for resource in "$APP_BIN/"*.bundle; do
+  /usr/bin/ditto --norsrc --noextattr "$resource" "$BUNDLE/Contents/Resources/$(basename "$resource")"
+done
+ICONSET="$STAGE/VoxInk.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+  /usr/bin/sips -z "$size" "$size" "$ROOT/app/Sources/VoxInkUI/Resources/logo-rain-impression-v2.png" \
+    --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  /usr/bin/sips -z "$((size * 2))" "$((size * 2))" "$ROOT/app/Sources/VoxInkUI/Resources/logo-rain-impression-v2.png" \
+    --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+done
+/usr/bin/iconutil -c icns "$ICONSET" -o "$BUNDLE/Contents/Resources/VoxInk.icns"
 cp "$WORKER_BIN/voxink-qwen-smoke" "$BUNDLE/Contents/Resources/Worker/"
 for resource in "$WORKER_BIN/"*.bundle; do
   /usr/bin/ditto --norsrc --noextattr "$resource" "$BUNDLE/Contents/Resources/Worker/$(basename "$resource")"
@@ -59,6 +71,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>VoxInk</string>
 <key>CFBundleIdentifier</key><string>local.voxink.preview</string>
 <key>CFBundleName</key><string>语落 VoxInk</string>
+<key>CFBundleIconFile</key><string>VoxInk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>
 <key>CFBundleVersion</key><string>1</string>
