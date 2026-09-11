@@ -15,13 +15,31 @@ public struct ContentView: View {
             header
             Divider()
             ScrollViewReader { scroll in
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        Text("工作空间").font(.caption).foregroundStyle(.secondary)
+                        Button { scroll.scrollTo("activity", anchor: .top) } label: {
+                            Label("语音输入", systemImage: "waveform")
+                        }
+                        Button { scroll.scrollTo("result", anchor: .top) } label: {
+                            Label("本次结果", systemImage: "text.alignleft")
+                        }
+                        Divider()
+                        SettingsLink { Label("偏好设置", systemImage: "slider.horizontal.3") }
+                        Spacer()
+                        Label("本机识别", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
+                    }.buttonStyle(.plain).padding(16).frame(width: 140).background(theme.paper)
+                    Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         if !store.setupCompleted { SetupView(store: store) }
-                        else { dailyInstruction }
-                        recordingControls.id("activity")
+                        else {
+                            statusHero
+                            usageCards
+                        }
+                        if !store.setupCompleted { recordingControls.id("activity") }
                         retainedRecording
-                        result
+                        result.padding(18).writingSurface().id("result")
                         diagnostics
                     }.padding(24)
                 }
@@ -33,6 +51,7 @@ public struct ContentView: View {
                 }
                 .onChange(of: originalHeight) { _, _ in
                     if showingOriginal { scroll.scrollTo("original", anchor: .bottom) }
+                }
                 }
             }
             Divider()
@@ -58,9 +77,35 @@ public struct ContentView: View {
             Text("语落").font(.title2.bold()).foregroundStyle(theme.ink)
             Text("VoxInk").foregroundStyle(.secondary)
             Spacer()
-            Text("开发预览").font(.caption).foregroundStyle(.secondary)
+            Text(store.modelState.title).font(.caption.weight(.medium)).foregroundStyle(theme.accent)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(theme.accent.opacity(0.1), in: Capsule())
             SettingsLink { Label("设置", systemImage: "gearshape") }
         }.padding(.horizontal, 24).padding(.vertical, 16)
+    }
+
+    private var statusHero: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("语音工作台", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+            dailyInstruction
+            recordingControls
+        }.padding(24).writingSurface().id("activity")
+    }
+
+    private var usageCards: some View {
+        HStack(spacing: 12) {
+            usageCard(title: "麦克风", value: store.microphoneAuthorization == .authorized ? "已允许" : "待授权", detail: "开始录音后采集")
+            usageCard(title: "识别方式", value: "本机处理", detail: "音频不离开设备")
+            usageCard(title: "文字写入", value: store.pastePermissionGranted ? "已允许" : "待授权", detail: "辅助功能权限")
+        }
+    }
+
+    private func usageCard(title: String, value: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.headline).lineLimit(1).minimumScaleFactor(0.75)
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).writingSurface()
     }
 
     private var dailyInstruction: some View {
