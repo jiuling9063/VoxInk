@@ -9,6 +9,60 @@ import VoxInkCore
     @Published public private(set) var status = "准备就绪"
     @Published public private(set) var transcript = ""
     @Published public private(set) var rawTranscript = ""
+    @Published public private(set) var polishingEnabled = false
+    @Published public private(set) var polishedPreview: String?
+    @Published public private(set) var polishMessage = ""
+    @Published public private(set) var isPolishing = false
+    private let polishingService: any PolishingService
+    private var polishTask: Task<Void, Never>?
+    private var polishGeneration = UUID()
+
+    public func setPolishingEnabled(_ enabled: Bool) {
+        polishingEnabled = enabled
+        preferences?.set(enabled, forKey: "polishingEnabled")
+        discardPolish()
+    }
+
+    public func previewPolish() {
+        guard polishingEnabled, canStart, !transcript.isEmpty else { return }
+        discardPolish()
+        let token = polishGeneration
+        let source = transcript
+        isPolishing = true
+        polishMessage = "正在本机润色…"
+        polishTask = Task { [weak self, polishingService] in
+            do {
+                let result = try await polishingService.polish(source)
+                guard let self, self.polishGeneration == token, self.transcript == source else { return }
+                self.polishedPreview = result.accepted ? result.text : nil
+                self.polishMessage = result.accepted ? "润色预览，请核对后复制；原文未改动。" : "结果未通过保真检查，已保留原文。"
+                self.isPolishing = false
+            } catch {
+                guard let self, self.polishGeneration == token else { return }
+                self.polishMessage = (error as? LocalPolishingService.Failure)?.errorDescription ?? "润色未完成，原文已保留。"
+                self.isPolishing = false
+            }
+        }
+    }
+
+    public func discardPolish() {
+        polishGeneration = UUID()
+        polishTask?.cancel(); polishTask = nil
+        isPolishing = false
+        polishedPreview = nil
+        polishMessage = ""
+    }
+
+    public func copyPolishedPreview() {
+        guard canStart, polishingEnabled, let polishedPreview else { return }
+        polishMessage = clipboardWriter(polishedPreview) ? "已复制整理结果" : "复制失败，请重试"
+    }
+    @Published private(set) var sessionHistory: [SessionTranscript] = []
+
+    func copyHistory(_ entry: SessionTranscript) -> Bool {
+        guard canStart, sessionHistory.contains(where: { $0.id == entry.id }) else { return false }
+        return clipboardWriter(entry.text)
+    }
     @Published public private(set) var conversionWarning: String?
     @Published public private(set) var elapsed: TimeInterval = 0
     @Published public private(set) var level: Float = 0
@@ -68,6 +122,7 @@ import VoxInkCore
     }
 
     public init(
+        polishingService: any PolishingService = LocalPolishingService(),
         service: any TranscriptionService = QwenTranscriptionService(),
         pasteService: any PasteService = PasteCoordinator(),
         recorder: any AudioRecording = AudioCapture(),
@@ -86,9 +141,11 @@ import VoxInkCore
         }
     ) {
         self.service = service
+        self.polishingService = polishingService
         self.pasteService = pasteService
         self.recorder = recorder
         self.preferences = preferences
+        self.polishingEnabled = preferences?.bool(forKey: "polishingEnabled") ?? false
         self.microphoneStatus = microphoneStatus
         self.setupCompleted = preferences?.bool(forKey: "setupCompleted") ?? false
         self.shortcutMode = preferences?.string(forKey: "shortcutMode").flatMap(ShortcutMode.init(rawValue:)) ?? .holdToTalk
@@ -204,6 +261,7 @@ import VoxInkCore
     }
 
     public func shutdown() async {
+        discardPolish()
         maintenanceTask?.cancel(); maintenanceTask = nil
         if canCancel || phase == .cancelling {
             let keepPrevious = retryingAudioID == nil && phase != .transcribing && phase != .recording && phase != .pasting
@@ -412,6 +470,8 @@ import VoxInkCore
             let warnings = [converted.warning, dictionaryUnavailable ? "词典暂不可用，本次使用基础文字规则" : nil].compactMap { $0 }
             conversionWarning = warnings.isEmpty ? nil : warnings.joined(separator: "；")
             transcript = text
+            discardPolish()
+            sessionHistory.insert(SessionTranscript(text: text, date: Date()), at: 0)
             if let target = activeTarget {
                 lastTarget = target
                 await deliver(text, to: target, token: token)

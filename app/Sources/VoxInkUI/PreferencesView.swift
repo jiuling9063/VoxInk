@@ -47,6 +47,9 @@ public struct PreferencesView: View {
                     LabeledContent("单次录音", value: "最长 60 秒 · Esc 取消")
                 }
                 Section("隐私") {
+                    Toggle("启用轻度润色预览", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
+                    Text("默认关闭。需要安装本地润色模型。手动生成预览，最长等待 30 秒；可取消，不自动替换写入文字。润色可能改变含义，请核对原文。")
+                        .font(.caption).foregroundStyle(.secondary)
                     Text("音频仅在本机识别。完成写入、复制或取消后删除；未完成录音最多保留一条、有效期 24 小时，可随时删除。识别文字只保留在当前会话，不建立历史记录。")
                         .font(.callout).foregroundStyle(.secondary)
                     Button("查看使用引导") { store.showSetup(); showGuide() }

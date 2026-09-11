@@ -8,6 +8,7 @@ public struct ContentView: View {
     @State private var importing = false
     @State private var showingOriginal = false
     @State private var originalHeight: CGFloat = 0
+    @State private var page = "input"
     public init(store: AppStore) { self.store = store }
 
     public var body: some View {
@@ -18,13 +19,15 @@ public struct ContentView: View {
                 HStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 22) {
                         Text("工作空间").font(.caption).foregroundStyle(.secondary)
-                        Button { scroll.scrollTo("activity", anchor: .top) } label: {
+                        Button { page = "input" } label: {
                             Label("语音输入", systemImage: "waveform")
                         }
-                        Button { scroll.scrollTo("result", anchor: .top) } label: {
+                        Button { page = "input"; scroll.scrollTo("result", anchor: .top) } label: {
                             Label("本次结果", systemImage: "text.alignleft")
                         }
                         Divider()
+                        Button { page = "history" } label: { Label("转录历史", systemImage: "clock") }
+                        Button { page = "statistics" } label: { Label("统计", systemImage: "chart.bar") }
                         SettingsLink { Label("偏好设置", systemImage: "slider.horizontal.3") }
                         Spacer()
                         Label("本机识别", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
@@ -32,6 +35,9 @@ public struct ContentView: View {
                     Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
+                        if page != "input" {
+                            SessionHistoryView(store: store, statistics: page == "statistics")
+                        } else {
                         if !store.setupCompleted { SetupView(store: store) }
                         else {
                             statusHero
@@ -41,6 +47,7 @@ public struct ContentView: View {
                         retainedRecording
                         result.padding(18).writingSurface().id("result")
                         diagnostics
+                        }
                     }.padding(24)
                 }
                 .onChange(of: store.transcript) { _, text in
@@ -216,6 +223,28 @@ public struct ContentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, minHeight: 120)
             } else {
+                if store.polishingEnabled {
+                    Button("轻度润色预览", systemImage: "text.badge.checkmark") { store.previewPolish() }
+                        .disabled(!store.canStart || store.isPolishing)
+                    if store.isPolishing {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Button("取消润色") { store.discardPolish() }
+                        }
+                    }
+                    Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)
+                    if let preview = store.polishedPreview {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("整理预览 · 原文保留在下方").font(.headline)
+                            Text(preview).textSelection(.enabled)
+                            Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Button("复制整理结果") { store.copyPolishedPreview() }.disabled(!store.canStart)
+                                Button("恢复原文") { store.discardPolish() }
+                            }
+                        }.padding(16).writingSurface()
+                    }
+                }
                 Text(store.transcript).font(.body).lineSpacing(5).textSelection(.enabled)
                     .foregroundStyle(theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading).padding(16)
