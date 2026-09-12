@@ -18,4 +18,12 @@ public enum ShortcutCombination: String, CaseIterable, Sendable {
         case .controlOptionSpace: UInt32(controlKey | optionKey)
         }
     }
+
+    var cancellationModifiers: [UInt32] {
+        [UInt32(optionKey), UInt32(shiftKey), UInt32(controlKey)]
+            .filter { modifiers & $0 != 0 }
+            .reduce([UInt32(0)]) { combinations, modifier in
+                combinations + combinations.map { $0 | modifier }
+            }
+    }
 }

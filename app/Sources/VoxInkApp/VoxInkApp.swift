@@ -60,7 +60,7 @@ import VoxInkCore
         let shortcuts = GlobalShortcutController(
             toggle: { [weak store] in store?.handleShortcutPressed() },
             released: { [weak store] in store?.handleShortcutReleased() },
-            cancel: { [weak store] in Task { await store?.cancel() } }
+            cancel: { [weak store] in store?.handleShortcutCancelled() }
         )
         self.shortcuts = shortcuts
         store.configureShortcutRegistration { [weak shortcuts] in shortcuts?.changeShortcut(to: $0) ?? false }

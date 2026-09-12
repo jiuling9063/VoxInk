@@ -1,6 +1,8 @@
 import SwiftUI
 
 public struct PreferencesView: View {
+    @Environment(\.colorScheme) private var scheme
+    private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
     @ObservedObject private var loginItem: LoginItemController
     private let showGuide: () -> Void
@@ -13,7 +15,24 @@ public struct PreferencesView: View {
     }
 
     public var body: some View {
-        TabView(selection: $tab) {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("偏好设置").font(.system(size: 26, weight: .bold))
+                    Text("让语落贴合你的表达习惯。").font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "slider.horizontal.3").font(.title2).foregroundStyle(theme.accent)
+                    .frame(width: 48, height: 48)
+                    .background(theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+            }.padding(.horizontal, 8)
+            Picker("设置分类", selection: $tab) {
+                Text("通用").tag(0)
+                Text("权限与模型").tag(1)
+                if store.dictionary != nil { Text("用户词典").tag(2) }
+            }.pickerStyle(.segmented).labelsHidden()
+            Group {
+            if tab == 0 {
             Form {
                 Section("启动") {
                     Toggle("登录时启动语落", isOn: Binding(
@@ -46,16 +65,18 @@ public struct PreferencesView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     LabeledContent("单次录音", value: "最长 60 秒 · Esc 取消")
                 }
-                Section("隐私") {
+                Section("文字润色") {
                     Toggle("启用轻度润色预览", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
                     Text("默认关闭。需要安装本地润色模型。手动生成预览，最长等待 30 秒；可取消，不自动替换写入文字。润色可能改变含义，请核对原文。")
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("音频仅在本机识别。完成写入、复制或取消后删除；未完成录音最多保留一条、有效期 24 小时，可随时删除。识别文字只保留在当前会话，不建立历史记录。")
+                }
+                Section("隐私与帮助") {
+                    Text("音频仅在本机识别。完成写入、复制或取消后删除；未完成录音最多保留一条、有效期 24 小时，可随时删除。转录历史仅保留在本次启动期间，退出 App 后清除。")
                         .font(.callout).foregroundStyle(.secondary)
                     Button("查看使用引导") { store.showSetup(); showGuide() }
                 }
             }.formStyle(.grouped)
-                .tabItem { Label("通用", systemImage: "gearshape") }.tag(0)
+            } else if tab == 1 {
             Form {
                 Section("系统权限") {
                     LabeledContent("麦克风", value: store.microphoneAuthorization.title)
@@ -86,13 +107,16 @@ public struct PreferencesView: View {
                 }
                 Button("刷新权限状态") { store.refreshPermissions() }
             }.formStyle(.grouped)
-                .tabItem { Label("权限与模型", systemImage: "checkmark.shield") }.tag(1)
-            if let dictionary = store.dictionary {
+            } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
-                    .tabItem { Label("用户词典", systemImage: "character.book.closed") }.tag(2)
             }
+            }.scrollContentBackground(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .writingSurface()
         }
-        .padding(16).frame(width: 560, height: 560)
+        .padding(24).frame(width: 620, height: 660)
+        .background(theme.background).tint(theme.accent)
+        .buttonStyle(VoxInkButtonStyle())
         .onAppear { store.refreshPermissions(); loginItem.refresh() }
     }
 }

@@ -1,7 +1,16 @@
+import Carbon
 import Testing
 @testable import VoxInkUI
 
 struct ShortcutLatchTests {
+    @Test func escapeCoversHeldAndPartiallyReleasedRecordingModifiers() {
+        #expect(Set(ShortcutCombination.optionSpace.cancellationModifiers) == Set([0, UInt32(optionKey)]))
+        #expect(Set(ShortcutCombination.optionShiftSpace.cancellationModifiers) ==
+                Set([0, UInt32(optionKey), UInt32(shiftKey), UInt32(optionKey | shiftKey)]))
+        #expect(Set(ShortcutCombination.controlOptionSpace.cancellationModifiers) ==
+                Set([0, UInt32(optionKey), UInt32(controlKey), UInt32(optionKey | controlKey)]))
+    }
+
     @Test func releaseIsDeliveredOnlyOnceForAnActualPress() {
         var latch = ShortcutLatch()
         let orphan = latch.release(id: 1)

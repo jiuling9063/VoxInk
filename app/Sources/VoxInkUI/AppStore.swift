@@ -619,6 +619,12 @@ import VoxInkCore
         if phase == .failed { holdRecording = false }
     }
 
+    public func handleShortcutCancelled() {
+        guard canCancel else { return }
+        holdRecording = false
+        Task { await cancel() }
+    }
+
     public func handleShortcutReleased() {
         shortcutIsHeld = false
         guard holdRecording else { return }

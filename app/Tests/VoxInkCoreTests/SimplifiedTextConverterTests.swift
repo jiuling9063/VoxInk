@@ -25,6 +25,13 @@ import Testing
         #expect(SimplifiedTextConverter.shared.convert("").text.isEmpty)
     }
 
+    @Test func convertsTimeUnitWithoutRewritingProtectedDecimalOrCode() {
+        let raw = "明天下午三點開會，四點半結束。數值三點一四，`三點`，https://example.com/三點。"
+        let result = SimplifiedTextConverter.shared.convert(raw)
+        #expect(result.text == "明天下午三点开会，四点半结束。数值三點一四，`三點`，https://example.com/三點。")
+        #expect(result.mode == .openCC)
+    }
+
     @Test func mainlandFileNounDoesNotDriftIntoDocumentOnSecondPass() {
         let result = SimplifiedTextConverter.shared.convert("檔案和文件夾中的文件。").text
         #expect(result == "文件和文件夹中的文件。")

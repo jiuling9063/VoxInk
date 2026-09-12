@@ -51,6 +51,13 @@ import Testing
         #expect(processor.process(code).text == code)
     }
 
+    @Test func recordingTimeUnitConvertsWhileDecimalValueRemainsVerbatim() {
+        let raw = "明天下午三點開會。四點半結束，數值負三點一四保持不變，`三點` 不改。"
+        let expected = "明天下午三点开会。四点半结束，数值負三點一四保持不变，`三點` 不改。"
+        #expect(processor.process(raw).text == expected)
+        #expect(processor.process(expected).text == expected)
+    }
+
     @Test func doesNotInventEndPunctuationOrRemoveMeaningfulWords() {
         for raw in ["明天提交", "然后就是这个方案", "金额 ¥  12.50 和 2026 年 9 月 9 日", "真的……真的吗？！"] {
             #expect(processor.process(raw).text == raw)

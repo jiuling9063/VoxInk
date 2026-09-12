@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -17,38 +18,41 @@ public struct ContentView: View {
             Divider()
             ScrollViewReader { scroll in
                 HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 22) {
-                        Text("工作空间").font(.caption).foregroundStyle(.secondary)
-                        Button { page = "input" } label: {
-                            Label("语音输入", systemImage: "waveform")
-                        }
-                        Button { page = "input"; scroll.scrollTo("result", anchor: .top) } label: {
-                            Label("本次结果", systemImage: "text.alignleft")
-                        }
-                        Divider()
-                        Button { page = "history" } label: { Label("转录历史", systemImage: "clock") }
-                        Button { page = "statistics" } label: { Label("统计", systemImage: "chart.bar") }
-                        SettingsLink { Label("偏好设置", systemImage: "slider.horizontal.3") }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("工作空间").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 12).padding(.bottom, 12)
+                        navigation("语音输入", icon: "waveform", destination: "input")
+                        navigation("本次结果", icon: "text.alignleft", destination: "result")
+                        navigation("转录历史", icon: "clock", destination: "history")
+                        navigation("使用统计", icon: "chart.bar", destination: "statistics")
                         Spacer()
-                        Label("本机识别", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
-                    }.buttonStyle(.plain).padding(16).frame(width: 140).background(theme.paper)
+                        SettingsLink { Label("偏好设置", systemImage: "slider.horizontal.3")
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(12) }
+                        Divider().padding(.vertical, 10)
+                        Label("本机处理 · 安心表达", systemImage: "lock.shield")
+                            .font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 8)
+                    }.buttonStyle(.plain).padding(12).padding(.vertical, 12).frame(width: 156).background(theme.paper)
                     Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if page != "input" {
+                        if page == "history" || page == "statistics" {
                             SessionHistoryView(store: store, statistics: page == "statistics")
+                        } else if page == "result" {
+                            Text("本次结果").font(.system(size: 26, weight: .bold))
+                            Text("查看原文，整理表达，随时复制。") .foregroundStyle(.secondary)
+                            result.padding(22).writingSurface()
                         } else {
                         if !store.setupCompleted { SetupView(store: store) }
                         else {
                             statusHero
                             usageCards
                         }
-                        if !store.setupCompleted { recordingControls.id("activity") }
+                        if !store.setupCompleted { recordingControls.padding(22).writingSurface().id("activity") }
                         retainedRecording
                         result.padding(18).writingSurface().id("result")
                         diagnostics
                         }
-                    }.padding(24)
+                    }.frame(maxWidth: 920, alignment: .leading).padding(24).frame(maxWidth: .infinity)
                 }
                 .onChange(of: store.transcript) { _, text in
                     if !text.isEmpty { scroll.scrollTo("activity", anchor: .top) }
@@ -61,14 +65,9 @@ public struct ContentView: View {
                 }
                 }
             }
-            Divider()
-            HStack(spacing: 6) {
-                Image(systemName: "lock.shield").accessibilityHidden(true)
-                Text(store.conversionWarning ?? "本机识别 · 默认简体 · 网址、数字与代码原样保留")
-                Spacer()
-            }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 12)
         }
         .tint(theme.accent)
+        .buttonStyle(VoxInkButtonStyle())
         .background(theme.background)
         .frame(minWidth: 620, minHeight: 520)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
@@ -76,31 +75,57 @@ public struct ContentView: View {
         }
     }
 
+    private func navigation(_ title: String, icon: String, destination: String) -> some View {
+        Button { page = destination } label: {
+            Label(title, systemImage: icon)
+                .font(.system(size: 13, weight: page == destination ? .semibold : .regular))
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 12)
+                .foregroundStyle(page == destination ? theme.accent : theme.ink.opacity(0.7))
+                .background(page == destination ? theme.accent.opacity(0.12) : .clear,
+                            in: RoundedRectangle(cornerRadius: 10))
+        }.accessibilityAddTraits(page == destination ? .isSelected : [])
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
-            Image("logo-rain-impression-v2", bundle: .module)
-                .resizable().scaledToFit().frame(width: 34, height: 34)
-                .accessibilityLabel("语落 VoxInk")
+            if let url = Bundle.module.url(forResource: "logo-rain-impression-v2", withExtension: "png"),
+               let logo = NSImage(contentsOf: url) {
+                Image(nsImage: logo).resizable().scaledToFit().frame(width: 34, height: 34)
+                    .accessibilityLabel("语落 VoxInk")
+            }
             Text("语落").font(.title2.bold()).foregroundStyle(theme.ink)
             Text("VoxInk").foregroundStyle(.secondary)
             Spacer()
             Text(store.modelState.title).font(.caption.weight(.medium)).foregroundStyle(theme.accent)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(theme.accent.opacity(0.1), in: Capsule())
-            SettingsLink { Label("设置", systemImage: "gearshape") }
         }.padding(.horizontal, 24).padding(.vertical, 16)
     }
 
     private var statusHero: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("语音工作台", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+            HStack {
+                Label("语音工作台", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+                Spacer()
+                Text(store.shortcutCombination.title).font(.system(.caption, design: .monospaced))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            }
             dailyInstruction
+            Divider().padding(.vertical, 6)
             recordingControls
         }.padding(24).writingSurface().id("activity")
     }
 
     private var usageCards: some View {
-        HStack(spacing: 12) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) { readinessCards }
+            VStack(spacing: 12) { readinessCards }
+        }
+    }
+
+    private var readinessCards: some View {
+        Group {
             usageCard(title: "麦克风", value: store.microphoneAuthorization == .authorized ? "已允许" : "待授权", detail: "开始录音后采集")
             usageCard(title: "识别方式", value: "本机处理", detail: "音频不离开设备")
             usageCard(title: "文字写入", value: store.pastePermissionGranted ? "已允许" : "待授权", detail: "辅助功能权限")
@@ -112,20 +137,15 @@ public struct ContentView: View {
             Text(title).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.headline).lineLimit(1).minimumScaleFactor(0.75)
             Text(detail).font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).writingSurface()
+        }.frame(minWidth: 100, maxWidth: .infinity, alignment: .leading).padding(14).writingSurface()
     }
 
     private var dailyInstruction: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(store.shortcutMode == .holdToTalk ? "按住说话，松开写入。" : "按一下说话，再按一下写入。")
-                .font(.title.bold()).foregroundStyle(theme.ink)
+                .font(.system(size: 27, weight: .semibold)).tracking(-0.6).foregroundStyle(theme.ink)
             Text("先点选输入框，再使用 \(store.shortcutCombination.title)。识别完成后，文字会自动写入。")
                 .foregroundStyle(.secondary)
-            HStack {
-                Label(store.modelState.title, systemImage: "internaldrive")
-                Spacer()
-                Text(store.shortcutStatus)
-            }.font(.caption).foregroundStyle(.secondary)
             if store.microphoneAuthorization != .authorized || !store.pastePermissionGranted {
                 HStack {
                     Label("输入权限需要检查", systemImage: "exclamationmark.circle")
@@ -158,14 +178,14 @@ public struct ContentView: View {
                 Button(store.phase == .recording ? "停止并识别" : "试录一段",
                     systemImage: store.phase == .recording ? "stop.fill" : "mic.fill") {
                     if store.phase == .recording { store.finishRecording() } else { store.beginRecording() }
-                }.buttonStyle(.borderedProminent).disabled(!store.canStart && store.phase != .recording)
+                }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canStart && store.phase != .recording)
                 Button("导入音频…", systemImage: "doc.badge.plus") { importing = true }.disabled(!store.canStart)
                 if store.canCancel { Button("取消") { Task { await store.cancel() } } }
                 Spacer()
             }
             Text("窗口内试录与导入只展示结果；使用快捷键录音才会自动写入目标应用。")
                 .font(.caption).foregroundStyle(.secondary)
-        }.padding(18).writingSurface()
+        }
     }
 
     @ViewBuilder private func recoveryButton(_ recovery: RecoveryAction) -> some View {
@@ -202,6 +222,11 @@ public struct ContentView: View {
 
     private var result: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let warning = store.conversionWarning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Text("识别结果").font(.headline)
                 Spacer()
@@ -248,7 +273,7 @@ public struct ContentView: View {
                 Text(store.transcript).font(.body).lineSpacing(5).textSelection(.enabled)
                     .foregroundStyle(theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading).padding(16)
-                    .writingSurface()
+                    .background(theme.accent.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
                     .overlay(alignment: .leading) {
                         Capsule().fill(theme.accent.opacity(0.45))
                             .frame(width: 2).padding(.vertical, 18).padding(.leading, 6)

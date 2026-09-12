@@ -5,15 +5,33 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 APP_BUILD="${VOXINK_APP_BUILD:-/tmp/voxink-app-xcode-beta}"
 WORKER_BUILD="${VOXINK_WORKER_BUILD:-/tmp/voxink-qwen-xcode-beta}"
+APP_CONFIGURATION="${VOXINK_APP_CONFIGURATION:-debug}"
+SIGN_IDENTITY="${VOXINK_SIGN_IDENTITY:--}"
 PROJECT_KEY="$(printf '%s' "$ROOT" | /usr/bin/shasum -a 256 | /usr/bin/cut -c1-16)"
 APP_DEST="$HOME/Library/Caches/VoxInkDevelopment/$PROJECT_KEY/VoxInk.app"
 case "${1:-}" in
-  ""|--verify|--build-only) ;;
-  *) echo "Usage: $0 [--verify|--build-only]" >&2; exit 64 ;;
+  ""|--verify|--build-only|--package-only) ;;
+  *) echo "Usage: $0 [--verify|--build-only|--package-only]" >&2; exit 64 ;;
 esac
+case "$APP_CONFIGURATION" in
+  debug|release) ;;
+  *) echo "VOXINK_APP_CONFIGURATION must be debug or release." >&2; exit 64 ;;
+esac
+if [[ "$SIGN_IDENTITY" != - ]]; then
+  if [[ ! "$SIGN_IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo "Set VOXINK_SIGN_IDENTITY to the 40-character certificate hash from security find-identity -v -p codesigning." >&2
+    exit 64
+  fi
+  identities="$(/usr/bin/security find-identity -v -p codesigning)"
+  if ! /usr/bin/grep -Fqi " $SIGN_IDENTITY " <<< "$identities"; then
+    echo "Requested signing identity is not available; current App has not been changed." >&2
+    exit 65
+  fi
+fi
 
 # Compare complete executable paths, so other installed copies remain running.
 stopped_pids=()
+if [[ "${1:-}" != --package-only ]]; then
 for pid in $(/usr/bin/pgrep -x VoxInk || true); do
   process_path="$(/bin/ps -p "$pid" -o comm=)"
   if [[ "$process_path" == "$APP_DEST/Contents/MacOS/VoxInk" || "$process_path" == "$ROOT/dist/VoxInk.app/Contents/MacOS/VoxInk" ]]; then
@@ -31,10 +49,11 @@ for pid in ${stopped_pids[@]+"${stopped_pids[@]}"}; do
     exit 70
   fi
 done
-/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" --product VoxInk
+fi
+/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" -c "$APP_CONFIGURATION" --product VoxInk
 /usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" \
   -c release --product voxink-qwen-smoke --disable-automatic-resolution
-APP_BIN="$(/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" --show-bin-path)"
+APP_BIN="$(/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" -c "$APP_CONFIGURATION" --show-bin-path)"
 WORKER_BIN="$(/usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" -c release --show-bin-path)"
 
 # Stage outside the synced workspace to avoid inherited resource-fork attributes.
@@ -81,7 +100,23 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>NSMicrophoneUsageDescription</key><string>语落需要麦克风录制你的语音，并仅在本机转换为文字。点击开始录音后才会采集。</string>
 </dict></plist>
 PLIST
-/usr/bin/codesign --force --sign - "$BUNDLE"
+sign_options=(--force --sign "$SIGN_IDENTITY")
+if [[ "$SIGN_IDENTITY" != - ]]; then
+  sign_options+=(--options runtime --timestamp)
+fi
+/usr/bin/codesign "${sign_options[@]}" "$BUNDLE/Contents/Resources/Worker/voxink-qwen-smoke"
+/usr/bin/codesign "${sign_options[@]}" --entitlements "$ROOT/app/VoxInk.entitlements" "$BUNDLE"
+/usr/bin/codesign --verify --deep --strict "$BUNDLE"
+if [[ "${1:-}" == --package-only ]]; then
+  PACKAGE_ROOT="$(mktemp -d /tmp/voxink-package.XXXXXX)"
+  /usr/bin/ditto --norsrc --noextattr "$BUNDLE" "$PACKAGE_ROOT/VoxInk.app"
+  /usr/bin/codesign --verify --deep --strict "$PACKAGE_ROOT/VoxInk.app"
+  printf 'Package: %s\nConfiguration: %s\n' "$PACKAGE_ROOT/VoxInk.app" "$APP_CONFIGURATION"
+  if [[ "$SIGN_IDENTITY" == - ]]; then
+    echo "Ad-hoc preview only; not notarized and upgrade permissions are not guaranteed."
+  fi
+  exit 0
+fi
 mkdir -p "$ROOT/dist"
 mkdir -p "$(dirname "$APP_DEST")"
 /usr/bin/ditto --norsrc --noextattr "$BUNDLE" "$APP_DEST"

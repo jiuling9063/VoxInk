@@ -265,6 +265,22 @@ private actor HoldTranscriber: TranscriptionService {
         #expect(!recorder.isRecording)
     }
 
+    @Test func escapeImmediatelyBeforeReleaseCannotSubmitAndNextHoldRecovers() async throws {
+        let recorder = HoldRecorder(); let paste = HoldPaste(); let store = make(recorder, paste)
+        store.handleShortcutPressed()
+        try await waitUntil { store.phase == .recording }
+        store.handleShortcutCancelled()
+        store.handleShortcutReleased()
+        #expect(recorder.stops == 0)
+        try await waitUntil { store.canStart }
+        #expect(paste.texts.isEmpty)
+        #expect(!recorder.isRecording)
+        try await recordAndRelease(store)
+        #expect(recorder.starts == 2)
+        #expect(recorder.stops == 1)
+        #expect(paste.texts.count == 1)
+    }
+
     @Test func fixedTextModeDoesNotRecordWhenHeldOrReleased() async {
         let recorder = HoldRecorder(); let paste = HoldPaste(); let store = make(recorder, paste)
         store.armFixedTextTest()

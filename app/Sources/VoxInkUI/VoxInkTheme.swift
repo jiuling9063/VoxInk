@@ -34,10 +34,27 @@ private struct WritingSurface: ViewModifier {
             .background(theme.paper, in: RoundedRectangle(cornerRadius: 18))
             .overlay {
                 RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.5 : 0.12), lineWidth: 1)
+                    .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.5 : 0.07), lineWidth: 1)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
+    }
+}
+
+struct VoxInkButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var enabled
+    var prominent = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let theme = VoxInkTheme(scheme: scheme)
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 13).padding(.vertical, 9)
+            .foregroundStyle(prominent ? theme.paper : theme.ink)
+            .background(prominent ? theme.accent : theme.ink.opacity(0.055),
+                        in: RoundedRectangle(cornerRadius: 9))
+            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
     }
 }
 

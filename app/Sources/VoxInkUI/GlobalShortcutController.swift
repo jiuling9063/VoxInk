@@ -14,7 +14,7 @@ struct ShortcutLatch {
 @MainActor public final class GlobalShortcutController {
     private var handler: EventHandlerRef?
     private var toggleKey: EventHotKeyRef?
-    private var escapeKey: EventHotKeyRef?
+    private var escapeKeys: [EventHotKeyRef] = []
     private var combination: ShortcutCombination?
     private var latch = ShortcutLatch()
     private let toggle: () -> Void
@@ -70,13 +70,25 @@ struct ShortcutLatch {
     }
 
     @discardableResult public func setCancellationEnabled(_ enabled: Bool) -> Bool {
-        if enabled, escapeKey == nil {
-            return RegisterEventHotKey(UInt32(kVK_Escape), 0,
-                EventHotKeyID(signature: 0x564F5849, id: 2), GetApplicationEventTarget(),
-                OptionBits(kEventHotKeyExclusive), &escapeKey) == noErr
+        if enabled, escapeKeys.isEmpty {
+            guard let combination else { return false }
+            var candidates: [EventHotKeyRef] = []
+            for modifiers in combination.cancellationModifiers {
+                var candidate: EventHotKeyRef?
+                let result = RegisterEventHotKey(UInt32(kVK_Escape), modifiers,
+                    EventHotKeyID(signature: 0x564F5849, id: 2), GetApplicationEventTarget(),
+                    OptionBits(kEventHotKeyExclusive), &candidate)
+                guard result == noErr, let candidate else {
+                    for registered in candidates { UnregisterEventHotKey(registered) }
+                    return false
+                }
+                candidates.append(candidate)
+            }
+            escapeKeys = candidates
         }
-        if !enabled, let escapeKey {
-            UnregisterEventHotKey(escapeKey); self.escapeKey = nil
+        if !enabled {
+            for escapeKey in escapeKeys { UnregisterEventHotKey(escapeKey) }
+            escapeKeys.removeAll()
             _ = latch.receive(id: 2, pressed: false)
         }
         return true
@@ -84,9 +96,9 @@ struct ShortcutLatch {
 
     public func stop() {
         if let toggleKey { UnregisterEventHotKey(toggleKey) }
-        if let escapeKey { UnregisterEventHotKey(escapeKey) }
+        for escapeKey in escapeKeys { UnregisterEventHotKey(escapeKey) }
         if let handler { RemoveEventHandler(handler) }
-        toggleKey = nil; escapeKey = nil; handler = nil; combination = nil; latch.reset()
+        toggleKey = nil; escapeKeys.removeAll(); handler = nil; combination = nil; latch.reset()
     }
 
     private func receive(id: UInt32, pressed: Bool) {

@@ -38,6 +38,31 @@ class PolishGuardTests(unittest.TestCase):
                                ("运行 `git status`。", "运行 `git reset`。")]:
             self.assertFalse(validate(source, json.dumps({"text": output}), "stop")["accepted"])
 
+    def test_small_content_edits_are_rejected(self):
+        cases = [
+            ("北国风光，千里冰封，万里雪飘。望长城内外，文宇茫茫，大河上下，顿是滔滔。",
+             "北国风光，千里冰封，万里雪飘。望长城内外，莽莽，大河上下，滔滔。"),
+            ("请张伟联系李娜，明天下午开会讨论方案。", "请李娜联系张伟，明天下午开会讨论方案。"),
+            ("明天下午开会讨论退款方案。", "明天下午开会讨论方案。"),
+            ("那个方案明天讨论。", "方案明天讨论。"),
+            ("先提交，再审核，最后提交。", "先提交，再审核。"),
+        ]
+        for source, output in cases:
+            with self.subTest(source=source):
+                result = validate(source, json.dumps({"text": output}), "stop")
+                self.assertFalse(result["accepted"])
+                self.assertEqual(result["text"], source)
+
+    def test_repeated_clause_and_punctuation_edits_are_allowed(self):
+        cases = [
+            ("那个，我们明天下午开会，讨论方案，讨论方案。", "我们明天下午开会，讨论方案。"),
+            ("明天下午开会。请提前准备。", "明天下午开会，请提前准备。"),
+            ("我不是同意，我不是同意取消。", "我不是同意，我不是同意取消。"),
+        ]
+        for source, output in cases:
+            with self.subTest(source=source):
+                self.assertTrue(validate(source, json.dumps({"text": output}), "stop")["accepted"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,11 @@ CHECK_BIN="$(/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$AP
 CHECK_ROOT="$(mktemp -d /tmp/voxink-interface-check.XXXXXX)"
 CHECK_BUNDLE="$CHECK_ROOT/VoxInkInterfaceCheck.app"
 mkdir -p "$CHECK_BUNDLE/Contents/MacOS"
+mkdir -p "$CHECK_BUNDLE/Contents/Resources"
+for resource in "$CHECK_BIN"/*.bundle; do
+  [[ -d "$resource" ]] || continue
+  /usr/bin/ditto --norsrc --noextattr "$resource" "$CHECK_BUNDLE/Contents/Resources/$(basename "$resource")"
+done
 /usr/bin/ditto --norsrc --noextattr "$CHECK_BIN/voxink-interface-check" "$CHECK_BUNDLE/Contents/MacOS/voxink-interface-check"
 cat > "$CHECK_BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
