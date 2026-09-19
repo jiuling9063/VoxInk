@@ -7,7 +7,7 @@ final class NonactivatingRecordingPanel: NSPanel {
 }
 
 struct RecordingPanelPlacement {
-    static func width(in visibleFrame: NSRect) -> CGFloat { min(430, max(1, visibleFrame.width - 32)) }
+    static func width(in visibleFrame: NSRect) -> CGFloat { min(180, max(1, visibleFrame.width - 32)) }
     static func origin(size: NSSize, in visibleFrame: NSRect) -> NSPoint {
         NSPoint(x: visibleFrame.midX - size.width / 2,
                 y: max(visibleFrame.minY, min(visibleFrame.minY + 72, visibleFrame.maxY - size.height - 16)))
@@ -30,7 +30,7 @@ struct RecordingPanelPlacement {
         panel.hidesOnDeactivate = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.ignoresMouseEvents = true
     }
 

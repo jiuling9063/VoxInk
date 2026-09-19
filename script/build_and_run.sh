@@ -83,6 +83,8 @@ cp "$WORKER_BIN/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
   "$BUNDLE/Contents/Resources/Worker/mlx.metallib"
 cp "$ROOT/benchmark/model-manifest.json" "$BUNDLE/Contents/Resources/"
 cp "$ROOT/app/ThirdPartyNotices.txt" "$BUNDLE/Contents/Resources/"
+mkdir -p "$BUNDLE/Contents/Resources/Polish"
+cp "$ROOT/script/polish_worker.py" "$ROOT/script/polish_guard.py" "$ROOT/script/check_polish_model.py" "$ROOT/script/download_polish_model.py" "$BUNDLE/Contents/Resources/Polish/"
 cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,8 +94,8 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>语落 VoxInk</string>
 <key>CFBundleIconFile</key><string>VoxInk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
-<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>0.1.4</string>
+<key>CFBundleVersion</key><string>6</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>

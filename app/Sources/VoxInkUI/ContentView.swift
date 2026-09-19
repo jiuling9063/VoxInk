@@ -6,51 +6,83 @@ public struct ContentView: View {
     @Environment(\.colorScheme) private var scheme
     private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showingReadiness = false
     @State private var importing = false
     @State private var showingOriginal = false
     @State private var originalHeight: CGFloat = 0
-    @State private var page = "input"
-    public init(store: AppStore) { self.store = store }
+    @StateObject private var navigation: WorkspaceNavigation
+    private var page: WorkspacePage {
+        get { navigation.page }
+        nonmutating set { navigation.page = newValue }
+    }
+
+    public init(store: AppStore) {
+        self.store = store
+        _navigation = StateObject(wrappedValue: WorkspaceNavigation())
+    }
+
+    init(store: AppStore, navigation: WorkspaceNavigation) {
+        self.store = store
+        _navigation = StateObject(wrappedValue: navigation)
+    }
 
     public var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
             ScrollViewReader { scroll in
                 HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("工作空间").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                             .padding(.horizontal, 12).padding(.bottom, 12)
-                        navigation("语音输入", icon: "waveform", destination: "input")
-                        navigation("本次结果", icon: "text.alignleft", destination: "result")
-                        navigation("转录历史", icon: "clock", destination: "history")
-                        navigation("使用统计", icon: "chart.bar", destination: "statistics")
-                        Spacer()
-                        SettingsLink { Label("偏好设置", systemImage: "slider.horizontal.3")
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(12) }
+                        navigation("语音工作台", icon: "rectangle.grid.2x2", destination: .input)
+                        navigation("转录历史", icon: "clock", destination: .history)
+                        navigation("统计", icon: "chart.bar", destination: .statistics)
+                        Text("设置").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 12).padding(.top, 22)
+                        navigation("转录引擎", icon: "waveform", destination: .engine)
+                        navigation("快捷键与输入", icon: "command", destination: .shortcut)
+                        navigation("文字与词典", icon: "text.badge.checkmark", destination: .postprocess)
+                        navigation("润色模型", icon: "wand.and.stars", destination: .polish)
+                        navigation("使用方法", icon: "questionmark.circle", destination: .help)
+                        if !store.setupCompleted {
+                            Button { store.showSetup(); page = .input } label: {
+                                Label("首次准备", systemImage: "checklist")
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                            }
+                        }
                         Divider().padding(.vertical, 10)
                         Label("本机处理 · 安心表达", systemImage: "lock.shield")
                             .font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 8)
-                    }.buttonStyle(.plain).padding(12).padding(.vertical, 12).frame(width: 156).background(theme.paper)
+                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
+                            .padding(.horizontal, 8).padding(.top, 3)
+                    }.buttonStyle(.plain).padding(12).padding(.vertical, 12)
+                    }.scrollIndicators(.hidden).frame(width: 176).workspaceChrome()
                     Divider()
+                switch page {
+                case .engine, .shortcut, .postprocess, .polish, .help:
+                    WorkspaceSettingsView(store: store, page: page) { page = .input }
+                case .input, .history, .statistics, .result:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if page == "history" || page == "statistics" {
-                            SessionHistoryView(store: store, statistics: page == "statistics")
-                        } else if page == "result" {
-                            Text("本次结果").font(.system(size: 26, weight: .bold))
-                            Text("查看原文，整理表达，随时复制。") .foregroundStyle(.secondary)
+                        if page == .history || page == .statistics {
+                            SessionHistoryView(store: store, statistics: page == .statistics)
+                        } else if page == .result {
+                            WorkspaceHeading(title: "本次结果", subtitle: "查看原文，整理表达，随时复制。")
                             result.padding(22).writingSurface()
                         } else {
                         if !store.setupCompleted { SetupView(store: store) }
                         else {
                             statusHero
-                            usageCards
+                            Label("音频在本机处理，文字只留在当前会话。", systemImage: "lock.shield")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         if !store.setupCompleted { recordingControls.padding(22).writingSurface().id("activity") }
                         retainedRecording
                         result.padding(18).writingSurface().id("result")
+                        #if DEBUG
                         diagnostics
+                        #endif
                         }
                     }.frame(maxWidth: 920, alignment: .leading).padding(24).frame(maxWidth: .infinity)
                 }
@@ -64,42 +96,33 @@ public struct ContentView: View {
                     if showingOriginal { scroll.scrollTo("original", anchor: .bottom) }
                 }
                 }
+                }
             }
         }
         .tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
         .background(theme.background)
         .frame(minWidth: 620, minHeight: 520)
+        .onChange(of: store.phase) { _, phase in
+            if phase == .failed { page = .input }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.audio]) { result in
             if case .success(let url) = result { store.importAudio(url) }
         }
     }
 
-    private func navigation(_ title: String, icon: String, destination: String) -> some View {
-        Button { page = destination } label: {
+    private func navigation(_ title: String, icon: String, destination: WorkspacePage) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1)) { page = destination }
+        } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 13, weight: page == destination ? .semibold : .regular))
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 10)
                 .foregroundStyle(page == destination ? theme.accent : theme.ink.opacity(0.7))
                 .background(page == destination ? theme.accent.opacity(0.12) : .clear,
                             in: RoundedRectangle(cornerRadius: 10))
         }.accessibilityAddTraits(page == destination ? .isSelected : [])
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            if let url = Bundle.module.url(forResource: "logo-rain-impression-v2", withExtension: "png"),
-               let logo = NSImage(contentsOf: url) {
-                Image(nsImage: logo).resizable().scaledToFit().frame(width: 34, height: 34)
-                    .accessibilityLabel("语落 VoxInk")
-            }
-            Text("语落").font(.title2.bold()).foregroundStyle(theme.ink)
-            Text("VoxInk").foregroundStyle(.secondary)
-            Spacer()
-            Text(store.modelState.title).font(.caption.weight(.medium)).foregroundStyle(theme.accent)
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(theme.accent.opacity(0.1), in: Capsule())
-        }.padding(.horizontal, 24).padding(.vertical, 16)
+            .help(title)
     }
 
     private var statusHero: some View {
@@ -112,32 +135,69 @@ public struct ContentView: View {
                     .background(theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
             }
             dailyInstruction
-            Divider().padding(.vertical, 6)
             recordingControls
+            Divider().padding(.vertical, 4)
+            DisclosureGroup(isExpanded: $showingReadiness) {
+                dashboardReadiness.padding(.top, 10)
+            } label: {
+                Label(store.canCompleteSetup ? "权限与模型已就绪" : "检查权限与模型",
+                      systemImage: store.canCompleteSetup ? "checkmark.shield" : "exclamationmark.circle")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(store.canCompleteSetup ? theme.accent : .orange)
+            }
         }.padding(24).writingSurface().id("activity")
     }
 
-    private var usageCards: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) { readinessCards }
-            VStack(spacing: 12) { readinessCards }
+    private var dashboardReadiness: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("准备状态").font(.headline)
+                Spacer()
+                if store.canRecord {
+                    Label("可以开始说话", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.medium)).foregroundStyle(.green)
+                } else {
+                    Text(store.canStart ? "点击即可处理" : "正在处理，请稍候").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            dashboardRow(icon: "mic.fill", title: "麦克风",
+                         detail: store.microphoneAuthorization == .authorized ? "已允许" : "需要允许录音",
+                         ready: store.microphoneAuthorization == .authorized) {
+                if store.microphoneAuthorization == .notDetermined { store.requestMicrophonePermission() }
+                else { store.openSystemSettings() }
+            }
+            dashboardRow(icon: "cursorarrow.and.square.on.square.dashed", title: "文字写入",
+                         detail: store.pastePermissionGranted ? "已允许自动写入" : "需要辅助功能权限",
+                         ready: store.pastePermissionGranted) { store.requestPastePermission() }
+            dashboardRow(icon: "internaldrive.fill", title: "本地模型",
+                         detail: store.modelState.title, ready: store.modelState == .ready) {
+                if store.modelState == .needsDownload { store.installModel() } else { store.warmUp() }
+            }
         }
+        .padding(14)
+        .background(theme.accent.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
+        .overlay { RoundedRectangle(cornerRadius: 14).stroke(theme.ink.opacity(0.06), lineWidth: 1) }
     }
 
-    private var readinessCards: some View {
-        Group {
-            usageCard(title: "麦克风", value: store.microphoneAuthorization == .authorized ? "已允许" : "待授权", detail: "开始录音后采集")
-            usageCard(title: "识别方式", value: "本机处理", detail: "音频不离开设备")
-            usageCard(title: "文字写入", value: store.pastePermissionGranted ? "已允许" : "待授权", detail: "辅助功能权限")
+    private func dashboardRow(icon: String, title: String, detail: String, ready: Bool,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.caption.weight(.semibold))
+                    .foregroundStyle(ready ? Color.green : theme.accent)
+                    .frame(width: 26, height: 26)
+                    .background((ready ? Color.green : theme.accent).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.medium))
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: ready ? "checkmark.circle.fill" : "chevron.right")
+                    .font(.caption.weight(.bold)).foregroundStyle(ready ? Color.green : .secondary)
+            }.contentShape(Rectangle())
         }
-    }
-
-    private func usageCard(title: String, value: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.headline).lineLimit(1).minimumScaleFactor(0.75)
-            Text(detail).font(.caption).foregroundStyle(.secondary)
-        }.frame(minWidth: 100, maxWidth: .infinity, alignment: .leading).padding(14).writingSurface()
+        .buttonStyle(.plain).disabled(ready || !store.canStart)
+        .accessibilityHint(ready ? "已完成" : "点击处理")
     }
 
     private var dailyInstruction: some View {
@@ -146,13 +206,7 @@ public struct ContentView: View {
                 .font(.system(size: 27, weight: .semibold)).tracking(-0.6).foregroundStyle(theme.ink)
             Text("先点选输入框，再使用 \(store.shortcutCombination.title)。识别完成后，文字会自动写入。")
                 .foregroundStyle(.secondary)
-            if store.microphoneAuthorization != .authorized || !store.pastePermissionGranted {
-                HStack {
-                    Label("输入权限需要检查", systemImage: "exclamationmark.circle")
-                    Spacer()
-                    Button("查看权限") { store.showSetup() }
-                }.font(.callout)
-            }
+
         }
     }
 
@@ -175,7 +229,7 @@ public struct ContentView: View {
                 recoveryButton(recovery)
             }
             HStack {
-                Button(store.phase == .recording ? "停止并识别" : "试录一段",
+                Button(store.phase == .recording ? "停止并识别" : "开始录音",
                     systemImage: store.phase == .recording ? "stop.fill" : "mic.fill") {
                     if store.phase == .recording { store.finishRecording() } else { store.beginRecording() }
                 }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canStart && store.phase != .recording)
@@ -248,27 +302,8 @@ public struct ContentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                if store.polishingEnabled {
-                    Button("轻度润色预览", systemImage: "text.badge.checkmark") { store.previewPolish() }
-                        .disabled(!store.canStart || store.isPolishing)
-                    if store.isPolishing {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Button("取消润色") { store.discardPolish() }
-                        }
-                    }
+                if !store.polishMessage.isEmpty {
                     Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)
-                    if let preview = store.polishedPreview {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("整理预览 · 原文保留在下方").font(.headline)
-                            Text(preview).textSelection(.enabled)
-                            Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)
-                            HStack {
-                                Button("复制整理结果") { store.copyPolishedPreview() }.disabled(!store.canStart)
-                                Button("恢复原文") { store.discardPolish() }
-                            }
-                        }.padding(16).writingSurface()
-                    }
                 }
                 Text(store.transcript).font(.body).lineSpacing(5).textSelection(.enabled)
                     .foregroundStyle(theme.ink)

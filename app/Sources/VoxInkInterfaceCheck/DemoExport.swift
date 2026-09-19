@@ -3,9 +3,11 @@ import Foundation
 
 @MainActor enum DemoExport {
     static func save(phase: String) throws -> String {
-        guard let window = NSApp.keyWindow, let view = window.contentView else {
+        guard let window = NSApp.keyWindow, let contentView = window.contentView else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
+        let view = window.identifier?.rawValue == "voxink-window-preview"
+            ? (contentView.superview ?? contentView) : contentView
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "--demo-output"), arguments.indices.contains(index + 1) else {
             return "启动时传入 --demo-output 目录后可导出"
@@ -17,7 +19,7 @@ import Foundation
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             throw CocoaError(.fileWriteUnknown)
         }
-        // Render only this checker-owned view; no desktop or other application capture.
+        // Include native chrome for the checker-owned workspace window only.
         view.cacheDisplay(in: view.bounds, to: bitmap)
         guard let png = bitmap.representation(using: .png, properties: [:]) else {
             throw CocoaError(.fileWriteUnknown)
@@ -31,8 +33,9 @@ import Foundation
             "phase": phase, "appearance": appearance, "simulation": true,
             "full_keyboard_access": NSApp.isFullKeyboardAccessEnabled,
             "width_points": view.bounds.width, "height_points": view.bounds.height,
+            "window_x": window.frame.minX, "window_y": window.frame.minY,
             "width_pixels": bitmap.pixelsWide, "height_pixels": bitmap.pixelsHigh,
-            "source": "NSView cacheDisplay of checker-owned content; not desktop screenshot"
+            "source": "NSView cacheDisplay of checker-owned window; not desktop screenshot"
         ]
         try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent(stem + ".json"), options: .withoutOverwriting)

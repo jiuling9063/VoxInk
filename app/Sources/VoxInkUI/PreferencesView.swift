@@ -7,6 +7,7 @@ public struct PreferencesView: View {
     @ObservedObject private var loginItem: LoginItemController
     private let showGuide: () -> Void
     @State private var tab = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(store: AppStore, loginItem: LoginItemController, showGuide: @escaping () -> Void) {
         self.store = store
@@ -17,20 +18,20 @@ public struct PreferencesView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("偏好设置").font(.system(size: 26, weight: .bold))
-                    Text("让语落贴合你的表达习惯。").font(.callout).foregroundStyle(.secondary)
-                }
+                WorkspaceHeading(title: "偏好设置", subtitle: "让语落贴合你的表达习惯。")
                 Spacer()
                 Image(systemName: "slider.horizontal.3").font(.title2).foregroundStyle(theme.accent)
                     .frame(width: 48, height: 48)
-                    .background(theme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+                    .background(theme.ceramicGradient, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay { RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.16), lineWidth: 1) }
+                    .accessibilityHidden(true)
             }.padding(.horizontal, 8)
             Picker("设置分类", selection: $tab) {
                 Text("通用").tag(0)
                 Text("权限与模型").tag(1)
                 if store.dictionary != nil { Text("用户词典").tag(2) }
             }.pickerStyle(.segmented).labelsHidden()
+            ReadinessSummary(store: store)
             Group {
             if tab == 0 {
             Form {
@@ -40,7 +41,7 @@ public struct PreferencesView: View {
                         set: { enabled in Task { await loginItem.setEnabled(enabled) } }
                     )).disabled(loginItem.isUpdating)
                     HStack {
-                        Text(loginItem.state.title).font(.caption).foregroundStyle(.secondary)
+                        StatusBadge(title: loginItem.state.title, tone: loginItem.state == .enabled ? .good : .quiet)
                         if loginItem.isUpdating { ProgressView().controlSize(.mini) }
                         Spacer()
                         if loginItem.state == .requiresApproval || loginItem.errorMessage != nil {
@@ -51,72 +52,81 @@ public struct PreferencesView: View {
                         Text(error).font(.caption).foregroundStyle(.orange)
                     }
                 }
-                Section("语音输入") {
-                    Picker("快捷键", selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
-                        ForEach(ShortcutCombination.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }.disabled(!store.canChangeShortcut)
-                    Text(store.shortcutStatus).font(.caption).foregroundStyle(.secondary)
-                    Picker("操作方式", selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
-                        ForEach(ShortcutMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }.disabled(!store.canChangeShortcut)
-                    Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
-                    LabeledContent("输出文字", value: "简体中文 · 英文保留原样")
-                    Text("自动整理异常空格与明显重复标点，清理句首的“呃，”；数字、网址、路径和代码保持原样。结果下方可查看识别原文。")
-                        .font(.caption).foregroundStyle(.secondary)
-                    LabeledContent("单次录音", value: "最长 60 秒 · Esc 取消")
-                }
-                Section("文字润色") {
-                    Toggle("启用轻度润色预览", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
-                    Text("默认关闭。需要安装本地润色模型。手动生成预览，最长等待 30 秒；可取消，不自动替换写入文字。润色可能改变含义，请核对原文。")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Section("语音输入") { InputSettingsContent(store: store) }
+                Section("文字处理") { TextProcessingContent() }
+                Section("文字润色") { PolishSettingsContent(store: store) }
                 Section("隐私与帮助") {
-                    Text("音频仅在本机识别。完成写入、复制或取消后删除；未完成录音最多保留一条、有效期 24 小时，可随时删除。转录历史仅保留在本次启动期间，退出 App 后清除。")
-                        .font(.callout).foregroundStyle(.secondary)
+                    PrivacySettingsContent()
                     Button("查看使用引导") { store.showSetup(); showGuide() }
                 }
             }.formStyle(.grouped)
             } else if tab == 1 {
             Form {
-                Section("系统权限") {
-                    LabeledContent("麦克风", value: store.microphoneAuthorization.title)
-                    LabeledContent("文字写入", value: store.pastePermissionGranted ? "已允许" : "尚未允许")
-                    HStack {
-                        Button("允许麦克风") { store.requestMicrophonePermission() }
-                            .disabled(!store.canStart || store.microphoneAuthorization != .notDetermined)
-                        Button("允许文字写入") { store.requestPastePermission() }.disabled(!store.canStart)
-                        Button("系统设置") { store.openSystemSettings() }
-                    }
-                    Text("在系统设置的「隐私与安全」中管理麦克风与辅助功能权限。返回语落时会刷新状态。")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Section("本地模型") {
-                    LabeledContent("状态", value: store.modelState.title)
-                    Text("当前预览使用 Qwen 本地模型。首次下载约 713 MB；中断可继续，完成后校验文件。识别过程无需联网。")
-                        .font(.callout).foregroundStyle(.secondary)
-                    if let progress = store.modelInstallationProgress {
-                        ProgressView(progress.title, value: progress.fraction)
-                    }
-                    if store.recovery == .installModel || store.recovery == .reloadModel || store.recovery == .checkInstallation {
-                        Text(store.status).font(.caption).foregroundStyle(.orange)
-                    }
-                    if store.modelState == .loading && store.canCancel {
-                        Button("取消准备") { Task { await store.cancel() } }
-                    }
-                    Button(store.modelState == .needsDownload ? "下载或继续安装" : "检查并修复模型") { store.installModel() }.disabled(!store.canStart)
-                }
-                Button("刷新权限状态") { store.refreshPermissions() }
+                Section("系统权限") { PermissionSettingsContent(store: store) }
+                Section("本地模型") { ModelSettingsContent(store: store) }
             }.formStyle(.grouped)
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
             }
-            }.scrollContentBackground(.hidden)
+            }.id(tab).transition(.opacity).scrollContentBackground(.hidden)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .writingSurface()
+                .ceramicSurface()
         }
         .padding(24).frame(width: 620, height: 660)
         .background(theme.background).tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: tab)
         .onAppear { store.refreshPermissions(); loginItem.refresh() }
+    }
+}
+
+private struct ReadinessSummary: View {
+    @ObservedObject var store: AppStore
+    @Environment(\.colorScheme) private var scheme
+
+    private var ready: Bool {
+        store.canCompleteSetup
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill((ready ? Color.green : Color.orange).opacity(0.12)).frame(width: 38, height: 38)
+                Circle().fill(ready ? Color.green : Color.orange).frame(width: 8, height: 8)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ready ? "语落已准备好" : (store.canStart ? "尚未完成准备" : "语落正在处理"))
+                    .font(.subheadline.weight(.semibold))
+                Text(ready ? "模型、权限和快捷键均已就绪" : (store.canStart ? "请检查权限、模型与快捷键状态" : "当前任务结束后可继续使用"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            StatusBadge(title: ready ? "已就绪" : (store.canStart ? "待处理" : "处理中"), tone: ready ? .good : .warning)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 11)
+        .writingSurface()
+    }
+}
+
+struct StatusBadge: View {
+    enum Tone { case good, warning, quiet }
+    let title: String
+    let tone: Tone
+
+    private var color: Color {
+        switch tone {
+        case .good: .green
+        case .warning: .orange
+        case .quiet: .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(title).font(.caption.weight(.medium)).foregroundStyle(color)
+        }
+        .padding(.horizontal, 9).padding(.vertical, 5)
+        .background(color.opacity(0.1), in: Capsule())
     }
 }

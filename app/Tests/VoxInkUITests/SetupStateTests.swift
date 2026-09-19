@@ -25,6 +25,30 @@ private actor SetupTranscriber: TranscriptionService {
     private final class MicrophoneProbe {
         var status: MicrophoneAuthorization = .authorized
     }
+    @Test func recordingReadinessRequiresModelAndMicrophoneButNotAutomaticPaste() async throws {
+        let microphone = MicrophoneProbe()
+        let store = AppStore(service: SetupTranscriber(), pasteService: SetupPaste(), preferences: nil,
+            microphoneStatus: { microphone.status })
+        store.refreshPermissions()
+        #expect(store.canStart)
+        #expect(!store.canRecord)
+        store.warmUp()
+        #expect(!store.canRecord)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while !store.canStart && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(store.modelState == .ready)
+        #expect(store.canRecord)
+        #expect(!store.canCompleteSetup)
+        microphone.status = .denied
+        store.refreshPermissions()
+        #expect(!store.canRecord)
+        microphone.status = .authorized
+        store.refreshPermissions()
+        #expect(store.canRecord)
+        await store.cancel()
+        #expect(!store.canRecord)
+    }
+
     @Test func guideCannotCompleteUntilAllRequirementsAreReady() async throws {
         let name = "VoxInk.SetupTests.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: name))

@@ -95,6 +95,15 @@ private actor PreviewDictionary: UserDictionaryStorage {
     @Published var changing = false
     @Published var error: String?
     @Published var exportStatus = "⌘⇧E 导出当前演示图"
+    private var workspaceWindow: WorkspaceWindowController?
+
+    func showWorkspaceWindow(compact: Bool) {
+        workspaceWindow?.close()
+        workspaceWindow = WorkspaceWindowController(store: store, restoresFrame: false)
+        workspaceWindow?.window?.setContentSize(NSSize(width: compact ? 660 : 820, height: 600))
+        workspaceWindow?.present()
+    }
+
     private var service: PreviewTranscriber
     private var paste: PreviewPaste
     let dictionaryStorage = PreviewDictionary()
@@ -208,6 +217,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
                     Toggle("最小高度", isOn: $short)
                     Text("主界面实测：\(Int(contentSize.width)) × \(Int(contentSize.height)) 点")
                         .font(.caption).foregroundStyle(.secondary)
+                    Button("正式窗口预览") { controller.showWorkspaceWindow(compact: compact) }
                     Button("导出演示图") { controller.exportCurrentView() }
                 }
                 Text(controller.exportStatus).font(.caption).foregroundStyle(.secondary)

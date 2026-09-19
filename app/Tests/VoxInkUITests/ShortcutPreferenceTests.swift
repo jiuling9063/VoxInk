@@ -3,6 +3,48 @@ import Testing
 @testable import VoxInkUI
 
 @MainActor struct ShortcutPreferenceTests {
+    @Test func remoteDeviceNamesPersistSeparately() throws {
+        let name = "VoxInk.RemoteDevicesTests.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let store = AppStore(preferences: preferences)
+        store.setUUDevices(mac: "Mini", windows: "PC")
+        let restored = AppStore(preferences: preferences)
+        #expect(restored.uuMacDevices == "Mini")
+        #expect(restored.uuWindowsDevices == "PC")
+    }
+    @Test func refreshingPermissionsRetriesUnavailableShortcut() {
+        let store = AppStore(preferences: nil)
+        var available = false
+        store.configureShortcutRegistration { _ in available }
+        #expect(!store.shortcutAvailable)
+        available = true
+        store.refreshPermissions()
+        #expect(store.shortcutAvailable)
+    }
+    @Test func uuWindowsPasteIsOptInAndPersists() throws {
+        let name = "VoxInk.WindowsPasteTests.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let store = AppStore(preferences: preferences)
+        #expect(!store.uuWindowsPaste)
+        store.setUUWindowsPaste(true)
+        #expect(AppStore(preferences: preferences).uuWindowsPaste)
+        store.setUUWindowsPaste(false)
+        #expect(!AppStore(preferences: preferences).uuWindowsPaste)
+    }
+    @Test func remoteTimingDefaultsToStableAndPersistsSelection() throws {
+        let name = "VoxInk.RemoteTimingTests.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let store = AppStore(preferences: preferences)
+        #expect(store.remotePasteTiming == .stable)
+        store.setRemotePasteTiming(.faster)
+        #expect(AppStore(preferences: preferences).remotePasteTiming == .faster)
+        preferences.set("unknown", forKey: "remotePasteTiming")
+        #expect(AppStore(preferences: preferences).remotePasteTiming == .stable)
+    }
+
     @Test func successfulRegistrationPersistsAndFailureKeepsPreviousCombination() throws {
         let name = "VoxInk.ShortcutTests.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: name))

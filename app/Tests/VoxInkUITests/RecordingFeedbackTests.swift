@@ -57,14 +57,24 @@ import Testing
         }
     }
 
-    @Test func longStatusIncreasesHeightInsteadOfClipping() {
+    @Test func compactHudKeepsFixedHeightForStatusUpdates() {
         let short = RecordingFeedbackPresentation(phase: .failed, status: "识别失败", target: "测试窗口")
         let long = RecordingFeedbackPresentation(phase: .failed,
             status: String(repeating: "文字已保留，请检查原目标输入框并确认没有重复内容，再手动重新粘贴。", count: 3), target: "测试窗口")
-        let shortView = NSHostingView(rootView: RecordingFeedbackView(presentation: short).frame(width: 430))
-        let longView = NSHostingView(rootView: RecordingFeedbackView(presentation: long).frame(width: 430))
-        #expect(longView.fittingSize.height > shortView.fittingSize.height)
-        #expect(longView.fittingSize.width == 430)
+        let shortView = NSHostingView(rootView: RecordingFeedbackView(presentation: short).frame(width: 180))
+        let longView = NSHostingView(rootView: RecordingFeedbackView(presentation: long).frame(width: 180))
+        #expect(longView.fittingSize.height == shortView.fittingSize.height)
+        #expect(longView.fittingSize.width == 180)
+    }
+
+    @Test func failedHudReservesSpaceForVisibleRecoveryHint() {
+        let failed = NSHostingView(rootView: RecordingFeedbackView(presentation:
+            .init(phase: .failed, status: "识别失败", target: "测试窗口")).frame(width: 180))
+        let recording = NSHostingView(rootView: RecordingFeedbackView(presentation:
+            .init(phase: .recording, status: "录音中", target: "测试窗口")).frame(width: 180))
+        #expect(failed.fittingSize.height >= 56)
+        #expect(recording.fittingSize.height == 44)
+        #expect(failed.fittingSize.width == 180)
     }
 
     @Test func panelCannotTakeKeyboardOrMouseFocus() {

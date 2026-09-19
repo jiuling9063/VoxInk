@@ -20,27 +20,15 @@ import VoxInkCore
     private var shortcuts: GlobalShortcutController?
     private var feedback: RecordingPanel?
     private var observation: AnyCancellable?
-    private var mainWindow: NSWindow?
+    private var mainWindow: WorkspaceWindowController?
 
     func showMainWindow() {
         guard let store else { return }
         store.refreshPermissions()
         if mainWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 760),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "语落 VoxInk"
-            window.identifier = NSUserInterfaceItemIdentifier("voxink-main")
-            window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: ContentView(store: store))
-            window.contentMinSize = NSSize(width: 660, height: 600)
-            window.setContentSize(NSSize(width: 720, height: 760))
-            if !window.setFrameUsingName("voxink-main") { window.center() }
-            window.setFrameAutosaveName("voxink-main")
-            mainWindow = window
+            mainWindow = WorkspaceWindowController(store: store)
         }
-        mainWindow?.deminiaturize(nil)
-        mainWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        mainWindow?.present()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

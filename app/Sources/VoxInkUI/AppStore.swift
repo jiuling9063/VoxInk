@@ -10,53 +10,188 @@ import VoxInkCore
     @Published public private(set) var transcript = ""
     @Published public private(set) var rawTranscript = ""
     @Published public private(set) var polishingEnabled = false
-    @Published public private(set) var polishedPreview: String?
     @Published public private(set) var polishMessage = ""
     @Published public private(set) var isPolishing = false
     private let polishingService: any PolishingService
-    private var polishTask: Task<Void, Never>?
-    private var polishGeneration = UUID()
+    @Published public private(set) var polishModel: PolishModel
+    @Published public private(set) var installedPolishModels: Set<PolishModel> = []
+    @Published public private(set) var isInstallingPolishModel = false
+    @Published public private(set) var polishInstallationMessage = ""
+    private let polishInstaller: any PolishModelInstalling
+    private let polishInventory: @MainActor () -> Set<PolishModel>
+    private var polishInstallationTask: Task<Void, Never>?
 
-    public func setPolishingEnabled(_ enabled: Bool) {
-        polishingEnabled = enabled
-        preferences?.set(enabled, forKey: "polishingEnabled")
-        discardPolish()
+    @Published public private(set) var automaticPolishModel: Bool
+    @Published public private(set) var polishPreference: PolishPreference
+    @Published public private(set) var polishDevice: PolishDevice
+    @Published public private(set) var polishPerformanceMessage = ""
+    @Published public private(set) var polishWarmMessage = ""
+    private var polishPolicy: PolishPerformancePolicy
+    private let deviceProvider: @MainActor () -> PolishDevice
+    private var pressureLevel = 0
+    private var isShuttingDown = false
+    private var pressureSource: (any DispatchSourceMemoryPressure)?
+    private var polishWarmTask: Task<Void, Never>?
+    private var warmModel: PolishModel?
+    private var warmGeneration = UUID()
+
+    public var recommendedPolishModel: PolishModel {
+        PolishPerformancePolicy.recommended(device: polishDevice, preference: polishPreference)
+    }
+    public var effectivePolishModel: PolishModel? {
+        guard polishDevice.appleSilicon, polishDevice.pressure < 2 else { return nil }
+        return automaticPolishModel
+            ? polishPolicy.select(device: polishDevice, preference: polishPreference, installed: installedPolishModels)
+            : polishModel
+    }
+    public var polishDownloadTarget: PolishModel { automaticPolishModel ? recommendedPolishModel : polishModel }
+    public var polishRecommendationText: String {
+        let actual = effectivePolishModel
+        if !polishDevice.appleSilicon { return "当前本地运行环境需要 Apple Silicon；本机暂不启用本地润色。" }
+        if polishDevice.pressure >= 2 { return "内存压力较高，暂时使用未润色文字，恢复后再启用。" }
+        if !automaticPolishModel {
+            return polishModel.rank > recommendedPolishModel.rank
+                ? "当前保留手动选择。本机建议使用\(recommendedPolishModel.title)，可减少等待和内存占用。"
+                : "保持手动选择，不自动更换模型。"
+        }
+        guard let actual else { return "尚无适合且已安装的模型。建议下载\(recommendedPolishModel.title)，点击下载前可查看大小。" }
+        return "本机建议\(recommendedPolishModel.title)，当前使用\(actual.title)。会结合实际耗时与系统负载调整已安装模型。"
     }
 
-    public func previewPolish() {
-        guard polishingEnabled, canStart, !transcript.isEmpty else { return }
-        discardPolish()
-        let token = polishGeneration
-        let source = transcript
-        isPolishing = true
-        polishMessage = "正在本机润色…"
-        polishTask = Task { [weak self, polishingService] in
+    public func setAutomaticPolishModel(_ enabled: Bool) {
+        guard canStart, !isInstallingPolishModel else { return }
+        automaticPolishModel = enabled
+        preferences?.set(enabled, forKey: "polishModelAutomatic")
+        refreshPolishDevice(); schedulePolishWarmup()
+    }
+
+    public func setPolishPreference(_ preference: PolishPreference) {
+        guard canStart, !isInstallingPolishModel else { return }
+        polishPreference = preference
+        preferences?.set(preference.rawValue, forKey: "polishPreference")
+        refreshPolishDevice(); schedulePolishWarmup()
+    }
+
+    private func refreshPolishDevice() {
+        var device = deviceProvider(); device.pressure = pressureLevel
+        polishDevice = device
+    }
+
+    private func schedulePolishWarmup() {
+        guard !isShuttingDown else { return }
+        let model = polishingEnabled && !isInstallingPolishModel && pressureLevel == 0 && !polishDevice.thermalPressure
+            ? effectivePolishModel : nil
+        if model == warmModel, polishWarmTask != nil { return }
+        let previous = polishWarmTask
+        previous?.cancel()
+        let token = UUID(); warmGeneration = token; warmModel = model
+        polishWarmMessage = model == nil ? "" : "正在后台预热…"
+        polishWarmTask = Task {
+            if model == nil || previous != nil { await polishingService.release() }
+            await previous?.value
+            guard !Task.isCancelled, warmGeneration == token else { return }
+            guard let model else { polishWarmTask = nil; return }
             do {
-                let result = try await polishingService.polish(source)
-                guard let self, self.polishGeneration == token, self.transcript == source else { return }
-                self.polishedPreview = result.accepted ? result.text : nil
-                self.polishMessage = result.accepted ? "润色预览，请核对后复制；原文未改动。" : "结果未通过保真检查，已保留原文。"
-                self.isPolishing = false
+                try await polishingService.prepare(model: model)
+                guard !Task.isCancelled, warmGeneration == token else { return }
+                polishWarmMessage = "已预热；连续使用会复用模型，闲置 2 分钟后释放。"
             } catch {
-                guard let self, self.polishGeneration == token else { return }
-                self.polishMessage = (error as? LocalPolishingService.Failure)?.errorDescription ?? "润色未完成，原文已保留。"
-                self.isPolishing = false
+                guard !Task.isCancelled, warmGeneration == token else { return }
+                polishWarmMessage = "预热未完成，将在输入时尝试加载。"
             }
+            // The service owns idle expiry; allow the next recording to ensure readiness again.
+            polishWarmTask = nil
         }
     }
 
-    public func discardPolish() {
-        polishGeneration = UUID()
-        polishTask?.cancel(); polishTask = nil
-        isPolishing = false
-        polishedPreview = nil
-        polishMessage = ""
+    private func startPolishPressureMonitoring() {
+        guard pressureSource == nil else { return }
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical], queue: .main)
+        source.setEventHandler { [weak self, weak source] in
+            let events = source?.data ?? []
+            let level = events.contains(.critical) ? 2 : (events.contains(.warning) ? 1 : 0)
+            Task { @MainActor [weak self] in
+                await self?.handlePolishMemoryPressure(level)
+            }
+        }
+        pressureSource = source; source.resume()
     }
 
-    public func copyPolishedPreview() {
-        guard canStart, polishingEnabled, let polishedPreview else { return }
-        polishMessage = clipboardWriter(polishedPreview) ? "已复制整理结果" : "复制失败，请重试"
+    func handlePolishMemoryPressure(_ level: Int) async {
+        guard !isShuttingDown else { return }
+        pressureLevel = level
+        refreshPolishDevice()
+        if level > 0, !isPolishing || level >= 2 {
+            warmGeneration = UUID()
+            polishWarmTask?.cancel(); polishWarmTask = nil; warmModel = nil
+            polishWarmMessage = "已释放润色模型以减轻内存压力。"
+            await polishingService.release()
+        }
     }
+
+    private func recordPolishTiming(model: PolishModel, characters: Int, seconds: Double?, timedOut: Bool,
+                                    preference: PolishPreference) {
+        polishPolicy.record(model: model, characters: characters, generationSeconds: seconds, timedOut: timedOut, preference: preference)
+        if let data = try? JSONEncoder().encode(polishPolicy) {
+            preferences?.set(data, forKey: "polishTiming-" + polishDevice.signature)
+        }
+        if let seconds, seconds.isFinite {
+            polishPerformanceMessage = String(format: "最近一次 %@ 生成 %.1f 秒（不含加载）。", model.title, seconds)
+        } else if timedOut { polishPerformanceMessage = "最近一次超过等待上限，已使用未润色文字。" }
+    }
+
+    public func setPolishModel(_ model: PolishModel) {
+        guard canStart, !isInstallingPolishModel else { return }
+        polishModel = model
+        automaticPolishModel = false
+        preferences?.set(false, forKey: "polishModelAutomatic")
+        polishInstallationMessage = ""
+        preferences?.set(model.rawValue, forKey: "polishModel")
+        refreshPolishDevice(); schedulePolishWarmup()
+    }
+
+    public func refreshPolishModels() { installedPolishModels = polishInventory(); refreshPolishDevice() }
+
+    public func installSelectedPolishModel() {
+        guard canStart, !isInstallingPolishModel else { return }
+        refreshPolishDevice()
+        let model = polishDownloadTarget
+        guard PolishPerformancePolicy.canDownload(model, device: polishDevice) else {
+            polishInstallationMessage = "当前设备不支持或磁盘空间不足。请至少预留模型大小加 2 GB 空间。"
+            return
+        }
+        polishWarmTask?.cancel(); warmGeneration = UUID(); warmModel = nil
+        isInstallingPolishModel = true
+        polishInstallationMessage = "正在下载并校验\(model.title)…首次下载可能需要较长时间。"
+        polishInstallationTask = Task {
+            do {
+                await polishingService.release()
+                try Task.checkCancellation()
+                try await polishInstaller.install(model)
+                try Task.checkCancellation()
+                refreshPolishModels()
+                polishInstallationMessage = installedPolishModels.contains(model) ? "安装完成，可以使用。" : "模型未就绪，请重新检查安装。"
+            } catch is CancellationError {
+                polishInstallationMessage = "已取消下载，再次点击可继续。"
+            } catch {
+                polishInstallationMessage = "安装未完成，请检查网络、可用磁盘空间和本地润色运行环境后重试。"
+            }
+            refreshPolishModels()
+            isInstallingPolishModel = false
+            polishInstallationTask = nil
+            schedulePolishWarmup()
+        }
+    }
+
+    public func cancelPolishInstallation() { polishInstallationTask?.cancel() }
+
+    public func setPolishingEnabled(_ enabled: Bool) {
+        guard canStart else { return }
+        polishingEnabled = enabled
+        preferences?.set(enabled, forKey: "automaticPolishingEnabled")
+        refreshPolishDevice(); schedulePolishWarmup()
+    }
+
     @Published private(set) var sessionHistory: [SessionTranscript] = []
 
     func copyHistory(_ entry: SessionTranscript) -> Bool {
@@ -71,6 +206,33 @@ import VoxInkCore
     @Published public private(set) var fixedTextTestArmed = false
     @Published public private(set) var shortcutMode: ShortcutMode
     @Published public private(set) var shortcutCombination: ShortcutCombination
+    @Published public private(set) var remotePasteTiming: RemotePasteTiming = .stable
+    @Published public private(set) var uuWindowsPaste = false
+    @Published public private(set) var uuMacDevices = ""
+    @Published public private(set) var uuWindowsDevices = ""
+    public func setUUDevices(mac: String, windows: String) {
+        guard canStart else { return }
+        uuMacDevices = mac
+        uuWindowsDevices = windows
+        pasteService.setRemoteDevices(RemoteDeviceProfiles.make(mac: mac, windows: windows))
+        preferences?.set(mac, forKey: "uuMacDevices")
+        preferences?.set(windows, forKey: "uuWindowsDevices")
+    }
+    @Published public private(set) var clipboardCleanupWarning: String = ""
+
+    public func setRemotePasteTiming(_ timing: RemotePasteTiming) {
+        guard canStart else { return }
+        remotePasteTiming = timing
+        pasteService.setRemotePasteTiming(timing)
+        preferences?.set(timing.rawValue, forKey: "remotePasteTiming")
+    }
+
+    public func setUUWindowsPaste(_ enabled: Bool) {
+        guard canStart else { return }
+        uuWindowsPaste = enabled
+        pasteService.setUUWindowsPaste(enabled)
+        preferences?.set(enabled, forKey: "uuWindowsPaste")
+    }
     @Published public private(set) var shortcutAvailable = false
     @Published public private(set) var cancellationShortcutAvailable = false
     @Published public private(set) var microphoneAuthorization: MicrophoneAuthorization = .notDetermined
@@ -109,12 +271,15 @@ import VoxInkCore
     private var cancellationTask: Task<Void, Never>?
     private var meterTask: Task<Void, Never>?
     public var canStart: Bool { phase == .ready || phase == .failed }
+    public var canRecord: Bool {
+        canStart && microphoneAuthorization == .authorized && modelState == .ready
+    }
     public var canCancel: Bool { phase == .loading || phase == .recording || phase == .transcribing || phase == .pasting }
     public var canPasteAgain: Bool { canStart && lastTarget != nil && !transcript.isEmpty }
     public var canRetryAudio: Bool { canStart && retainedAudio.map { $0.expiresAt > Date() } == true }
     public var repasteTargetName: String? { lastTarget?.name }
     public var canCompleteSetup: Bool {
-        canStart && microphoneAuthorization == .authorized && pastePermissionGranted && modelState == .ready && shortcutAvailable
+        canRecord && pastePermissionGranted && shortcutAvailable
     }
     public var canChangeShortcut: Bool { canStart && !shortcutIsHeld }
     public var shortcutInstruction: String {
@@ -123,6 +288,9 @@ import VoxInkCore
 
     public init(
         polishingService: any PolishingService = LocalPolishingService(),
+        polishDeviceProvider: @escaping @MainActor () -> PolishDevice = { PolishDevice.current() },
+        polishInstaller: any PolishModelInstalling = LocalPolishModelInstaller(),
+        polishInventory: @escaping @MainActor () -> Set<PolishModel> = { LocalPolishingService.installedModels() },
         service: any TranscriptionService = QwenTranscriptionService(),
         pasteService: any PasteService = PasteCoordinator(),
         recorder: any AudioRecording = AudioCapture(),
@@ -142,10 +310,22 @@ import VoxInkCore
     ) {
         self.service = service
         self.polishingService = polishingService
+        self.deviceProvider = polishDeviceProvider
+        let device = polishDeviceProvider()
+        self.polishDevice = device
+        self.polishPreference = preferences?.string(forKey: "polishPreference").flatMap(PolishPreference.init(rawValue:)) ?? .balanced
+        self.automaticPolishModel = preferences?.object(forKey: "polishModelAutomatic") != nil
+            ? preferences!.bool(forKey: "polishModelAutomatic") : preferences?.string(forKey: "polishModel") == nil
+        self.polishPolicy = preferences?.data(forKey: "polishTiming-" + device.signature)
+            .flatMap { try? JSONDecoder().decode(PolishPerformancePolicy.self, from: $0) } ?? .init()
+        self.polishInstaller = polishInstaller
+        self.polishInventory = polishInventory
+        self.polishModel = preferences?.string(forKey: "polishModel").flatMap(PolishModel.init(rawValue:)) ?? .balanced
+        self.installedPolishModels = polishInventory()
         self.pasteService = pasteService
         self.recorder = recorder
         self.preferences = preferences
-        self.polishingEnabled = preferences?.bool(forKey: "polishingEnabled") ?? false
+        self.polishingEnabled = preferences?.bool(forKey: "automaticPolishingEnabled") ?? false
         self.microphoneStatus = microphoneStatus
         self.setupCompleted = preferences?.bool(forKey: "setupCompleted") ?? false
         self.shortcutMode = preferences?.string(forKey: "shortcutMode").flatMap(ShortcutMode.init(rawValue:)) ?? .holdToTalk
@@ -156,9 +336,21 @@ import VoxInkCore
         self.clipboardWriter = clipboardWriter
         self.temporaryAudioJanitor = temporaryAudioJanitor
         self.dictionary = dictionary
+        remotePasteTiming = preferences?.string(forKey: "remotePasteTiming").flatMap(RemotePasteTiming.init(rawValue:)) ?? .stable
+        pasteService.setRemotePasteTiming(remotePasteTiming)
+        uuWindowsPaste = preferences?.bool(forKey: "uuWindowsPaste") ?? false
+        pasteService.setUUWindowsPaste(uuWindowsPaste)
+        uuMacDevices = preferences?.string(forKey: "uuMacDevices") ?? ""
+        uuWindowsDevices = preferences?.string(forKey: "uuWindowsDevices") ?? ""
+        pasteService.setRemoteDevices(RemoteDeviceProfiles.make(mac: uuMacDevices, windows: uuWindowsDevices))
+        pasteService.setCleanupFailureHandler { [weak self] _ in
+            self?.clipboardCleanupWarning = "粘贴按键已发出，但原剪贴板恢复失败。请检查剪贴板；不要重复粘贴。"
+        }
     }
 
     public func prepareForUse() {
+        startPolishPressureMonitoring()
+        refreshPolishDevice(); schedulePolishWarmup()
         guard canStart else { return }
         let token = UUID(); generation = token
         phase = .loading; status = "正在检查未完成录音…"
@@ -261,19 +453,31 @@ import VoxInkCore
     }
 
     public func shutdown() async {
-        discardPolish()
+        isShuttingDown = true
+        pressureSource?.cancel(); pressureSource = nil
+        warmGeneration = UUID()
+        polishWarmTask?.cancel()
+        polishInstallationTask?.cancel()
         maintenanceTask?.cancel(); maintenanceTask = nil
+        // Invalidate the input before releasing workers: release errors must not trigger a fallback paste.
         if canCancel || phase == .cancelling {
             let keepPrevious = retryingAudioID == nil && phase != .transcribing && phase != .recording && phase != .pasting
             await cancel(preserveRetainedAudio: keepPrevious)
-        }
-        else { await service.cancel() }
+        } else { await service.cancel() }
+        await polishingService.release()
+        await polishWarmTask?.value
+        polishWarmTask = nil
+        await polishInstallationTask?.value
         await dictionary?.waitForPendingChanges()
+        await pasteService.finishPendingCleanup()
     }
 
     public func refreshPermissions() {
         microphoneAuthorization = microphoneStatus()
         pastePermissionGranted = pasteService.accessibilityGranted
+        if !shortcutAvailable, canStart, let registerShortcut {
+            configureShortcutRegistration(registerShortcut)
+        }
     }
 
     public func completeSetup() {
@@ -294,7 +498,12 @@ import VoxInkCore
         phase = .loading; recovery = nil; status = "正在检查麦克风权限…"
         operation = Task {
             guard generation == token, !Task.isCancelled else { return }
-            let allowed = await recorder.requestPermission()
+            let allowed: Bool
+            if microphoneAuthorization == .authorized {
+                allowed = true
+            } else {
+                allowed = await recorder.requestPermission()
+            }
             guard generation == token else { return }
             refreshPermissions()
             if allowed { phase = .ready; status = "麦克风已允许，按快捷键或点击录音时才会采集声音。" }
@@ -363,6 +572,7 @@ import VoxInkCore
             do {
                 try recorder.start()
                 elapsed = 0; level = 0
+                refreshPolishDevice(); schedulePolishWarmup()
                 phase = .recording
                 status = holdRecording ? "正在录音 · 松开快捷键后识别并写入"
                     : (target != nil ? "正在录音 · 再按快捷键结束并写入" : "正在录音 · 最长 60 秒")
@@ -454,6 +664,11 @@ import VoxInkCore
 
     // Keep unrecognized audio separate from the previous transcript.
     private func recognize(_ url: URL, token: UUID) async -> RecognitionRetention {
+        let shouldPolish = polishingEnabled
+        refreshPolishDevice()
+        let selectedPolishModel = effectivePolishModel
+        let selectedPolishPreference = polishPreference
+        polishMessage = ""
         let dictionarySnapshot = dictionary?.rules ?? .empty
         let dictionaryUnavailable = dictionary != nil && dictionary?.isReady != true
         phase = .transcribing; recovery = nil; status = "正在识别 · 首次使用可能需要加载模型…"
@@ -462,7 +677,7 @@ import VoxInkCore
             guard generation == token else { return .discard }
             modelState = .ready
             let converted = textProcessor.process(raw, dictionary: dictionarySnapshot)
-            let text = converted.text
+            var text = converted.text
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 fail("没有识别到文字，请重试。", recovery: .recordAgain); return .audio
             }
@@ -470,7 +685,39 @@ import VoxInkCore
             let warnings = [converted.warning, dictionaryUnavailable ? "词典暂不可用，本次使用基础文字规则" : nil].compactMap { $0 }
             conversionWarning = warnings.isEmpty ? nil : warnings.joined(separator: "；")
             transcript = text
-            discardPolish()
+            if shouldPolish, let selectedPolishModel, polishDevice.pressure < 2 {
+                isPolishing = true
+                status = "正在润色 · 完成后再写入，可按 Esc 取消…"
+                do {
+                    let result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds))
+                    guard generation == token, !Task.isCancelled else { return .discard }
+                    recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: result.generationSeconds, timedOut: false, preference: selectedPolishPreference)
+                    if result.accepted && !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        text = result.text
+                        polishMessage = text == converted.text ? "已检查，无需润色" : "已自动润色"
+                    } else {
+                        polishMessage = "润色结果未通过检查，本次使用未润色文字。"
+                    }
+                } catch is CancellationError {
+                    guard generation == token else { return .discard }
+                    isPolishing = false
+                    activeTarget = nil
+                    phase = .ready; status = "已取消 · 未发出粘贴"
+                    return .discard
+                } catch {
+                    guard generation == token, !Task.isCancelled else { return .discard }
+                    if error as? LocalPolishingService.Failure == .timeout {
+                        recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: nil, timedOut: true, preference: selectedPolishPreference)
+                    }
+                    polishMessage = "\((error as? LocalPolishingService.Failure)?.errorDescription ?? "润色未完成。")本次使用未润色文字。"
+                }
+                isPolishing = false
+                if polishDevice.pressure > 0 || polishDevice.thermalPressure { await polishingService.release() }
+                guard generation == token, !Task.isCancelled else { return .discard }
+                transcript = text
+            } else if shouldPolish {
+                polishMessage = "当前没有适合且可用的润色模型，本次使用未润色文字。"
+            }
             sessionHistory.insert(SessionTranscript(text: text, date: Date()), at: 0)
             if let target = activeTarget {
                 lastTarget = target
@@ -514,6 +761,8 @@ import VoxInkCore
         let preparingModel = phase == .loading && modelState == .loading
         let pendingModelOperation = preparingModel ? operation : nil
         generation = UUID()
+        isPolishing = false
+        polishMessage = ""
         holdRecording = false
         pasteService.cancel()
         let pendingAudioOperation = audioOperation

@@ -17,6 +17,7 @@ private struct Example: Identifiable {
         .init(id: "按两次录音", value: .init(phase: .recording, status: "正在录音 · 再按快捷键结束并写入", target: "备忘录", elapsed: 59, level: 0.2, cancellationAvailable: true)),
         .init(id: "加载", value: .init(phase: .loading, status: "正在检查麦克风权限…", target: "测试窗口", cancellationAvailable: true)),
         .init(id: "识别", value: .init(phase: .transcribing, status: "正在识别 · 首次使用可能需要加载模型…", target: "测试窗口", cancellationAvailable: true)),
+        .init(id: "润色", value: .init(phase: .transcribing, status: "正在润色…", target: "测试窗口", cancellationAvailable: true)),
         .init(id: "写入", value: .init(phase: .pasting, status: "正在写入测试窗口并清理剪贴板…", target: "测试窗口", cancellationAvailable: true)),
         .init(id: "取消", value: .init(phase: .cancelling, status: "正在取消…", target: "测试窗口")),
         .init(id: "失败和长文字", value: .init(phase: .failed, status: "文字已保留。原目标输入框已失去焦点，请重新点选输入框，确认没有重复内容后，再从语落窗口手动重新粘贴。", target: "一个名称较长的远程应用与文件传输助手测试窗口")),
@@ -53,6 +54,7 @@ private struct Example: Identifiable {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(example.id).font(.caption).foregroundStyle(.secondary)
                             RecordingFeedbackView(presentation: example.value)
+                                .frame(width: 180)
                         }
                     }
                 }.padding(8)

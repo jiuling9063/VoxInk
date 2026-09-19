@@ -54,7 +54,7 @@ public actor ResidentWorkerClient {
     private var generation = UUID()
     private var buffer = Data()
     private var readyWaiter: CheckedContinuation<WorkerReady, Error>?
-    private var resultWaiter: CheckedContinuation<WorkerResult, Error>?
+    private var resultWaiter: CheckedContinuation<Data, Error>?
     private var requestID: UUID?
     private var deadline: Task<Void, Never>?
     private var cleanup: Task<Bool, Never>?
@@ -124,10 +124,24 @@ public actor ResidentWorkerClient {
 
     public func transcribe(requestID: UUID = UUID(), sampleID: String, audioPath: String,
                            timeout: Duration = .seconds(300)) async throws -> WorkerResult {
-        guard readyInfo != nil, let input else { throw ResidentWorkerError.notReady }
-        guard resultWaiter == nil else { throw ResidentWorkerError.busy }
         let data = try JSONEncoder().encode(Request(request_id: requestID, sample_id: sampleID, audio_path: audioPath))
         guard data.count < 4096 else { throw ResidentWorkerError.invalidProtocol }
+        let response = try await exchange(requestID: requestID, payload: data, timeout: timeout)
+        guard let result = try JSONDecoder().decode(Response.self, from: response).result else {
+            throw ResidentWorkerError.invalidProtocol
+        }
+        return result
+    }
+
+    /// Exchanges one bounded JSON envelope; the caller decodes its result schema.
+    public func exchange(requestID: UUID, payload: Data, timeout: Duration) async throws -> Data {
+        guard readyInfo != nil, let input else { throw ResidentWorkerError.notReady }
+        guard resultWaiter == nil else { throw ResidentWorkerError.busy }
+        guard payload.count <= 32768,
+              let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+              let id = object["request_id"] as? String, UUID(uuidString: id) == requestID else {
+            throw ResidentWorkerError.invalidProtocol
+        }
         let token = generation
         let operation = UUID()
         return try await withTaskCancellationHandler {
@@ -136,7 +150,7 @@ public actor ResidentWorkerClient {
                 resultWaiter = continuation
                 self.requestID = requestID
                 armTimeout(timeout, token: token)
-                do { try input.write(contentsOf: data + Data([10])) } catch {
+                do { try input.write(contentsOf: payload + Data([10])) } catch {
                     Task { await self.writeFailed(error, token: token, operation: operation) }
                 }
             }
@@ -203,9 +217,14 @@ public actor ResidentWorkerClient {
                     deadlineID = UUID()
                     waiter.resume(returning: ready)
                 } else {
-                    let response = try JSONDecoder().decode(Response.self, from: line)
-                    guard response.request_id == requestID, let waiter = resultWaiter else { continue }
-                    guard (response.result != nil) != (response.error_code != nil) else {
+                    guard let response = try JSONSerialization.jsonObject(with: line) as? [String: Any],
+                          let id = response["request_id"] as? String, let responseID = UUID(uuidString: id) else {
+                        throw ResidentWorkerError.invalidProtocol
+                    }
+                    guard responseID == requestID, let waiter = resultWaiter else { continue }
+                    let result = response["result"] as? [String: Any]
+                    let errorCode = response["error_code"] as? String
+                    guard (result != nil) != (errorCode != nil) else {
                         throw ResidentWorkerError.invalidProtocol
                     }
                     resultWaiter = nil
@@ -213,8 +232,8 @@ public actor ResidentWorkerClient {
                     requestID = nil
                     deadline?.cancel()
                     deadlineID = UUID()
-                    if let code = response.error_code { waiter.resume(throwing: ResidentWorkerError.worker(code)) }
-                    else if let result = response.result { waiter.resume(returning: result) }
+                    if let code = errorCode { waiter.resume(throwing: ResidentWorkerError.worker(code)) }
+                    else if result != nil { waiter.resume(returning: line) }
                     else { waiter.resume(throwing: ResidentWorkerError.invalidProtocol) }
                 }
             } catch {

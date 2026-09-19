@@ -50,42 +50,93 @@ public struct RecordingFeedbackView: View {
     public init(presentation: RecordingFeedbackPresentation) { self.presentation = presentation }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: presentation.symbol)
-                    .foregroundStyle(presentation.phase == .failed ? Color.orange : Color(red: 0.33, green: 0.49, blue: 0.52))
-                    .accessibilityHidden(true)
-                Text(presentation.target).fontWeight(.semibold).lineLimit(2)
-                Spacer(minLength: 8)
-                if presentation.phase == .recording {
-                    Text("\(presentation.safeElapsed) / 60 秒").monospacedDigit().fixedSize()
-                }
-            }
-            Text(presentation.status).font(.callout).fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("feedbackStatus")
+        ZStack {
             if presentation.phase == .recording {
-                ProgressView(value: presentation.safeLevel).tint(Color(red: 0.43, green: 0.64, blue: 0.65))
+                OutwardPulse(level: presentation.safeLevel, reduceMotion: reduceMotion)
                     .accessibilityLabel("麦克风音量")
             } else if presentation.busy {
-                ProgressView().controlSize(.small).accessibilityLabel("正在处理")
-            }
-            if !presentation.hint.isEmpty {
-                Text(presentation.hint).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    ProcessingDots(reduceMotion: reduceMotion).accessibilityLabel("正在处理")
+                    if presentation.status.hasPrefix("正在润色") {
+                        Text("润色中").font(.caption).foregroundStyle(Color.white)
+                    }
+                }
+            } else if presentation.phase == .failed {
+                VStack(spacing: 5) {
+                    Label("未完成", systemImage: presentation.symbol)
+                        .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                    Text("打开语落查看详情")
+                        .font(.system(size: 11)).foregroundStyle(Color.white)
+                }
+            } else {
+                Image(systemName: presentation.symbol)
+                    .foregroundStyle(presentation.phase == .failed ? Color.orange : Color.white.opacity(0.72))
+                    .accessibilityLabel(presentation.status)
             }
         }
-        .padding(15)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .frame(height: presentation.phase == .failed ? 60 : 44)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(presentation.status)
+        .accessibilityHint(presentation.hint)
+        .background(Color(red: 0.10, green: 0.12, blue: 0.13), in: RoundedRectangle(cornerRadius: 22))
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.38), lineWidth: 0.8)
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
         }
-        .shadow(color: Color(red: 0.20, green: 0.34, blue: 0.35).opacity(0.16), radius: 14, y: 7)
+        .shadow(color: Color.black.opacity(0.22), radius: 8, y: 4)
         .overlay {
             if presentation.phase == .ready && !reduceMotion {
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: 22)
                     .stroke(Color(red: 0.49, green: 0.68, blue: 0.61).opacity(0.55), lineWidth: 1.2)
+            }
+        }
+    }
+}
+
+private struct OutwardPulse: View {
+    let level: Double
+    let reduceMotion: Bool
+    @State private var started = Date()
+    @State private var smoothedLevel = 0.0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            Canvas { graphics, size in
+                for index in -14...14 {
+                    let sample = RecordingPulse.sample(index: index,
+                        time: context.date.timeIntervalSince(started), level: smoothedLevel,
+                        reduceMotion: reduceMotion)
+                    let x = size.width / 2 + Double(index) * 5.3 * size.width / 190
+                    let height = sample.height * size.height / 44
+                    let color = Color(red: (96 + 65 * sample.intensity) / 255,
+                                      green: (224 + 25 * sample.intensity) / 255,
+                                      blue: (202 + 29 * sample.intensity) / 255)
+                    var path = Path()
+                    path.move(to: CGPoint(x: x, y: size.height / 2 - height / 2))
+                    path.addLine(to: CGPoint(x: x, y: size.height / 2 + height / 2))
+                    graphics.stroke(path, with: .color(color.opacity(sample.opacity)),
+                                    style: StrokeStyle(lineWidth: 3 * size.width / 190, lineCap: .round))
+                }
+            }
+            .onChange(of: context.date) { old, new in
+                let delta = min(0.1, max(0, new.timeIntervalSince(old)))
+                smoothedLevel += (level - smoothedLevel) * (1 - exp(-delta * 7))
+            }
+        }
+        .frame(width: 156, height: 36)
+        .onAppear { smoothedLevel = level }
+    }
+}
+
+private struct ProcessingDots: View {
+    let reduceMotion: Bool
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<5, id: \.self) { index in
+                Circle().fill(Color(red: 96 / 255, green: 224 / 255, blue: 202 / 255)
+                    .opacity(reduceMotion ? 0.9 : 0.65 + Double(index) * 0.08))
+                    .frame(width: 5, height: 5)
             }
         }
     }

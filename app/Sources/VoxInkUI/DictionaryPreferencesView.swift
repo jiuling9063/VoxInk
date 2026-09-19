@@ -4,6 +4,9 @@ import VoxInkCore
 struct DictionaryPreferencesView: View {
     @ObservedObject var controller: UserDictionaryController
     let canEdit: Bool
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var focusedField: EditorField?
+    private enum EditorField { case source, replacement }
     @State private var editing = false
     @State private var editingID: UUID?
     @State private var source = ""
@@ -73,11 +76,14 @@ struct DictionaryPreferencesView: View {
     private var editor: some View {
         let candidate = try? controller.candidate(source: source, replacement: replacement, id: editingID ?? UUID())
         return VStack(alignment: .leading, spacing: 16) {
-            Text(editingID == nil ? "添加纠正词" : "编辑纠正词").font(.headline)
+            WorkspaceHeading(title: editingID == nil ? "添加纠正词" : "编辑纠正词",
+                             subtitle: "为常用词设置准确的写法。")
             Text("识别词").font(.caption).foregroundStyle(.secondary)
             TextField("识别词，例如：雨落", text: $source).textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .source)
             Text("正确写法").font(.caption).foregroundStyle(.secondary)
             TextField("正确写法，例如：语落", text: $replacement).textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .replacement)
             if let candidate {
                 Text("保存为：\(candidate.source) → \(candidate.replacement)").font(.callout).foregroundStyle(.secondary)
             } else if !source.isEmpty || !replacement.isEmpty {
@@ -95,9 +101,12 @@ struct DictionaryPreferencesView: View {
                         if await controller.save(source: source, replacement: replacement, id: editingID) { editing = false }
                     }
                 }.keyboardShortcut(.defaultAction)
+                    .buttonStyle(VoxInkButtonStyle(prominent: true))
                     .disabled(candidate == nil || !canEdit || controller.isUpdating)
             }
-        }.padding(24).frame(width: 420)
+        }.padding(28).frame(width: 420)
+            .background(VoxInkTheme(scheme: scheme).background)
+            .onAppear { focusedField = .source }
     }
 
     private var validationMessage: String {

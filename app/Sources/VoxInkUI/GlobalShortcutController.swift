@@ -1,5 +1,6 @@
 import Carbon
 import Foundation
+import AppKit
 
 struct ShortcutLatch {
     private var held: Set<UInt32> = []
@@ -17,6 +18,7 @@ struct ShortcutLatch {
     private var escapeKeys: [EventHotKeyRef] = []
     private var combination: ShortcutCombination?
     private var latch = ShortcutLatch()
+    private var remoteMonitor: RemoteOptionSpaceMonitor?
     private let toggle: () -> Void
     private let released: () -> Void
     private let cancel: () -> Void
@@ -40,11 +42,16 @@ struct ShortcutLatch {
             let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
             MainActor.assumeIsolated {
                 let controller = Unmanaged<GlobalShortcutController>.fromOpaque(context).takeUnretainedValue()
-                controller.receive(id: key.id, pressed: pressed)
+                controller.receiveCarbon(id: key.id, pressed: pressed)
             }
             return noErr
         }, events.count, &events, context, &handler)
         guard installed == noErr else { stop(); return false }
+        if combination == .optionSpace {
+            let monitor = makeRemoteMonitor()
+            guard monitor.start() else { monitor.stop(); stop(); return false }
+            remoteMonitor = monitor
+        }
         let registered = RegisterEventHotKey(UInt32(kVK_Space), combination.modifiers,
             EventHotKeyID(signature: 0x564F5849, id: 1), GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &toggleKey)
@@ -56,13 +63,22 @@ struct ShortcutLatch {
     public func changeShortcut(to combination: ShortcutCombination) -> Bool {
         guard handler != nil else { return start(combination: combination) }
         if self.combination == combination, toggleKey != nil { return true }
+        guard remoteMonitor?.isQuiescent != false else { return false }
+        var candidateMonitor: RemoteOptionSpaceMonitor?
+        if combination == .optionSpace {
+            let monitor = makeRemoteMonitor()
+            guard monitor.start() else { monitor.stop(); return false }
+            candidateMonitor = monitor
+        }
         var candidate: EventHotKeyRef?
         let result = RegisterEventHotKey(UInt32(kVK_Space), combination.modifiers,
             EventHotKeyID(signature: 0x564F5849, id: 1), GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &candidate)
         // Keep the existing registration until the replacement is known to work.
-        guard result == noErr, let candidate else { return false }
+        guard result == noErr, let candidate else { candidateMonitor?.stop(); return false }
         if let toggleKey { UnregisterEventHotKey(toggleKey) }
+        remoteMonitor?.stop()
+        remoteMonitor = candidateMonitor
         toggleKey = candidate
         self.combination = combination
         latch.reset()
@@ -95,10 +111,24 @@ struct ShortcutLatch {
     }
 
     public func stop() {
+        remoteMonitor?.stop(); remoteMonitor = nil
         if let toggleKey { UnregisterEventHotKey(toggleKey) }
         for escapeKey in escapeKeys { UnregisterEventHotKey(escapeKey) }
         if let handler { RemoveEventHandler(handler) }
         toggleKey = nil; escapeKeys.removeAll(); handler = nil; combination = nil; latch.reset()
+    }
+
+    private func makeRemoteMonitor() -> RemoteOptionSpaceMonitor {
+        RemoteOptionSpaceMonitor(
+            pressed: { [weak self] in self?.receive(id: 1, pressed: true) },
+            released: { [weak self] in self?.receive(id: 1, pressed: false) },
+            interrupted: { [weak self] in self?.latch.reset(); self?.cancel() })
+    }
+
+    private func receiveCarbon(id: UInt32, pressed: Bool) {
+        if id == 1 && pressed && combination == .optionSpace && remoteMonitor != nil
+            && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.netease.uuremote" { return }
+        receive(id: id, pressed: pressed)
     }
 
     private func receive(id: UInt32, pressed: Bool) {

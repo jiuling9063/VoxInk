@@ -3,24 +3,20 @@ import SwiftUI
 struct VoxInkTheme {
     let scheme: ColorScheme
 
-    var background: Color {
-        scheme == .dark ? Color(red: 32 / 255, green: 39 / 255, blue: 41 / 255)
-            : Color(red: 242 / 255, green: 240 / 255, blue: 234 / 255)
-    }
-
+    var background: Color { Color(nsColor: .windowBackgroundColor) }
     var paper: Color {
-        scheme == .dark ? Color(red: 43 / 255, green: 51 / 255, blue: 54 / 255)
-            : Color(red: 250 / 255, green: 249 / 255, blue: 245 / 255)
+        scheme == .dark ? Color(red: 0.20, green: 0.21, blue: 0.22) : Color(nsColor: .controlBackgroundColor)
     }
-
-    var ink: Color {
-        scheme == .dark ? Color(red: 237 / 255, green: 239 / 255, blue: 235 / 255)
-            : Color(red: 36 / 255, green: 48 / 255, blue: 55 / 255)
-    }
-
+    var ink: Color { Color(nsColor: .labelColor) }
     var accent: Color {
-        scheme == .dark ? Color(red: 169 / 255, green: 205 / 255, blue: 208 / 255)
-            : Color(red: 84 / 255, green: 126 / 255, blue: 134 / 255)
+        scheme == .dark ? Color(red: 0.43, green: 0.78, blue: 0.77)
+            : Color(red: 0.12, green: 0.40, blue: 0.42)
+    }
+    var accentForeground: Color {
+        scheme == .dark ? Color(red: 0.06, green: 0.18, blue: 0.19) : .white
+    }
+    var ceramicGradient: LinearGradient {
+        LinearGradient(colors: [paper, paper], startPoint: .top, endPoint: .bottom)
     }
 }
 
@@ -31,33 +27,80 @@ private struct WritingSurface: ViewModifier {
     func body(content: Content) -> some View {
         let theme = VoxInkTheme(scheme: scheme)
         content
-            .background(theme.paper, in: RoundedRectangle(cornerRadius: 18))
+            .background(theme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.5 : 0.07), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.55 : 0.08), lineWidth: 1)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
+            .shadow(color: .black.opacity(scheme == .dark ? 0.08 : 0.025), radius: 8, y: 3)
     }
 }
 
 struct VoxInkButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
     var prominent = false
 
     func makeBody(configuration: Configuration) -> some View {
         let theme = VoxInkTheme(scheme: scheme)
+        let foreground = configuration.role == .destructive ? Color.red : theme.ink
         configuration.label
-            .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 13).padding(.vertical, 9)
-            .foregroundStyle(prominent ? theme.paper : theme.ink)
-            .background(prominent ? theme.accent : theme.ink.opacity(0.055),
-                        in: RoundedRectangle(cornerRadius: 9))
-            .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+            .font(.system(size: 13, weight: .medium))
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .foregroundStyle(prominent ? theme.accentForeground : foreground)
+            .background(prominent ? theme.accent : theme.ink.opacity(hovered && enabled ? 0.10 : 0.055),
+                        in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.55 : 0.08), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+            .brightness(configuration.isPressed && enabled ? -0.06 : 0)
+            .scaleEffect(configuration.isPressed && enabled && !reduceMotion ? 0.98 : 1)
+            .opacity(enabled ? 1 : 0.45)
+            .onHover { hovered = $0 }
+    }
+}
+
+/// Material belongs to navigation chrome; reading surfaces remain solid.
+private struct WorkspaceChrome: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content.background {
+            if reduceTransparency || contrast == .increased {
+                VoxInkTheme(scheme: scheme).background
+            } else {
+                Rectangle().fill(.regularMaterial)
+            }
+        }
+    }
+}
+
+struct WorkspaceHeading: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 26, weight: .semibold)).tracking(-0.5)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
 extension View {
     func writingSurface() -> some View { modifier(WritingSurface()) }
+    func ceramicSurface() -> some View { modifier(WritingSurface()) }
+    func workspaceChrome() -> some View { modifier(WorkspaceChrome()) }
 }

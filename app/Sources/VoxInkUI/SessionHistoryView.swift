@@ -15,11 +15,9 @@ struct SessionHistoryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(statistics ? "使用统计" : "转录历史").font(.system(size: 26, weight: .bold))
-                Text(statistics ? "每一次表达，都在这里留下刻度。" : "说过的话，随时拾起。")
-                    .foregroundStyle(.secondary)
-            }.padding(.bottom, 4)
+            WorkspaceHeading(title: statistics ? "使用统计" : "转录历史",
+                             subtitle: statistics ? "查看本次使用的识别次数与文字量。" : "说过的话，随时拾起。")
+                .padding(.bottom, 4)
             if statistics {
                 HStack(spacing: 14) {
                     metric("成功识别", value: store.sessionHistory.count, unit: "次", icon: "waveform")

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>语落 · HUD 波纹对比</title>
+<style>
+:root{--paper:#eeefeb;--ink:#243536;--muted:#617170;--line:#cbd4cf;--hud:#091416;--mint:#60e0ca;--edge:#517f79}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.7 "PingFang SC","Hiragino Sans GB",sans-serif;transition:background .25s,color .25s}main{max-width:1220px;margin:auto;padding:46px 40px 32px}.eyebrow{font-size:12px;letter-spacing:3px;color:var(--muted)}h1{font-size:34px;letter-spacing:-1px;font-weight:600;margin:12px 0 8px}p{margin:0;color:var(--muted)}header{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:32px}.mark{border:1px solid var(--line);padding:6px 14px;border-radius:30px;font-size:12px;white-space:nowrap}.controls{display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:16px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}button,select{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}button:hover{background:#78cdb528}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #308578;outline-offset:3px}label{display:flex;align-items:center;gap:10px;font-size:13px}input{accent-color:#338f7f;width:120px}.controls .note{margin-left:auto;font-size:12px;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:32px}.number{font-size:12px;letter-spacing:2px;color:var(--muted)}h2{font-size:21px;font-weight:500;margin:6px 0 17px}.stage{height:226px;position:relative;display:flex;align-items:center;justify-content:center;border-radius:16px;background:#fafbf8;border:1px solid var(--line);overflow:hidden}.stage:before{content:"";position:absolute;inset:24px 22px;background:repeating-linear-gradient(0deg,transparent 0 24px,#a7b8b515 24px 25px);pointer-events:none}.hud{width:220px;height:60px;display:flex;align-items:center;justify-content:center;border-radius:18px;background:var(--hud);border:1px solid var(--edge);box-shadow:0 5px 15px #0a1e302d;position:relative}.hud canvas{display:block;width:190px;height:44px}.actual{position:absolute;bottom:14px;font-size:11px;color:var(--muted);letter-spacing:1px}.desc{font-size:14px;margin-top:17px;min-height:54px}.tag{display:inline-block;font-size:11px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:3px;margin-top:12px}.details{margin-top:36px;display:flex;gap:28px;border-top:1px solid var(--line);padding-top:20px;flex-wrap:wrap}.detail{flex:1;min-width:220px}.detail strong{display:block;font-size:13px;font-weight:500;margin-bottom:5px}.detail p{font-size:12px}.swatch{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.footer{font-size:12px;color:var(--muted);margin-top:28px}.selected{color:#308578}.dark{--paper:#192022;--ink:#e0e9e5;--muted:#acbcb6;--line:#394c4c}.dark .stage{background:#0d1315}.dark select option{background:#192022}.expanded .hud{transform:scale(1.3)}@media(max-width:950px){.grid{grid-template-columns:1fr}.stage{height:190px}.desc{min-height:0}main{padding:25px}header{align-items:start}.controls .note{margin-left:0}h1{font-size:27px}}
+.grid article:first-child .hud{width:180px;height:44px;border-radius:22px}.grid article:first-child canvas{width:156px;height:36px}
+</style>
+<main>
+<header><div><div class="eyebrow">语落 VOXINK / MOTION STUDY</div><h1>一声起，涟漪开。</h1><p>同一套青绿色，三种从中心向两侧扩散的方式。</p></div><span class="mark">HUD 动态草稿 · 01—03</span></header>
+<div class="controls">
+<button id="pause" type="button" aria-pressed="false">暂停动画</button>
+<label>音量模拟 <select id="mode"><option value="speech">自然说话</option><option value="quiet">安静待听</option><option value="strong">持续说话</option></select></label>
+<label>强度 <input id="level" type="range" min="20" max="100" value="65" aria-label="模拟音量强度"></label>
+<button id="theme" type="button" aria-pressed="false">切换深色页面</button>
+<button id="scale" type="button" aria-pressed="false">放大细看</button>
+<span class="note" id="state" aria-live="polite">模拟音量 · 无需麦克风</span>
+</div>
+<section class="grid">
+<article><div class="number">01 / RHYTHM</div><h2>A · 向外舒展的音柱</h2><div class="stage"><div class="hud"><canvas id="bars" aria-label="青绿色音柱从中心向两侧扩散" role="img"></canvas></div><span class="actual">动态预览</span></div><p class="desc">中心先起，两侧依次跟随。波峰升高时亮起，回落时变柔和；声音越大，形状和明暗变化越明显。</p><span class="tag selected">选定方向 · 紧凑胶囊 / 明暗联动</span></article>
+<article><div class="number">02 / WAVE</div><h2>B · 双向水波</h2><div class="stage"><div class="hud"><canvas id="wave" aria-label="连续青绿色曲线向两侧传播" role="img"></canvas></div><span class="actual">动态预览</span></div><p class="desc">把音柱连成柔和曲线，波峰从中心流向两端，边缘轻轻消散。</p><span class="tag">备选 · 双向水波</span></article>
+<article><div class="number">03 / RIPPLE</div><h2>C · 水面涟漪</h2><div class="stage"><div class="hud"><canvas id="rings" aria-label="青绿色椭圆涟漪从中心扩散" role="img"></canvas></div><span class="actual">动态预览</span></div><p class="desc">声音像落在水面的雨滴，椭圆环一圈圈向外展开，再逐渐淡去。</p><span class="tag">涟漪感最强 · 更偏意象</span></article>
+</section>
+<section class="details"><div class="detail"><strong><i class="swatch" style="background:#091416"></i>底色更深、更实</strong><p>墨青底 #091416，降低背景画面对 HUD 的干扰。</p></div><div class="detail"><strong><i class="swatch" style="background:#60e0ca"></i>青绿色更亮</strong><p>主色 #60E0CA。保留原有色系，轮廓清楚、不做强烈闪烁。</p></div><div class="detail"><strong>安静时收拢，说话时展开</strong><p>三稿共享相同的模拟音量。可切换待听状态比较收敛效果。</p></div></section>
+<p class="footer">独立动效预览，尚未替换应用内 HUD。展示的是模拟声音；最终尺寸及真实音量响应会在选定后适配。</p>
+</main>
+<script>
+const canvases=[...document.querySelectorAll('canvas')];
+for(const canvas of canvases){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=190*dpr;canvas.height=44*dpr;canvas.getContext('2d').scale(dpr,dpr)}
+let paused=matchMedia('(prefers-reduced-motion: reduce)').matches, time=0, previous=0, volume=0;
+const pause=document.getElementById('pause'), mode=document.getElementById('mode'), level=document.getElementById('level');
+function updatePause(){pause.textContent=paused?'播放动画':'暂停动画';pause.setAttribute('aria-pressed',String(paused));document.getElementById('state').textContent=paused?'已暂停 · 无需麦克风':'模拟音量 · 无需麦克风'}
+pause.onclick=()=>{paused=!paused;updatePause()};updatePause();
+document.getElementById('theme').onclick=function(){const dark=document.body.classList.toggle('dark');this.textContent=dark?'切换浅色页面':'切换深色页面';this.setAttribute('aria-pressed',String(dark))};
+document.getElementById('scale').onclick=function(){const large=document.body.classList.toggle('expanded');this.textContent=large?'恢复预览大小':'放大细看';this.setAttribute('aria-pressed',String(large))};
+function signal(t){if(mode.value==='quiet')return .035;if(mode.value==='strong')return .87;const gate=Math.max(0,Math.sin(t*1.2)*.6+.4);return gate*(.35+.3*(Math.sin(t*5.3)+1)/2+.3*(Math.sin(t*8.1)+1)/2)}
+function stroke(c,alpha=1,width=2){c.strokeStyle=`rgba(96,224,202,${alpha})`;c.fillStyle=`rgba(96,224,202,${alpha})`;c.lineWidth=width;c.lineCap='round'}
+function draw(t,v){
+const a=canvases[0].getContext('2d');a.clearRect(0,0,190,44);
+for(let i=-14;i<=14;i++){
+ let d=Math.abs(i)/14, envelope=Math.exp(-d*d*1.7);
+ let crest=(Math.cos(Math.abs(i)*.55-t*5.2)+1)/2;
+ let activity=Math.sqrt(v)*envelope*crest;
+ let h=3+envelope*(3+v*27)*(.2+.8*crest);
+ stroke(a,.52+.48*activity,3);
+ a.strokeStyle=`rgba(${Math.round(96+65*activity)},${Math.round(224+25*activity)},${Math.round(202+29*activity)},${.52+.48*activity})`;
+ a.shadowColor='rgba(96,224,202,.38)';a.shadowBlur=activity*4;
+ a.beginPath();a.moveTo(95+i*5.3,22-h/2);a.lineTo(95+i*5.3,22+h/2);a.stroke();
+}
+a.shadowBlur=0;
+const b=canvases[1].getContext('2d');b.clearRect(0,0,190,44);
+for(let layer=1;layer>=0;layer--){stroke(b,layer?.36:1,layer?1.5:2.2);b.beginPath();for(let x=12;x<=178;x++){const d=Math.abs(x-95)/83;const edge=Math.pow(Math.max(0,1-d*d),1.5);const y=22+Math.sin(d*10-t*4.3+layer*.85)*edge*(1.2+v*13)*(layer?-.65:1);x===12?b.moveTo(x,y):b.lineTo(x,y)}b.stroke()}
+const c=canvases[2].getContext('2d');c.clearRect(0,0,190,44);
+for(let i=0;i<4;i++){const p=(t*.48+i/4)%1;const fade=Math.sin(Math.PI*p);stroke(c,fade*(.32+.6*v),1.8);c.beginPath();c.ellipse(95,22,3+p*(42+v*40),1+p*(6+v*10),0,0,Math.PI*2);c.stroke()}
+stroke(c,.9);c.beginPath();c.arc(95,22,1.8+v*.8,0,Math.PI*2);c.fill();
+}
+function frame(now){const dt=previous?Math.min((now-previous)/1000,.05):0;previous=now;if(!paused&&!document.hidden){time+=dt;volume+=(signal(time)*Number(level.value)/100-volume)*(1-Math.exp(-dt*7));draw(time,volume)}requestAnimationFrame(frame)}
+draw(1,.45);requestAnimationFrame(frame);
+</script>
+</html>

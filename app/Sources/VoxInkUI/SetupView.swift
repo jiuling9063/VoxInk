@@ -8,7 +8,21 @@ struct ReadinessRow<Actions: View>: View {
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 14) {
+                description
+                Spacer(minLength: 12)
+                actions().fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                description
+                actions().padding(.leading, 52)
+            }
+        }.padding(.vertical, 12)
+    }
+
+    private var description: some View {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.title3).foregroundStyle(.tint)
                 .frame(width: 38, height: 38)
@@ -20,10 +34,8 @@ struct ReadinessRow<Actions: View>: View {
                     if ready { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("已就绪") }
                 }
                 Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 12)
-            actions()
-        }.padding(.vertical, 8)
+            }.frame(minWidth: 160, alignment: .leading)
+        }
     }
 }
 
@@ -32,11 +44,8 @@ struct SetupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("让想说的话，落成文字。").font(.title.bold())
-                Text("完成下面的准备，就能直接在输入框中说话写入。\(store.shortcutInstruction)")
-                    .foregroundStyle(.secondary)
-            }
+            WorkspaceHeading(title: "让想说的话，落成文字。",
+                             subtitle: "完成下面的准备，就能直接在输入框中说话写入。\(store.shortcutInstruction)")
             VStack(spacing: 0) {
                 ReadinessRow(icon: "mic", title: "允许麦克风", detail: "\(store.microphoneAuthorization.title) · 仅在你开始录音后采集声音。",
                     ready: store.microphoneAuthorization == .authorized) {
@@ -80,7 +89,7 @@ struct SetupView: View {
                 Button("刷新状态", systemImage: "arrow.clockwise") { store.refreshPermissions() }
                 Spacer()
                 Button("开始使用", systemImage: "arrow.right") { store.completeSetup() }
-                    .buttonStyle(.borderedProminent).disabled(!store.canCompleteSetup)
+                    .buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canCompleteSetup)
             }
             if !store.shortcutAvailable {
                 Text(store.shortcutStatus).font(.callout).foregroundStyle(.orange)

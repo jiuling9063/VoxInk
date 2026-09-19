@@ -2,15 +2,39 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+public enum RemotePasteTiming: String, CaseIterable, Sendable {
+    case stable, faster, fast, experimental
+    public var title: String {
+        switch self {
+        case .stable: "稳定 · 2 秒"
+        case .faster: "较快 · 1.5 秒"
+        case .fast: "快速 · 1 秒"
+        case .experimental: "试验 · 0.7 秒"
+        }
+    }
+    var delay: Duration {
+        switch self {
+        case .stable: .seconds(2)
+        case .faster: .milliseconds(1500)
+        case .fast: .seconds(1)
+        case .experimental: .milliseconds(700)
+        }
+    }
+}
+
 public struct PasteTarget: Sendable, Equatable {
     public let pid: Int32
     public let bundleID: String
     public let name: String
+    public let remoteDeviceName: String?
+    public let remoteUsesControl: Bool?
 
-    public init(pid: Int32, bundleID: String, name: String) {
+    public init(pid: Int32, bundleID: String, name: String, remoteDeviceName: String? = nil, remoteUsesControl: Bool? = nil) {
         self.pid = pid
         self.bundleID = bundleID
         self.name = name
+        self.remoteDeviceName = remoteDeviceName
+        self.remoteUsesControl = remoteUsesControl
     }
 }
 
@@ -66,6 +90,7 @@ enum PasteboardRestoreResult: Equatable {
 @MainActor
 protocol PasteEnvironment: AnyObject {
     func captureTarget() -> PasteTarget?
+    func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String?
     var accessibilityGranted: Bool { get }
     func requestAccessibility() -> Bool
     func isTargetValid(_ target: PasteTarget) -> Bool
@@ -76,9 +101,35 @@ protocol PasteEnvironment: AnyObject {
     func currentPasteboardChangeCount() -> Int
     func restorePasteboard(_ snapshot: PasteboardSnapshot, expectedChangeCount: Int) -> PasteboardRestoreResult
     func areCommandModifiersReleased() -> Bool
-    func postCommandV() -> Bool
+    func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool
     func delay(for duration: Duration) async
     func delayIgnoringCancellation(for duration: Duration) async
+}
+
+extension PasteEnvironment {
+    func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String? { nil }
+}
+
+public enum RemoteDeviceProfiles {
+    public static func names(_ text: String) -> [String] {
+        text.components(separatedBy: CharacterSet(charactersIn: ",，\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    public static func make(mac: String, windows: String) -> [String: Bool] {
+        let macNames = Set(names(mac)), windowsNames = Set(names(windows))
+        // A name assigned to both systems is ambiguous and must not be guessed.
+        var result: [String: Bool] = [:]
+        for name in macNames.subtracting(windowsNames) { result[name] = false }
+        for name in windowsNames.subtracting(macNames) { result[name] = true }
+        return result
+    }
+
+    static func match(labels: [String], candidates: [String]) -> String? {
+        let labels = Set(labels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        let matches = Set(candidates).intersection(labels)
+        return matches.count == 1 ? matches.first : nil
+    }
 }
 
 @MainActor
@@ -112,6 +163,19 @@ public final class PasteCoordinator {
     private var attemptedSessions: Set<UUID> = []
     private var activeTransactionID: UUID?
     private var cancellationRequested = false
+    private var pendingCleanup: Task<Void, Never>?
+    private var cleanupFailureHandler: (@MainActor (UUID) -> Void)?
+    private var remoteTiming: RemotePasteTiming = .stable
+    private var uuWindowsPaste = false
+    private var remoteDevices: [String: Bool] = [:]
+
+    public func setRemotePasteTiming(_ timing: RemotePasteTiming) { remoteTiming = timing }
+    public func setUUWindowsPaste(_ enabled: Bool) { uuWindowsPaste = enabled }
+    public func setRemoteDevices(_ devices: [String: Bool]) { remoteDevices = devices }
+    public func setCleanupFailureHandler(_ handler: @escaping @MainActor (UUID) -> Void) {
+        cleanupFailureHandler = handler
+    }
+    public func finishPendingCleanup() async { await pendingCleanup?.value }
 
     public convenience init() {
         self.init(environment: AppKitPasteEnvironment())
@@ -122,7 +186,17 @@ public final class PasteCoordinator {
     }
 
     public func captureTarget() -> PasteTarget? {
-        environment.captureTarget()
+        guard let target = environment.captureTarget() else { return nil }
+        guard target.bundleID == "com.netease.uuremote" else { return target }
+        let device = environment.remoteDeviceName(for: target, candidates: Array(remoteDevices.keys))
+        let name = device.map { "\(target.name) · \($0)" } ?? target.name
+        return PasteTarget(pid: target.pid, bundleID: target.bundleID, name: name,
+                           remoteDeviceName: device, remoteUsesControl: device.flatMap { remoteDevices[$0] } ?? uuWindowsPaste)
+    }
+
+    private func remoteTargetMatches(_ target: PasteTarget) -> Bool {
+        guard let device = target.remoteDeviceName else { return true }
+        return environment.remoteDeviceName(for: target, candidates: Array(remoteDevices.keys)) == device
     }
 
     public var accessibilityGranted: Bool {
@@ -160,6 +234,10 @@ public final class PasteCoordinator {
             }
         }
 
+        // A subsequent paste must not snapshot the previous dictation or replace
+        // its clipboard before the remote computer has had time to consume it.
+        await finishPendingCleanup()
+        guard !cancellationRequested else { return .cancelledBeforeSend }
         guard environment.accessibilityGranted else {
             return .failed("需要辅助功能权限")
         }
@@ -167,6 +245,7 @@ public final class PasteCoordinator {
               await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
             return .failed("无法确认粘贴目标")
         }
+        guard remoteTargetMatches(target) else { return .failed("UU 远端设备已切换或无法识别，请回到原设备重试") }
         guard !environment.isKnownSecureFocusedField() else {
             return .failed("安全输入框不允许自动粘贴")
         }
@@ -199,7 +278,10 @@ public final class PasteCoordinator {
             }
         }
 
-        await environment.delay(for: .milliseconds(150))
+        // UU synchronizes the clipboard asynchronously; restoring it too soon can
+        // make the remote computer paste the previous contents instead.
+        let isUURemote = target.bundleID == "com.netease.uuremote"
+        await environment.delay(for: isUURemote ? remoteTiming.delay : .milliseconds(150))
 
         if cancellationRequested {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
@@ -226,10 +308,24 @@ public final class PasteCoordinator {
         guard !cancellationRequested else {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        guard environment.postCommandV() else {
+        guard remoteTargetMatches(target) else {
+            return failBeforeSend("UU 远端设备已切换或无法识别，请回到原设备重试", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        }
+        guard environment.postPaste(to: target, usingControl: isUURemote && (target.remoteUsesControl ?? uuWindowsPaste)) else {
             return failBeforeSend("无法发送粘贴按键", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
 
+        if isUURemote {
+            pendingCleanup = Task { @MainActor in
+                await environment.delayIgnoringCancellation(for: .seconds(3))
+                if environment.currentPasteboardChangeCount() == ownedChangeCount,
+                   environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
+                    cleanupFailureHandler?(sessionID)
+                }
+                pendingCleanup = nil
+            }
+            return .sent
+        }
         await environment.delayIgnoringCancellation(for: .milliseconds(1_200))
         let wasCancelled = cancellationRequested
         if environment.currentPasteboardChangeCount() == ownedChangeCount,
@@ -292,6 +388,32 @@ final class AppKitPasteEnvironment: PasteEnvironment {
             bundleID: bundleID,
             name: application.localizedName ?? bundleID
         )
+    }
+
+    func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String? {
+        guard target.bundleID == "com.netease.uuremote", !candidates.isEmpty else { return nil }
+        let application = AXUIElementCreateApplication(target.pid)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let window = unsafeDowncast(value, to: AXUIElement.self)
+        var labels: [String] = []
+        // UU exposes its connection name in window chrome. Do not walk remote content.
+        func collect(_ element: AXUIElement, depth: Int) {
+            for attribute in [kAXTitleAttribute, kAXValueAttribute] {
+                var text: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, attribute as CFString, &text) == .success,
+                   let text = text as? String { labels.append(text) }
+            }
+            guard depth < 2 else { return }
+            var children: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+               let children = children as? [AXUIElement] {
+                for child in children.prefix(40) { collect(child, depth: depth + 1) }
+            }
+        }
+        collect(window, depth: 0)
+        return RemoteDeviceProfiles.match(labels: labels, candidates: candidates)
     }
 
     var accessibilityGranted: Bool { AXIsProcessTrusted() }
@@ -389,13 +511,17 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         return held.intersection(relevant).isEmpty
     }
 
-    func postCommandV() -> Bool {
+    static func pasteEvents(usingControl: Bool) -> [CGEvent]? {
         guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false) else { return false }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false) else { return nil }
+        down.flags = usingControl ? .maskControl : .maskCommand
+        up.flags = down.flags
+        return [down, up]
+    }
+
+    func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool {
+        guard let events = Self.pasteEvents(usingControl: usingControl) else { return false }
+        for event in events { event.post(tap: .cghidEventTap) }
         return true
     }
 

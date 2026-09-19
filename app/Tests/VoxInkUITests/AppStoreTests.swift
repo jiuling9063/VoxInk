@@ -40,65 +40,7 @@ private actor CompletionProbe {
     func markCompleted() { completed = true }
 }
 
-private struct StubPolisher: PolishingService {
-    var delay: Duration = .zero
-    var fails = false
-    func polish(_ text: String) async throws -> PolishResult {
-        try? await Task.sleep(for: delay)
-        if fails { throw LocalPolishingService.Failure.timeout }
-        return .init(accepted: true, reason: "test", text: "明天讨论。\n后天确认。")
-    }
-}
-
 @MainActor struct AppStoreTests {
-    @Test func cancelledPolishCannotPublishLateResult() async throws {
-        let store = AppStore(polishingService: StubPolisher(delay: .milliseconds(50)), service: StubTranscriber(), preferences: nil)
-        await store.transcribePrepared(URL(fileURLWithPath: "/non-owned-fixture.wav"))
-        store.setPolishingEnabled(true)
-        store.previewPolish()
-        await Task.yield()
-        store.discardPolish()
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(!store.isPolishing)
-        #expect(store.polishedPreview == nil)
-        #expect(store.polishMessage.isEmpty)
-        #expect(store.transcript == "测试结果")
-    }
-
-    @Test func polishTimeoutPreservesOriginalAndReportsFailure() async throws {
-        let store = AppStore(polishingService: StubPolisher(fails: true), service: StubTranscriber(), preferences: nil)
-        await store.transcribePrepared(URL(fileURLWithPath: "/non-owned-fixture.wav"))
-        store.setPolishingEnabled(true)
-        store.previewPolish()
-        for _ in 0..<100 {
-            if !store.isPolishing { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(!store.isPolishing)
-        #expect(store.polishedPreview == nil)
-        #expect(store.polishMessage.contains("30 秒"))
-        #expect(store.transcript == "测试结果")
-    }
-    @Test func optionalPolishKeepsOriginalAndResetsOnNewRecognition() async {
-        let store = AppStore(polishingService: StubPolisher(), service: StubTranscriber(text: "明天讨论。后天确认。"), preferences: nil)
-        let fixture = URL(fileURLWithPath: "/non-owned-fixture.wav")
-        await store.transcribePrepared(fixture)
-        store.previewPolish()
-        #expect(store.polishedPreview == nil)
-        store.setPolishingEnabled(true)
-        store.previewPolish()
-        for _ in 0..<100 {
-            if !store.isPolishing { break }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(store.polishedPreview == "明天讨论。\n后天确认。")
-        #expect(store.transcript == "明天讨论。后天确认。")
-        await store.transcribePrepared(fixture)
-        #expect(store.polishedPreview == nil)
-        store.previewPolish()
-        store.setPolishingEnabled(false)
-        #expect(store.polishedPreview == nil)
-    }
     @Test func historyCountsRepeatedRecognitionButNotCopies() async {
         var copied = ""
         let store = AppStore(service: StubTranscriber(), preferences: nil, clipboardWriter: { copied = $0; return true })

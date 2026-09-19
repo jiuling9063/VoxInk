@@ -15,6 +15,8 @@ private final class FakePasteEnvironment: PasteEnvironment {
     var changeCount = 2
     var restoreSucceeds = true
     var postedPasteCount = 0
+    var postedTarget: PasteTarget?
+    var postedUsingControl = false
     var restored: PasteboardSnapshot?
     var delays: [Duration] = []
     var cleanupDelays: [Duration] = []
@@ -22,14 +24,27 @@ private final class FakePasteEnvironment: PasteEnvironment {
     var onCleanupDelay: (() -> Void)?
     var beforeRestore: (() -> Void)?
     var afterWriteFailureChangeCount: Int?
+    var pauseCleanup = false
+    var cleanupContinuation: CheckedContinuation<Void, Never>?
+    var snapshotCount = 0
+    var onSnapshot: (() -> Void)?
 
-    func captureTarget() -> PasteTarget? { nil }
+    var capturedTarget: PasteTarget?
+    var currentDevice: String?
+    func captureTarget() -> PasteTarget? { capturedTarget }
+    func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String? {
+        currentDevice.flatMap { candidates.contains($0) ? $0 : nil }
+    }
     var accessibilityGranted: Bool { accessibility }
     func requestAccessibility() -> Bool { accessibility }
     func isTargetValid(_ target: PasteTarget) -> Bool { targetIsValid }
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool { focused }
     func isKnownSecureFocusedField() -> Bool { secure }
-    func pasteboardSnapshot() throws -> PasteboardSnapshot { try snapshotResult.get() }
+    func pasteboardSnapshot() throws -> PasteboardSnapshot {
+        snapshotCount += 1
+        onSnapshot?()
+        return try snapshotResult.get()
+    }
     func writePlainText(_ text: String) throws -> Int {
         do {
             let version = try writeResult.get()
@@ -48,8 +63,10 @@ private final class FakePasteEnvironment: PasteEnvironment {
         return restoreSucceeds ? .restored : .failed
     }
     func areCommandModifiersReleased() -> Bool { modifiersReleased }
-    func postCommandV() -> Bool {
+    func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool {
         postedPasteCount += 1
+        postedTarget = target
+        postedUsingControl = usingControl
         return true
     }
     func delay(for duration: Duration) async {
@@ -59,10 +76,61 @@ private final class FakePasteEnvironment: PasteEnvironment {
     func delayIgnoringCancellation(for duration: Duration) async {
         cleanupDelays.append(duration)
         onCleanupDelay?()
+        if pauseCleanup { await withCheckedContinuation { cleanupContinuation = $0 } }
     }
 }
 
 private struct FakeError: Error {}
+
+@Test func remoteProfilesMatchExactlyAndRejectAmbiguity() {
+    let profiles = RemoteDeviceProfiles.make(mac: " Mini ， Shared,Mini", windows: "PC\nShared")
+    #expect(profiles == ["Mini": false, "PC": true])
+    #expect(RemoteDeviceProfiles.match(labels: [" Mini "], candidates: Array(profiles.keys)) == "Mini")
+    #expect(RemoteDeviceProfiles.match(labels: ["Mini", "PC"], candidates: Array(profiles.keys)) == nil)
+    #expect(RemoteDeviceProfiles.match(labels: ["Mini 2"], candidates: Array(profiles.keys)) == nil)
+}
+
+@Test @MainActor func remoteDeviceSelectsPasteAndFreezesFallbackAtCapture() async throws {
+    for device in ["Mini", "PC", "Unknown"] {
+        let environment = FakePasteEnvironment()
+        environment.capturedTarget = .init(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+        environment.currentDevice = device
+        let coordinator = PasteCoordinator(environment: environment)
+        coordinator.setRemoteDevices(["Mini": false, "PC": true])
+        let captured = try #require(coordinator.captureTarget())
+        coordinator.setUUWindowsPaste(true)
+        #expect(await coordinator.paste(text: "test", to: captured, sessionID: UUID()) == .sent)
+        await coordinator.finishPendingCleanup()
+        #expect(environment.postedUsingControl == (device == "PC"))
+    }
+}
+
+@Test @MainActor func remoteSwitchDuringSynchronizationDoesNotPaste() async throws {
+    let environment = FakePasteEnvironment()
+    environment.capturedTarget = .init(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    environment.currentDevice = "Mini"
+    let coordinator = PasteCoordinator(environment: environment)
+    coordinator.setRemoteDevices(["Mini": false, "PC": true])
+    let captured = try #require(coordinator.captureTarget())
+    environment.onDelay = { _ in environment.currentDevice = "PC" }
+    let result = await coordinator.paste(text: "test", to: captured, sessionID: UUID())
+    #expect(!result.wasIssued)
+    #expect(environment.postedPasteCount == 0)
+    #expect(environment.restored != nil)
+}
+
+@Test @MainActor func losingDeviceBeforePasteDoesNotWriteClipboard() async throws {
+    let environment = FakePasteEnvironment()
+    environment.capturedTarget = .init(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    environment.currentDevice = "Mini"
+    let coordinator = PasteCoordinator(environment: environment)
+    coordinator.setRemoteDevices(["Mini": false])
+    let captured = try #require(coordinator.captureTarget())
+    environment.currentDevice = nil
+    #expect(!(await coordinator.paste(text: "test", to: captured, sessionID: UUID())).wasIssued)
+    #expect(environment.snapshotCount == 0)
+    #expect(environment.postedPasteCount == 0)
+}
 
 @MainActor
 private final class RacingPasteboard: PasteboardAccess {
@@ -83,6 +151,166 @@ private final class RacingPasteboard: PasteboardAccess {
 }
 
 private let target = PasteTarget(pid: 42, bundleID: "test.target", name: "Target")
+
+@Test @MainActor
+func pasteEventsUseOnlyTheSelectedModifier() throws {
+    let events = try #require(AppKitPasteEnvironment.pasteEvents(usingControl: true))
+    #expect(events.map(\.type) == [.keyDown, .keyUp])
+    #expect(events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [9, 9])
+    #expect(events.allSatisfy { $0.flags == .maskControl })
+    let local = try #require(AppKitPasteEnvironment.pasteEvents(usingControl: false))
+    #expect(local.map(\.type) == [.keyDown, .keyUp])
+    #expect(local.allSatisfy { $0.flags == .maskCommand })
+}
+
+@Test @MainActor
+func windowsPasteIsOptInAndOnlyAffectsUU() async {
+    for enabled in [false, true] {
+        for bundleID in ["com.netease.uuremote", "test.target"] {
+            let environment = FakePasteEnvironment()
+            let coordinator = PasteCoordinator(environment: environment)
+            coordinator.setUUWindowsPaste(enabled)
+            let destination = PasteTarget(pid: 43, bundleID: bundleID, name: "Target")
+            #expect(await coordinator.paste(text: "test", to: destination, sessionID: UUID()) == .sent)
+            await coordinator.finishPendingCleanup()
+            #expect(environment.postedPasteCount == 1)
+            #expect(environment.postedUsingControl == (enabled && bundleID == "com.netease.uuremote"))
+        }
+    }
+}
+
+@Test @MainActor
+func uuRemoteAllowsClipboardSynchronizationBeforePasteAndRestore() async {
+    let environment = FakePasteEnvironment()
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU远程")
+    let coordinator = PasteCoordinator(environment: environment)
+    environment.onDelay = { _ in #expect(environment.postedPasteCount == 0) }
+    environment.onCleanupDelay = {
+        #expect(environment.postedPasteCount == 1)
+        #expect(environment.restored == nil)
+    }
+    #expect(await coordinator.paste(text: "remote", to: remote, sessionID: UUID()) == .sent)
+    #expect(environment.postedTarget == remote)
+    #expect(environment.restored == nil)
+    await coordinator.finishPendingCleanup()
+    #expect(environment.delays == [.seconds(2)])
+    #expect(environment.cleanupDelays == [.seconds(3)])
+    #expect(environment.restored != nil)
+}
+
+@Test @MainActor
+func uuCleanupDoesNotBlockReturnAndPreservesNewCopy() async {
+    let environment = FakePasteEnvironment()
+    environment.pauseCleanup = true
+    let coordinator = PasteCoordinator(environment: environment)
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    #expect(await coordinator.paste(text: "first", to: remote, sessionID: UUID()) == .sent)
+    while environment.cleanupContinuation == nil { await Task.yield() }
+    #expect(environment.restored == nil)
+    environment.changeCount += 1
+    environment.cleanupContinuation?.resume()
+    await coordinator.finishPendingCleanup()
+    #expect(environment.restored == nil)
+}
+
+@Test @MainActor
+func nextPasteWaitsForPreviousCleanupAndCanBeCancelled() async {
+    let environment = FakePasteEnvironment()
+    environment.pauseCleanup = true
+    let coordinator = PasteCoordinator(environment: environment)
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    #expect(await coordinator.paste(text: "first", to: remote, sessionID: UUID()) == .sent)
+    while environment.cleanupContinuation == nil { await Task.yield() }
+    let next = Task { await coordinator.paste(text: "second", to: target, sessionID: UUID()) }
+    for _ in 0..<10 { await Task.yield() }
+    #expect(environment.snapshotCount == 1)
+    coordinator.cancel()
+    environment.cleanupContinuation?.resume()
+    #expect(await next.value == .cancelledBeforeSend)
+    #expect(environment.postedPasteCount == 1)
+    #expect(environment.restored != nil)
+}
+
+@Test @MainActor
+func uuCleanupFailureIsReportedAfterPasteReturned() async {
+    let environment = FakePasteEnvironment()
+    environment.restoreSucceeds = false
+    let coordinator = PasteCoordinator(environment: environment)
+    let session = UUID()
+    var failedSession: UUID?
+    coordinator.setCleanupFailureHandler { failedSession = $0 }
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    #expect(await coordinator.paste(text: "first", to: remote, sessionID: session) == .sent)
+    await coordinator.finishPendingCleanup()
+    #expect(failedSession == session)
+}
+
+@Test @MainActor
+func consecutiveRemotePastesRestoreOriginalBeforeTakingNextSnapshot() async {
+    let environment = FakePasteEnvironment()
+    environment.pauseCleanup = true
+    let coordinator = PasteCoordinator(environment: environment)
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+    #expect(await coordinator.paste(text: "first", to: remote, sessionID: UUID()) == .sent)
+    while environment.cleanupContinuation == nil { await Task.yield() }
+    environment.onSnapshot = { #expect(environment.restored != nil) }
+    let next = Task { await coordinator.paste(text: "second", to: remote, sessionID: UUID()) }
+    for _ in 0..<10 { await Task.yield() }
+    #expect(environment.snapshotCount == 1)
+    environment.pauseCleanup = false
+    environment.cleanupContinuation?.resume()
+    #expect(await next.value == .sent)
+    await coordinator.finishPendingCleanup()
+    #expect(environment.snapshotCount == 2)
+    #expect(environment.postedPasteCount == 2)
+}
+
+@Test @MainActor
+func remoteTimingOnlyChangesUUPaste() async {
+    for timing in RemotePasteTiming.allCases {
+        let environment = FakePasteEnvironment()
+        let coordinator = PasteCoordinator(environment: environment)
+        coordinator.setRemotePasteTiming(timing)
+        let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU")
+        #expect(await coordinator.paste(text: "first", to: remote, sessionID: UUID()) == .sent)
+        await coordinator.finishPendingCleanup()
+        #expect(environment.delays == [timing.delay])
+        environment.delays = []
+        #expect(await coordinator.paste(text: "next", to: target, sessionID: UUID()) == .sent)
+        #expect(environment.delays == [.milliseconds(150)])
+    }
+}
+
+@Test @MainActor
+func localPasteKeepsExistingTiming() async {
+    let environment = FakePasteEnvironment()
+    let coordinator = PasteCoordinator(environment: environment)
+    #expect(await coordinator.paste(text: "local", to: target, sessionID: UUID()) == .sent)
+    #expect(environment.delays == [.milliseconds(150)])
+    #expect(environment.cleanupDelays == [.milliseconds(1_200)])
+}
+
+@Test @MainActor
+func cancellingWhileUUSynchronizesDoesNotSendPaste() async {
+    let environment = FakePasteEnvironment()
+    let coordinator = PasteCoordinator(environment: environment)
+    environment.onDelay = { _ in coordinator.cancel() }
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU远程")
+    #expect(await coordinator.paste(text: "remote", to: remote, sessionID: UUID()) == .cancelledBeforeSend)
+    #expect(environment.postedPasteCount == 0)
+    #expect(environment.restored != nil)
+}
+
+@Test @MainActor
+func copyingDuringUUSynchronizationPreservesUserClipboard() async {
+    let environment = FakePasteEnvironment()
+    let coordinator = PasteCoordinator(environment: environment)
+    environment.onDelay = { _ in environment.changeCount += 1 }
+    let remote = PasteTarget(pid: 43, bundleID: "com.netease.uuremote", name: "UU远程")
+    #expect(await coordinator.paste(text: "remote", to: remote, sessionID: UUID()) == .failed("剪贴板已被其他操作修改"))
+    #expect(environment.postedPasteCount == 0)
+    #expect(environment.restored == nil)
+}
 
 @Test @MainActor
 func restoresAllPasteboardItemsAndTypesAfterSend() async {
