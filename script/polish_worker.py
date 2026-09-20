@@ -6,7 +6,7 @@ import sys
 import time
 
 from check_polish_model import digest
-from polish_guard import clean_fillers, messages, validate
+from polish_guard import clean_disfluencies, messages, validate
 
 
 def load_model(directory):
@@ -28,7 +28,7 @@ def polish(source, model, tokenizer, max_tokens=1024):
     from mlx_lm import stream_generate
     from mlx_lm.sample_utils import make_sampler
     started = time.monotonic()
-    cleaned = clean_fillers(source)
+    cleaned = clean_disfluencies(source)
     prompt = tokenizer.apply_chat_template(messages(cleaned or source), tokenize=False, add_generation_prompt=True,
                                            enable_thinking=False)
     output = ''

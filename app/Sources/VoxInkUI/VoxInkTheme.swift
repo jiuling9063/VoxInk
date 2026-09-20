@@ -99,7 +99,63 @@ struct WorkspaceHeading: View {
     }
 }
 
+/// Settings share the page's content edges, without Form's additional macOS gutters.
+struct WorkspaceForm<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            ForEach(sections: content) { section in
+                VStack(alignment: .leading, spacing: 10) {
+                    section.header.font(.headline).accessibilityAddTraits(.isHeader)
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(section.content) { row in
+                            if row.id != section.content.first?.id { Divider() }
+                            row.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18).writingSurface()
+                    section.footer.font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .toggleStyle(WorkspaceToggleStyle())
+            .labeledContentStyle(WorkspaceLabeledContentStyle())
+    }
+}
+
+private struct WorkspaceToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+            Spacer(minLength: 12)
+            Toggle(isOn: configuration.$isOn) { EmptyView() }
+                .labelsHidden().toggleStyle(.switch)
+        }
+    }
+}
+
+private struct WorkspaceLabeledContentStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            configuration.label
+            Spacer(minLength: 0)
+            configuration.content.foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct WorkspacePageMargins: ViewModifier {
+    func body(content: Content) -> some View {
+        content.frame(maxWidth: 920, alignment: .leading)
+            .padding(24).frame(maxWidth: .infinity, alignment: .top)
+    }
+}
+
 extension View {
+    func workspacePageMargins() -> some View { modifier(WorkspacePageMargins()) }
     func writingSurface() -> some View { modifier(WritingSurface()) }
     func ceramicSurface() -> some View { modifier(WritingSurface()) }
     func workspaceChrome() -> some View { modifier(WorkspaceChrome()) }

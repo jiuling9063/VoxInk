@@ -14,12 +14,14 @@ struct DictionaryPreferencesView: View {
     @State private var testText = "请打开雨落。"
 
     var body: some View {
-        Form {
+        WorkspaceForm {
             Section("纠正专有词") {
-                Text("填写常被识别错的词和正确写法。例如：雨落 → 语落。仅在本机保存，从下一次识别起生效。")
+                Text("记住正确写法，例如：雨落 → 语落。下次识别时自动纠正。")
                     .font(.callout).foregroundStyle(.secondary)
-                Text("完整词语匹配，区分英文大小写；数字、网址、路径和标记代码保持原样。这里的词条用于识别后的文字纠正。")
-                    .font(.caption).foregroundStyle(.secondary)
+                DisclosureGroup("匹配规则") {
+                    Text("词条仅在本机保存，用于识别后的文字纠正。匹配完整词语，区分英文大小写；数字、网址、路径和代码保持原样。")
+                        .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                }
                 if let error = controller.errorMessage {
                     Text(error).font(.callout).foregroundStyle(.orange)
                 }
@@ -63,7 +65,7 @@ struct DictionaryPreferencesView: View {
                 Text("预览最多 2000 个字符，只展示文字，不录音、不粘贴，也不保存这句话。")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped)
+        }
             .sheet(isPresented: $editing) { editor }
     }
 

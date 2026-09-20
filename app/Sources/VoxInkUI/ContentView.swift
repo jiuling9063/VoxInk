@@ -31,6 +31,7 @@ public struct ContentView: View {
         VStack(spacing: 0) {
             ScrollViewReader { scroll in
                 HStack(spacing: 0) {
+                    VStack(spacing: 0) {
                     ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("工作空间").font(.caption.weight(.medium)).foregroundStyle(.secondary)
@@ -51,13 +52,17 @@ public struct ContentView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                             }
                         }
-                        Divider().padding(.vertical, 10)
+                    }.buttonStyle(.plain).padding(12).padding(.top, 24)
+                    }.scrollIndicators(.hidden)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Divider().padding(.bottom, 8)
                         Label("本机处理 · 安心表达", systemImage: "lock.shield")
-                            .font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 8)
-                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")").font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-                            .padding(.horizontal, 8).padding(.top, 3)
-                    }.buttonStyle(.plain).padding(12).padding(.vertical, 12)
-                    }.scrollIndicators(.hidden).frame(width: 176).workspaceChrome()
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")")
+                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 12)
+                    }.frame(width: 176).workspaceChrome()
                     Divider()
                 switch page {
                 case .engine, .shortcut, .postprocess, .polish, .help:
@@ -84,7 +89,7 @@ public struct ContentView: View {
                         diagnostics
                         #endif
                         }
-                    }.frame(maxWidth: 920, alignment: .leading).padding(24).frame(maxWidth: .infinity)
+                    }.workspacePageMargins()
                 }
                 .onChange(of: store.transcript) { _, text in
                     if !text.isEmpty { scroll.scrollTo("activity", anchor: .top) }

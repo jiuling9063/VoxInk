@@ -36,61 +36,42 @@ struct WorkspaceSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            WorkspaceHeading(title: page.title, subtitle: subtitle)
-            switch page {
-            case .engine:
-                Form {
-                    Section("语音识别") { ModelSettingsContent(store: store) }
-                    Section("麦克风与文字写入") { PermissionSettingsContent(store: store) }
-                }.formStyle(.grouped)
-            case .shortcut:
-                Form {
-                    Section("语音输入") { InputSettingsContent(store: store) }
-                    Section("系统权限") { PermissionSettingsContent(store: store) }
-                }.formStyle(.grouped)
-            case .postprocess:
-                VStack(alignment: .leading, spacing: 8) { TextProcessingContent() }
-                    .padding(16).writingSurface()
-                if let dictionary = store.dictionary {
-                    DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
-                } else {
-                    Text("用户词典暂不可用，请重新打开语落后再试。")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-            case .polish:
-                Form {
-                    Section("可选本地润色") { PolishSettingsContent(store: store) }
-                    Section("自动处理") {
-                        Text("开启后，松开快捷键会先识别、再润色，最后只写入一次。未开启时直接写入识别文字，无需手动点击。识别原文始终保留，可在结果中查看。")
-                        Text("模型按需下载，润色时不联网。组件缺失、超时或结果未通过检查时，自动使用未润色文字。切换档位不会自动开启润色。")
-                            .font(.callout).foregroundStyle(.secondary)
-                        Button("返回工作台") { showDashboard() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                WorkspaceHeading(title: page.title, subtitle: subtitle)
+                switch page {
+                case .engine:
+                    WorkspaceForm {
+                        Section("语音识别") { ModelSettingsContent(store: store) }
+                        Section("麦克风与文字写入") { PermissionSettingsContent(store: store) }
                     }
-                }.formStyle(.grouped)
-            case .help:
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("1. 完成准备").font(.headline)
-                        Text("允许麦克风并下载识别模型。自动写入还需要辅助功能权限和可用的快捷键。")
-                        Text("2. 开始说话").font(.headline)
-                        Text(store.shortcutInstruction)
-                        Text("先点选目标输入框，再使用快捷键。也可在工作台点击录音，完成后手动复制。单次最长 60 秒。")
-                        Text("3. 检查结果").font(.headline)
-                        Text("识别后核对姓名、数字和专有词。写入失败时打开工作台查看原因；再次粘贴前先确认目标中没有重复文字。已写入的文字需在目标应用中撤销。")
-                        Text("隐私与保留").font(.headline)
-                        PrivacySettingsContent()
-                        Button("查看首次准备") { store.showSetup(); showDashboard() }
-                        SettingsLink { Label("打开偏好设置", systemImage: "slider.horizontal.3") }
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(20).writingSurface()
+                case .shortcut:
+                    WorkspaceForm {
+                        Section("语音输入") { InputSettingsContent(store: store) }
+                        Section("系统权限") { PermissionSettingsContent(store: store) }
+                    }
+                case .postprocess:
+                    VStack(alignment: .leading, spacing: 8) { TextProcessingContent() }
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(18).writingSurface()
+                    if let dictionary = store.dictionary {
+                        DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
+                    } else {
+                        Text("用户词典暂不可用，请重新打开语落后再试。")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                case .polish:
+                    WorkspaceForm {
+                        Section("可选本地润色") { PolishSettingsContent(store: store) }
+                    }
+                case .help:
+                    WorkspaceHelpView(store: store, showDashboard: showDashboard)
+                case .input, .history, .statistics, .result:
+                    EmptyView()
                 }
-            case .input, .history, .statistics, .result:
-                EmptyView()
             }
+            .workspacePageMargins()
         }
-        .scrollContentBackground(.hidden)
-        .frame(maxWidth: 920, maxHeight: .infinity, alignment: .topLeading)
-        .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { store.refreshPermissions() }
     }
 }
@@ -140,6 +121,7 @@ struct TextProcessingContent: View {
 
 struct PolishSettingsContent: View {
     @ObservedObject var store: AppStore
+    private var installed: Bool { store.installedPolishModels.contains(store.polishDownloadTarget) }
     var body: some View {
         Toggle("自动润色后写入", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
             .disabled(!store.canStart || store.isInstallingPolishModel)
@@ -155,36 +137,63 @@ struct PolishSettingsContent: View {
         Picker("使用偏好", selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) })) {
             ForEach(PolishPreference.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canStart || store.isInstallingPolishModel)
-        Text(store.polishDevice.summary).font(.caption).foregroundStyle(.secondary)
-        Text(store.polishRecommendationText).font(.callout)
-        LabeledContent("当前模型", value: store.effectivePolishModel?.modelName ?? "暂不使用")
-        Text(store.polishWarmMessage).font(.caption).foregroundStyle(.secondary)
-        if !store.polishPerformanceMessage.isEmpty {
-            Text(store.polishPerformanceMessage).font(.caption).foregroundStyle(.secondary)
-        }
-        LabeledContent("下载或修复", value: store.polishDownloadTarget.title)
-        Text(store.polishDownloadTarget.detail).font(.callout)
-        LabeledContent("安装状态", value: store.installedPolishModels.contains(store.polishDownloadTarget) ? "已安装" : "未安装")
-        if store.isInstallingPolishModel {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                ProgressView().controlSize(.small)
-                Text(store.polishInstallationMessage).font(.callout)
-                Spacer()
-                Button("取消下载") { store.cancelPolishInstallation() }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.polishDownloadTarget.title).font(.headline)
+                    Text(store.polishDownloadTarget.detail).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                StatusBadge(title: installed ? "已安装" : "未下载", tone: installed ? .good : .quiet)
             }
-        } else {
-            Button(store.installedPolishModels.contains(store.polishDownloadTarget) ? "检查并修复此模型" : "下载并启用") {
-                store.installSelectedPolishModel(enableAfterInstall: !store.installedPolishModels.contains(store.polishDownloadTarget))
-            }.disabled(!store.canStart)
-        }
-        if !store.isInstallingPolishModel && !store.polishInstallationMessage.isEmpty {
-            Text(store.polishInstallationMessage).font(.caption).foregroundStyle(.secondary)
-        }
-        Text("运行组件已随 App 提供，无需安装 Python 或配置环境。上方大小为模型下载量。高档位占用更多内存、耗时更长；“最佳效果”是效果优先档，具体表现因文本和电脑而异。")
+            if store.isInstallingPolishModel {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(store.polishInstallationMessage).font(.callout)
+                    Spacer()
+                    Button("取消") { store.cancelPolishInstallation() }
+                }
+            } else {
+                HStack {
+                    if installed {
+                        Text("当前使用：\(store.effectivePolishModel?.title ?? "暂不可用")")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("首次下载后即可使用").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(installed ? "检查与修复" : "下载并启用") {
+                        store.installSelectedPolishModel(enableAfterInstall: !installed)
+                    }.disabled(!store.canStart)
+                }
+            }
+            if !store.isInstallingPolishModel && !store.polishInstallationMessage.isEmpty {
+                Text(store.polishInstallationMessage).font(.caption).foregroundStyle(.secondary)
+            }
+        }.onAppear { store.refreshPolishModels() }
+        Text("在本机整理表达，失败时保留原文。")
             .font(.caption).foregroundStyle(.secondary)
-        Text("默认关闭。开启后先润色再写入。响应更快／兼顾／效果优先分别最多等待 6／12／30 秒，失败使用未润色文字；Esc 取消整次输入。自动模式只调整已安装模型，新模型须点击下载，不会切到云端。性能统计只保存在本机，不含输入文字。")
-            .font(.caption).foregroundStyle(.secondary)
-            .onAppear { store.refreshPolishModels() }
+        DisclosureGroup("模型与运行详情") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(store.polishDevice.summary)
+                Text(store.polishRecommendationText)
+                LabeledContent("完整模型名称", value: store.polishDownloadTarget.modelName)
+                Text(store.polishWarmMessage)
+                if !store.polishPerformanceMessage.isEmpty { Text(store.polishPerformanceMessage) }
+            }.font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+        }
+        DisclosureGroup("使用说明") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("开启后先识别、再润色，最后写入一次。识别原文始终保留；Esc 取消整次输入。")
+                Text("运行组件已内置，无需配置。模型按需下载，下载完成后可离线使用；高档位需要更多内存和等待时间。")
+                Text("自动模式只选择已安装的模型。响应更快、兼顾、效果优先分别最多等待 6、12、30 秒；超时或结果不合格时使用未润色文字。")
+                Text("运行耗时只保存在本机，不包含输入文字。")
+            }.font(.caption).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+        }
+
     }
 }
 
@@ -207,8 +216,10 @@ struct PermissionSettingsContent: View {
             HStack { permissionButtons }
             VStack(alignment: .leading) { permissionButtons }
         }
-        Text("在系统设置的「隐私与安全」中管理麦克风与辅助功能权限。返回语落时会刷新状态。")
-            .font(.caption).foregroundStyle(.secondary)
+        DisclosureGroup("权限说明") {
+            Text("麦克风用于录音，辅助功能用于写入文字。在系统设置的“隐私与安全”中管理；返回语落后会自动刷新。")
+                .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+        }
         Button("刷新权限状态") { store.refreshPermissions() }
     }
 
@@ -231,7 +242,7 @@ struct ModelSettingsContent: View {
             StatusBadge(title: store.modelState.title,
                         tone: store.modelState == .ready ? .good : (store.modelState == .failed ? .warning : .quiet))
         }
-        Text("当前预览使用 Qwen 本地模型。首次下载约 713 MB；中断可继续，完成后校验文件。识别过程无需联网。")
+        Text("识别在本机完成。首次下载约 713 MB，支持中断后继续。")
             .font(.callout).foregroundStyle(.secondary)
         if let progress = store.modelInstallationProgress {
             ProgressView(progress.title, value: progress.fraction)

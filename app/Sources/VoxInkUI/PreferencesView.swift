@@ -25,16 +25,17 @@ public struct PreferencesView: View {
                     .background(theme.ceramicGradient, in: RoundedRectangle(cornerRadius: 14))
                     .overlay { RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.16), lineWidth: 1) }
                     .accessibilityHidden(true)
-            }.padding(.horizontal, 8)
+            }
             Picker("设置分类", selection: $tab) {
                 Text("通用").tag(0)
                 Text("权限与模型").tag(1)
                 if store.dictionary != nil { Text("用户词典").tag(2) }
             }.pickerStyle(.segmented).labelsHidden()
             ReadinessSummary(store: store)
+            ScrollView {
             Group {
             if tab == 0 {
-            Form {
+            WorkspaceForm {
                 Section("启动") {
                     Toggle("登录时启动语落", isOn: Binding(
                         get: { loginItem.state == .enabled || loginItem.state == .requiresApproval },
@@ -59,18 +60,17 @@ public struct PreferencesView: View {
                     PrivacySettingsContent()
                     Button("查看使用引导") { store.showSetup(); showGuide() }
                 }
-            }.formStyle(.grouped)
+            }
             } else if tab == 1 {
-            Form {
+            WorkspaceForm {
                 Section("系统权限") { PermissionSettingsContent(store: store) }
                 Section("本地模型") { ModelSettingsContent(store: store) }
-            }.formStyle(.grouped)
+            }
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
             }
-            }.id(tab).transition(.opacity).scrollContentBackground(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ceramicSurface()
+            }.id(tab).transition(.opacity)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(24).frame(width: 620, height: 660)
         .background(theme.background).tint(theme.accent)
