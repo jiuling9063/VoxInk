@@ -94,14 +94,19 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>语落 VoxInk</string>
 <key>CFBundleIconFile</key><string>VoxInk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.4</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.1.5</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSMicrophoneUsageDescription</key><string>语落需要麦克风录制你的语音，并仅在本机转换为文字。点击开始录音后才会采集。</string>
 </dict></plist>
 PLIST
+bash "$ROOT/script/prepare_polish_build_runtime.sh"
+POLISH_BUILD_PYTHON="${VOXINK_POLISH_BUILD_RUNTIME:-$HOME/Library/Caches/VoxInkBuild/polish-python-3.12.13}/bin/python3.12"
+"$POLISH_BUILD_PYTHON" -B "$ROOT/script/bundle_polish_runtime.py" --python "$POLISH_BUILD_PYTHON" \
+  --destination "$BUNDLE/Contents/Resources/PolishRuntime" --identity "$SIGN_IDENTITY" \
+  --requirements "$ROOT/benchmark/polish-requirements.lock"
 sign_options=(--force --sign "$SIGN_IDENTITY")
 if [[ "$SIGN_IDENTITY" != - ]]; then
   sign_options+=(--options runtime --timestamp)

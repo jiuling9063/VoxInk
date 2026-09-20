@@ -68,6 +68,23 @@ private actor FixtureInstaller: PolishModelInstalling {
         #expect(store.polishInstallationMessage.contains("安装完成"))
     }
 
+    @Test func explicitDownloadEnablesPolishOnlyAfterSuccess() async throws {
+        let store = AppStore(polishInstaller: FixtureInstaller(), polishInventory: { [.light] }, preferences: nil)
+        store.setPolishModel(.light)
+        #expect(!store.polishingEnabled)
+        store.installSelectedPolishModel(enableAfterInstall: true)
+        try await waitForInstall(store)
+        #expect(store.polishingEnabled)
+    }
+
+    @Test func failedExplicitDownloadDoesNotEnablePolish() async throws {
+        let store = AppStore(polishInstaller: FixtureInstaller(shouldFail: true), polishInventory: { [] }, preferences: nil)
+        store.installSelectedPolishModel(enableAfterInstall: true)
+        try await waitForInstall(store)
+        #expect(!store.polishingEnabled)
+        #expect(!store.polishInstallationMessage.contains("配置环境"))
+    }
+
     @Test func failedInstallIsNotReportedReady() async throws {
         let store = AppStore(polishInstaller: FixtureInstaller(shouldFail: true), polishInventory: { [] }, preferences: nil)
         store.installSelectedPolishModel()

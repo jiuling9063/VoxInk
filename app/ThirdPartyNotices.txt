@@ -23,3 +23,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Bundled local polishing runtime
+
+The App includes CPython 3.12.13 and the dependencies pinned in
+Contents/Resources/PolishRuntime/requirements.lock. Their original LICENSE,
+COPYING, NOTICE and *.dist-info/licenses files are retained in that directory.
+CPython: https://www.python.org/ (PSF License; see runtime LICENSE.txt)
+MLX and MLX LM: https://github.com/ml-explore (MIT License)
+Hugging Face Hub, Transformers and Tokenizers: https://github.com/huggingface
+(Apache License 2.0)
+Model weights are downloaded separately; their repository license files are
+retained alongside the downloaded model.

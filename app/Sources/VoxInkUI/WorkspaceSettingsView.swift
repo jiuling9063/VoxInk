@@ -142,7 +142,7 @@ struct PolishSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
         Toggle("自动润色后写入", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
-            .disabled(!store.canStart)
+            .disabled(!store.canStart || store.isInstallingPolishModel)
         Picker("模型选择", selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
             if $0 == "auto" { store.setAutomaticPolishModel(true) }
             else if let model = PolishModel(rawValue: $0) { store.setPolishModel(model) }
@@ -168,19 +168,19 @@ struct PolishSettingsContent: View {
         if store.isInstallingPolishModel {
             HStack {
                 ProgressView().controlSize(.small)
-                Text("下载与校验中…")
+                Text(store.polishInstallationMessage).font(.callout)
                 Spacer()
                 Button("取消下载") { store.cancelPolishInstallation() }
             }
         } else {
-            Button(store.installedPolishModels.contains(store.polishDownloadTarget) ? "检查并修复此模型" : "下载此模型") {
-                store.installSelectedPolishModel()
+            Button(store.installedPolishModels.contains(store.polishDownloadTarget) ? "检查并修复此模型" : "下载并启用") {
+                store.installSelectedPolishModel(enableAfterInstall: !store.installedPolishModels.contains(store.polishDownloadTarget))
             }.disabled(!store.canStart)
         }
-        if !store.polishInstallationMessage.isEmpty {
+        if !store.isInstallingPolishModel && !store.polishInstallationMessage.isEmpty {
             Text(store.polishInstallationMessage).font(.caption).foregroundStyle(.secondary)
         }
-        Text("大小为模型下载量，不含运行环境。高档位占用更多内存、耗时更长；“最佳效果”是效果优先档，具体表现因文本和电脑而异。")
+        Text("运行组件已随 App 提供，无需安装 Python 或配置环境。上方大小为模型下载量。高档位占用更多内存、耗时更长；“最佳效果”是效果优先档，具体表现因文本和电脑而异。")
             .font(.caption).foregroundStyle(.secondary)
         Text("默认关闭。开启后先润色再写入。响应更快／兼顾／效果优先分别最多等待 6／12／30 秒，失败使用未润色文字；Esc 取消整次输入。自动模式只调整已安装模型，新模型须点击下载，不会切到云端。性能统计只保存在本机，不含输入文字。")
             .font(.caption).foregroundStyle(.secondary)

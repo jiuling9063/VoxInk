@@ -152,7 +152,7 @@ import VoxInkCore
 
     public func refreshPolishModels() { installedPolishModels = polishInventory(); refreshPolishDevice() }
 
-    public func installSelectedPolishModel() {
+    public func installSelectedPolishModel(enableAfterInstall: Bool = false) {
         guard canStart, !isInstallingPolishModel else { return }
         refreshPolishDevice()
         let model = polishDownloadTarget
@@ -162,19 +162,27 @@ import VoxInkCore
         }
         polishWarmTask?.cancel(); warmGeneration = UUID(); warmModel = nil
         isInstallingPolishModel = true
-        polishInstallationMessage = "正在下载并校验\(model.title)…首次下载可能需要较长时间。"
+        polishInstallationMessage = PolishInstallationStage.preparing.rawValue
         polishInstallationTask = Task {
             do {
                 await polishingService.release()
                 try Task.checkCancellation()
-                try await polishInstaller.install(model)
+                try await polishInstaller.install(model) { [weak self] stage in
+                    await MainActor.run { self?.polishInstallationMessage = stage.rawValue }
+                }
                 try Task.checkCancellation()
                 refreshPolishModels()
-                polishInstallationMessage = installedPolishModels.contains(model) ? "安装完成，可以使用。" : "模型未就绪，请重新检查安装。"
+                if installedPolishModels.contains(model) {
+                    if enableAfterInstall && canStart { setPolishingEnabled(true) }
+                    polishInstallationMessage = enableAfterInstall && !polishingEnabled
+                        ? "安装完成，当前任务结束后可开启润色。" : "安装完成，可以使用。"
+                } else {
+                    polishInstallationMessage = "模型未就绪，请重新检查安装。"
+                }
             } catch is CancellationError {
                 polishInstallationMessage = "已取消下载，再次点击可继续。"
             } catch {
-                polishInstallationMessage = "安装未完成，请检查网络、可用磁盘空间和本地润色运行环境后重试。"
+                polishInstallationMessage = "安装未完成。" + ((error as? PolishInstallationFailure)?.errorDescription ?? "请检查网络和可用磁盘空间后重试。")
             }
             refreshPolishModels()
             isInstallingPolishModel = false

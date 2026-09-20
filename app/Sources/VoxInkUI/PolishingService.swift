@@ -47,6 +47,7 @@ public actor LocalPolishingService: PolishingService {
     }
 
     private let bundledWorker: URL?
+    private let resources: URL?
     private let root: URL
     private let client = ResidentWorkerClient()
     private let idleTimeout: Duration
@@ -60,6 +61,7 @@ public actor LocalPolishingService: PolishingService {
     public init(resources: URL? = Bundle.main.resourceURL,
                 root: URL = URL.applicationSupportDirectory.appendingPathComponent("VoxInk/Polish"),
                 idleTimeout: Duration = .seconds(120)) {
+        self.resources = resources
         bundledWorker = resources?.appendingPathComponent("Polish/polish_worker.py")
         self.root = root; self.idleTimeout = idleTimeout
     }
@@ -68,13 +70,15 @@ public actor LocalPolishingService: PolishingService {
         let preferred = model.directory(in: root)
         let legacy = URL(fileURLWithPath: config.model)
         let candidates = [preferred] + (legacy.lastPathComponent == model.revision ? [legacy] : [])
-        return candidates.first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("verified.json").path) }
+        return candidates.first {
+            FileManager.default.fileExists(atPath: $0.appendingPathComponent("verified.json").path) &&
+            !FileManager.default.fileExists(atPath: $0.appendingPathComponent(".installation-pending").path)
+        }
     }
 
-    public static func installedModels(root: URL = URL.applicationSupportDirectory.appendingPathComponent("VoxInk/Polish")) -> Set<PolishModel> {
-        guard let data = try? Data(contentsOf: root.appendingPathComponent("runtime.json")),
-              let config = try? JSONDecoder().decode(Configuration.self, from: data),
-              FileManager.default.isExecutableFile(atPath: config.python) else { return [] }
+    public static func installedModels(root: URL = URL.applicationSupportDirectory.appendingPathComponent("VoxInk/Polish"),
+                                       resources: URL? = Bundle.main.resourceURL) -> Set<PolishModel> {
+        guard let config = PolishRuntime.configuration(resources: resources, root: root) else { return [] }
         return Set(PolishModel.allCases.filter { modelDirectory($0, root: root, config: config) != nil })
     }
 
@@ -94,10 +98,7 @@ public actor LocalPolishingService: PolishingService {
             loading = nil
         }
         if loadedModel == model, await client.readyInfo != nil { return }
-        let location = root.appendingPathComponent("runtime.json")
-        guard let data = try? Data(contentsOf: location),
-              let config = try? JSONDecoder().decode(Configuration.self, from: data),
-              FileManager.default.isExecutableFile(atPath: config.python),
+        guard let config = PolishRuntime.configuration(resources: resources, root: root),
               let directory = Self.modelDirectory(model, root: root, config: config) else { throw Failure.unavailable }
         let worker = bundledWorker.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0.path : nil } ?? config.worker
         guard FileManager.default.fileExists(atPath: worker) else { throw Failure.unavailable }
@@ -106,7 +107,7 @@ public actor LocalPolishingService: PolishingService {
             await client.shutdown()
             try Task.checkCancellation()
             _ = try await client.start(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
-                arguments: ["-p", "(version 1)(allow default)(deny network*)", config.python, "-B", worker,
+                arguments: ["-p", "(version 1)(allow default)(deny network*)", config.python, "-B", "-E", "-s", worker,
                             directory.path, "--resident"], readyTimeout: timeout)
         }
         loading = (id, model, task)
