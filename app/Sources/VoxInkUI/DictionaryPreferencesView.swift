@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import VoxInkCore
 
 struct DictionaryPreferencesView: View {
@@ -12,6 +13,13 @@ struct DictionaryPreferencesView: View {
     @State private var source = ""
     @State private var replacement = ""
     @State private var testText = "请打开雨落。"
+
+    @State private var choosingImport = false
+    @State private var importPreview: UserDictionaryController.ImportPreview?
+    @State private var fileError: String?
+    @State private var exporting = false
+    @State private var exportDocument = DictionaryCSVDocument(data: Data())
+    @State private var exportName = "VoxInk-纠正词库"
 
     var body: some View {
         WorkspaceForm {
@@ -32,6 +40,19 @@ struct DictionaryPreferencesView: View {
                     Text("\(controller.entries.count) / 100 条").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if controller.isUpdating { ProgressView().controlSize(.small) }
+                    Menu("词库文件") {
+                        Button("导入 CSV…") { choosingImport = true }
+                            .disabled(!canEdit || !controller.isReady || controller.isUpdating)
+                        Button("导出词库…") {
+                            exportDocument = DictionaryCSVDocument(data: UserDictionaryCSV.encode(controller.entries))
+                            exportName = "VoxInk-纠正词库"; exporting = true
+                        }.disabled(!controller.isReady || controller.isUpdating)
+                        Button("保存导入模板…") {
+                            let example = try? UserDictionaryEntry(source: "雨落", replacement: "语落")
+                            exportDocument = DictionaryCSVDocument(data: UserDictionaryCSV.encode(example.map { [$0] } ?? []))
+                            exportName = "VoxInk-纠正词模板"; exporting = true
+                        }
+                    }.fixedSize()
                     Button("添加纠正词", systemImage: "plus") { beginEditing(nil) }
                         .disabled(!canEdit || !controller.isReady || controller.isUpdating || controller.entries.count >= 100)
                 }
@@ -67,6 +88,28 @@ struct DictionaryPreferencesView: View {
             }
         }
             .sheet(isPresented: $editing) { editor }
+            .sheet(item: $importPreview) { preview in
+                DictionaryImportView(controller: controller, preview: preview, canEdit: canEdit)
+            }
+            .fileImporter(isPresented: $choosingImport, allowedContentTypes: [.commaSeparatedText]) { result in
+                do {
+                    let url = try result.get()
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let handle = try FileHandle(forReadingFrom: url)
+                    defer { try? handle.close() }
+                    let data = try handle.read(upToCount: UserDictionaryCSV.maximumBytes + 1) ?? Data()
+                    controller.clearEditingError()
+                    importPreview = try controller.previewImport(data)
+                } catch { fileError = error.localizedDescription }
+            }
+            .fileExporter(isPresented: $exporting, document: exportDocument,
+                          contentType: .commaSeparatedText, defaultFilename: exportName) { result in
+                if case .failure(let error) = result { fileError = error.localizedDescription }
+            }
+            .alert("词库文件", isPresented: Binding(get: { fileError != nil }, set: { if !$0 { fileError = nil } })) {
+                Button("好", role: .cancel) { fileError = nil }
+            } message: { Text(fileError ?? "") }
     }
 
     private func beginEditing(_ entry: UserDictionaryEntry?) {

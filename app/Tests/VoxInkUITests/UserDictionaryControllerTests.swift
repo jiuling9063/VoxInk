@@ -39,6 +39,44 @@ private actor DictionaryMemoryStore: UserDictionaryStorage {
 }
 
 @MainActor struct UserDictionaryControllerTests {
+    @Test func csvImportPreviewsConflictsAndSavesOnlyNewEntries() async throws {
+        let storage = DictionaryMemoryStore(); let controller = UserDictionaryController(storage: storage)
+        await controller.load()
+        #expect(await controller.save(source: "雨落", replacement: "语落"))
+        let data = Data("识别词,正确写法\n雨落,語落\n雨落,VoxInk\n软件,应用\n软件,程序\n123,456\n".utf8)
+        let preview = try controller.previewImport(data)
+        #expect(preview.additions.count == 1)
+        #expect(preview.duplicates == 1 && preview.conflicts == 2 && preview.invalid == 1)
+        #expect(controller.entries.count == 1)
+        #expect(await controller.importConfirmed(preview))
+        #expect(controller.entries.map(\.replacement) == ["语落", "应用"])
+        #expect(await storage.writes == 2)
+    }
+
+    @Test func csvImportFailureAndStalePreviewPreserveDictionary() async throws {
+        let storage = DictionaryMemoryStore(); let controller = UserDictionaryController(storage: storage)
+        await controller.load()
+        let data = Data("识别词,正确写法\n雨落,语落\n".utf8)
+        let preview = try controller.previewImport(data)
+        await storage.setSaveFailure(true)
+        #expect(await !controller.importConfirmed(preview))
+        #expect(controller.entries.isEmpty)
+        await storage.setSaveFailure(false)
+        #expect(await controller.save(source: "软件", replacement: "应用"))
+        #expect(await !controller.importConfirmed(preview))
+        #expect(controller.entries.count == 1)
+    }
+
+    @Test func csvImportOverCapacityCannotPartiallySave() async throws {
+        let storage = DictionaryMemoryStore(); let controller = UserDictionaryController(storage: storage)
+        await controller.load()
+        let entries = try (0..<101).map { try UserDictionaryEntry(source: "原词\($0)", replacement: "正词\($0)") }
+        let preview = try controller.previewImport(UserDictionaryCSV.encode(entries))
+        #expect(preview.blockingError != nil)
+        #expect(await !controller.importConfirmed(preview))
+        #expect(await storage.writes == 0)
+    }
+
     private func wait(_ predicate: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(3))
         while !predicate(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(1)) }

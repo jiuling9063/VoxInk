@@ -66,6 +66,54 @@ import VoxInkCore
         _ = await persist(entries.filter { $0.id != id })
     }
 
+    public struct ImportPreview: Identifiable {
+        public let id = UUID()
+        let original: [UserDictionaryEntry]
+        let additions: [UserDictionaryEntry]
+        let notices: [String]
+        let duplicates: Int
+        let conflicts: Int
+        let invalid: Int
+        let blockingError: String?
+    }
+
+    public func previewImport(_ data: Data) throws -> ImportPreview {
+        let rows = try UserDictionaryCSV.decode(data)
+        var known = Dictionary(uniqueKeysWithValues: entries.map { ($0.source, $0.replacement) })
+        var additions: [UserDictionaryEntry] = [], notices: [String] = []
+        var duplicates = 0, conflicts = 0, invalid = 0
+        for row in rows {
+            do {
+                let entry = try candidate(source: row.source, replacement: row.replacement)
+                if let target = known[entry.source] {
+                    if target == entry.replacement { duplicates += 1 }
+                    else {
+                        conflicts += 1
+                        notices.append("第 \(row.number) 行：\(entry.source) 已有写法“\(target)”，跳过冲突项。")
+                    }
+                } else {
+                    known[entry.source] = entry.replacement; additions.append(entry)
+                }
+            } catch {
+                invalid += 1
+                notices.append("第 \(row.number) 行：\(error.localizedDescription)")
+            }
+        }
+        var blockingError: String?
+        do { _ = try UserDictionaryRules(entries: entries + additions) }
+        catch { blockingError = error.localizedDescription }
+        return ImportPreview(original: entries, additions: additions, notices: notices,
+                             duplicates: duplicates, conflicts: conflicts, invalid: invalid, blockingError: blockingError)
+    }
+
+    @discardableResult public func importConfirmed(_ preview: ImportPreview) async -> Bool {
+        guard isReady, !isUpdating, preview.blockingError == nil, !preview.additions.isEmpty else { return false }
+        guard entries == preview.original else {
+            errorMessage = "词库已变化，请重新选择文件并预览。"; return false
+        }
+        return await persist(entries + preview.additions)
+    }
+
     private func persist(_ changed: [UserDictionaryEntry]) async -> Bool {
         isUpdating = true; defer { finishUpdate() }
         do {
