@@ -65,3 +65,13 @@
 Swift 257 项常规测试通过，1 项真实下载测试默认跳过。新增覆盖通用远程键选择、录音目标快照、普通应用隔离、取消/剪贴板变更阻止发送、配置持久化更新移除、减少动态音量反馈及阶段文字。测试日志 /tmp/voxink-emil-final-tests.log。
 
 实际 UI 检查使用内存替身，不向真实远端发送输入，不改动用户的正式词库/远程配置。未修改全局辅助功能或动画偏好。
+
+## 修复定位（当前版本）
+
+- `app/Sources/VoxInkUI/VoxInkTheme.swift:128` 开关语义；`:165` 紧凑选择器。
+- `app/Sources/VoxInkUI/ContentView.swift:118` 即时导航；`PreferencesView.swift:71` 即时分类内容。
+- `app/Sources/VoxInkCore/PasteCoordinator.swift:25` 通用应用配置；`:299` 远程同步及粘贴策略。
+- `app/Sources/VoxInkUI/RecordingFeedbackView.swift:23` 阶段文字；`:35` 父级音量读屏值。
+- `app/Sources/VoxInkUI/RecordingPulse.swift:19` 减少动态效果的固定几何。
+- `app/Sources/VoxInkUI/SessionHistoryView.swift:53` 条目旁复制反馈。
+- `app/Sources/VoxInkUI/DictionaryImportView.swift:45` 导入反馈；`DictionaryPreferencesView.swift:144` 保存反馈。
