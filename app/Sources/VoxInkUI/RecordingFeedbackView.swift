@@ -20,6 +20,21 @@ public struct RecordingFeedbackPresentation {
                   cancellationAvailable: store.cancellationShortcutAvailable)
     }
 
+    var phaseTitle: String {
+        if status.hasPrefix("正在润色") { return "润色中" }
+        switch phase {
+        case .loading: return "准备中"
+        case .recording: return "录音中"
+        case .transcribing: return "识别中"
+        case .pasting: return "写入中"
+        case .cancelling: return "取消中"
+        case .failed: return "未完成"
+        case .ready: return "已就绪"
+        }
+    }
+    var accessibilityStatus: String {
+        phase == .recording ? "\(status)，麦克风音量 \(Int(safeLevel * 100))%" : status
+    }
     var busy: Bool { phase != .ready && phase != .failed }
     var dismissAfter: Duration? { busy ? nil : .seconds(phase == .failed ? 8 : 0) }
     var hint: String {
@@ -54,12 +69,11 @@ public struct RecordingFeedbackView: View {
             if presentation.phase == .recording {
                 OutwardPulse(level: presentation.safeLevel, reduceMotion: reduceMotion)
                     .accessibilityLabel("麦克风音量")
+                    .accessibilityValue("\(Int(presentation.safeLevel * 100))%")
             } else if presentation.busy {
                 HStack(spacing: 10) {
                     ProcessingDots(reduceMotion: reduceMotion).accessibilityLabel("正在处理")
-                    if presentation.status.hasPrefix("正在润色") {
-                        Text("润色中").font(.caption).foregroundStyle(Color.white)
-                    }
+                    Text(presentation.phaseTitle).font(.caption).foregroundStyle(Color.white)
                 }
             } else if presentation.phase == .failed {
                 VStack(spacing: 5) {
@@ -77,7 +91,7 @@ public struct RecordingFeedbackView: View {
         .frame(height: presentation.phase == .failed ? 60 : 44)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(presentation.status)
+        .accessibilityValue(presentation.accessibilityStatus)
         .accessibilityHint(presentation.hint)
         .background(Color(red: 0.10, green: 0.12, blue: 0.13), in: RoundedRectangle(cornerRadius: 22))
         .overlay {
@@ -105,7 +119,7 @@ private struct OutwardPulse: View {
             Canvas { graphics, size in
                 for index in -14...14 {
                     let sample = RecordingPulse.sample(index: index,
-                        time: context.date.timeIntervalSince(started), level: smoothedLevel,
+                        time: context.date.timeIntervalSince(started), level: reduceMotion ? level : smoothedLevel,
                         reduceMotion: reduceMotion)
                     let x = size.width / 2 + Double(index) * 5.3 * size.width / 190
                     let height = sample.height * size.height / 44

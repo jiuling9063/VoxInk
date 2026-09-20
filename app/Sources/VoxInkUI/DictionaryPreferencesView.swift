@@ -141,7 +141,7 @@ struct DictionaryPreferencesView: View {
             HStack {
                 Spacer()
                 Button("取消") { editing = false }.keyboardShortcut(.cancelAction).disabled(controller.isUpdating)
-                Button("保存") {
+                Button(controller.isUpdating ? "正在保存…" : "保存") {
                     Task {
                         if await controller.save(source: source, replacement: replacement, id: editingID) { editing = false }
                     }

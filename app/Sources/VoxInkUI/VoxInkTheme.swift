@@ -128,9 +128,9 @@ struct WorkspaceForm<Content: View>: View {
 private struct WorkspaceToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         HStack {
-            configuration.label
+            configuration.label.accessibilityHidden(true)
             Spacer(minLength: 12)
-            Toggle(isOn: configuration.$isOn) { EmptyView() }
+            Toggle(isOn: configuration.$isOn) { configuration.label }
                 .labelsHidden().toggleStyle(.switch)
         }
     }
@@ -159,4 +159,29 @@ extension View {
     func writingSurface() -> some View { modifier(WritingSurface()) }
     func ceramicSurface() -> some View { modifier(WritingSurface()) }
     func workspaceChrome() -> some View { modifier(WorkspaceChrome()) }
+}
+
+/// Keep short settings choices compact; wrap the label only when space is scarce.
+struct WorkspacePicker<Selection: Hashable, Options: View>: View {
+    let title: String
+    @Binding var selection: Selection
+    @ViewBuilder let options: Options
+
+    init(_ title: String, selection: Binding<Selection>, @ViewBuilder content: () -> Options) {
+        self.title = title; self._selection = selection; self.options = content()
+    }
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 16) {
+                Text(title).fixedSize()
+                Spacer(minLength: 12)
+                choice
+            }
+            VStack(alignment: .leading, spacing: 8) { Text(title); choice }
+        }
+    }
+    private var choice: some View {
+        Picker(title, selection: $selection) { options }
+            .labelsHidden().pickerStyle(.menu).fixedSize()
+    }
 }

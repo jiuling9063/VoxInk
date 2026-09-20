@@ -510,3 +510,46 @@ func secureFieldAndHeldModifiersPreventKeyEvent() async {
     #expect(modifierEnvironment.postedPasteCount == 0)
     #expect(modifierEnvironment.restored != nil)
 }
+
+@Test @MainActor func configuredRemoteApplicationsUseIndependentPasteKeysAndCleanup() async throws {
+    for usesControl in [false, true] {
+        let env = FakePasteEnvironment()
+        env.capturedTarget = .init(pid: 45, bundleID: "test.remote", name: "Remote")
+        let coordinator = PasteCoordinator(environment: env)
+        coordinator.setRemoteApplications([.init(bundleID: "test.remote", name: "Remote", usesControl: usesControl)])
+        let captured = try #require(coordinator.captureTarget())
+        coordinator.setRemoteApplications([])
+        #expect(await coordinator.paste(text: "text", to: captured, sessionID: UUID()) == .sent)
+        await coordinator.finishPendingCleanup()
+        #expect(env.postedUsingControl == usesControl)
+        #expect(env.delays.first == .seconds(2))
+        #expect(env.cleanupDelays == [.seconds(3)])
+        #expect(env.restored != nil)
+    }
+}
+
+@Test @MainActor func remoteApplicationConfigurationNeverLeaksToLocalApps() async throws {
+    let env = FakePasteEnvironment()
+    env.capturedTarget = .init(pid: 45, bundleID: "test.local", name: "Local")
+    let coordinator = PasteCoordinator(environment: env)
+    coordinator.setRemoteApplications([.init(bundleID: "test.remote", name: "Remote", usesControl: true)])
+    let captured = try #require(coordinator.captureTarget())
+    #expect(captured.remoteUsesControl == nil)
+    #expect(await coordinator.paste(text: "text", to: captured, sessionID: UUID()) == .sent)
+    #expect(!env.postedUsingControl)
+    #expect(env.delays.first == .milliseconds(150))
+}
+
+@Test @MainActor func genericRemoteCancellationAndClipboardChangeNeverSendPaste() async throws {
+    for cancel in [false, true] {
+        let env = FakePasteEnvironment()
+        env.capturedTarget = .init(pid: 45, bundleID: "test.remote", name: "Remote")
+        let coordinator = PasteCoordinator(environment: env)
+        coordinator.setRemoteApplications([.init(bundleID: "test.remote", name: "Remote", usesControl: true)])
+        let captured = try #require(coordinator.captureTarget())
+        env.onDelay = { _ in if cancel { coordinator.cancel() } else { env.changeCount = 99 } }
+        let outcome = await coordinator.paste(text: "text", to: captured, sessionID: UUID())
+        #expect(!outcome.wasIssued && env.postedPasteCount == 0)
+        if !cancel { #expect(env.restored == nil) }
+    }
+}

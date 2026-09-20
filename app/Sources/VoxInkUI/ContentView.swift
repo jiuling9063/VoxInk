@@ -6,7 +6,6 @@ public struct ContentView: View {
     @Environment(\.colorScheme) private var scheme
     private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingReadiness = false
     @State private var importing = false
     @State private var showingOriginal = false
@@ -118,7 +117,7 @@ public struct ContentView: View {
 
     private func navigation(_ title: String, icon: String, destination: WorkspacePage) -> some View {
         Button {
-            withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1)) { page = destination }
+            page = destination
         } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 13, weight: page == destination ? .semibold : .regular))
@@ -145,10 +144,10 @@ public struct ContentView: View {
             DisclosureGroup(isExpanded: $showingReadiness) {
                 dashboardReadiness.padding(.top, 10)
             } label: {
-                Label(store.canCompleteSetup ? "权限与模型已就绪" : "检查权限与模型",
-                      systemImage: store.canCompleteSetup ? "checkmark.shield" : "exclamationmark.circle")
+                Label(store.canCompleteSetup ? "权限与模型已就绪" : (store.canStart ? "检查权限与模型" : "权限与模型"),
+                      systemImage: store.canCompleteSetup ? "checkmark.shield" : (store.canStart ? "exclamationmark.circle" : "shield"))
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(store.canCompleteSetup ? theme.accent : .orange)
+                    .foregroundStyle(store.canCompleteSetup ? theme.accent : (store.canStart ? .orange : .secondary))
             }
         }.padding(24).writingSurface().id("activity")
     }

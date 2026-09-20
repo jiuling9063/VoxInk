@@ -1,8 +1,23 @@
 import Foundation
 import Testing
+import VoxInkCore
 @testable import VoxInkUI
 
 @MainActor struct ShortcutPreferenceTests {
+    @Test func remoteApplicationProfilesPersistUpdateAndRemoveIndependently() throws {
+        let name = "VoxInk.RemoteApplications.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let store = AppStore(preferences: preferences)
+        store.setRemoteApplication(.init(bundleID: "test.one", name: "One", usesControl: true))
+        store.setRemoteApplication(.init(bundleID: "test.two", name: "Two"))
+        store.setRemoteApplication(.init(bundleID: "test.one", name: "One", usesControl: false))
+        let restored = AppStore(preferences: preferences)
+        #expect(restored.remoteApplications.count == 2)
+        #expect(restored.remoteApplications.allSatisfy { !$0.usesControl })
+        restored.removeRemoteApplication("test.one")
+        #expect(AppStore(preferences: preferences).remoteApplications.map(\.bundleID) == ["test.two"])
+    }
     @Test func remoteDeviceNamesPersistSeparately() throws {
         let name = "VoxInk.RemoteDevicesTests.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: name))

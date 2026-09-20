@@ -12,6 +12,7 @@ struct SessionHistoryView: View {
     @ObservedObject var store: AppStore
     let statistics: Bool
     @State private var copyStatus = ""
+    @State private var copiedID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -41,7 +42,6 @@ struct SessionHistoryView: View {
                 HStack {
                     Text("\(store.sessionHistory.count) 条转录").font(.caption.weight(.medium))
                     Spacer()
-                    Text(copyStatus).font(.caption).foregroundStyle(.secondary)
                 }
                 LazyVStack(spacing: 12) {
                     ForEach(store.sessionHistory) { entry in
@@ -50,7 +50,12 @@ struct SessionHistoryView: View {
                                 Label(entry.date.formatted(date: .abbreviated, time: .shortened), systemImage: "waveform")
                                     .font(.caption).foregroundStyle(theme.accent)
                                 Spacer()
-                                Button("复制") { copyStatus = store.copyHistory(entry) ? "已复制" : "复制失败，请重试" }
+                                if copiedID == entry.id { Text(copyStatus).font(.caption).foregroundStyle(.secondary) }
+                                Button("复制") {
+                                    copiedID = entry.id
+                                    copyStatus = store.copyHistory(entry) ? "已复制" : "复制失败，请重试"
+                                }
+                                    .accessibilityLabel("复制 \(entry.date.formatted(date: .omitted, time: .shortened)) 的转录")
                                     .disabled(!store.canStart)
                             }
                             Text(entry.text).lineSpacing(5).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)

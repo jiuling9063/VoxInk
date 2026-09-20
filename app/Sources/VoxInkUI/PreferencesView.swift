@@ -7,7 +7,6 @@ public struct PreferencesView: View {
     @ObservedObject private var loginItem: LoginItemController
     private let showGuide: () -> Void
     @State private var tab = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(store: AppStore, loginItem: LoginItemController, showGuide: @escaping () -> Void) {
         self.store = store
@@ -69,13 +68,12 @@ public struct PreferencesView: View {
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
             }
-            }.id(tab).transition(.opacity)
+            }.id(tab)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(24).frame(width: 620, height: 660)
         .background(theme.background).tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: tab)
         .onAppear { store.refreshPermissions(); loginItem.refresh() }
     }
 }

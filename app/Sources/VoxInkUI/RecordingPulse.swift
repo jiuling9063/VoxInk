@@ -17,6 +17,6 @@ struct RecordingPulse {
         let trailing = 0.48 * exp(-pow((distance - (front - 0.32)) / 0.13, 2) / 2)
         let shape = min(1, main + trailing) * edge
         let energy = reduceMotion ? 0.25 : volume
-        return Sample(height: 2.4 + energy * 31 * shape, intensity: sqrt(energy) * shape)
+        return Sample(height: 2.4 + energy * 31 * shape, intensity: sqrt(volume) * (reduceMotion ? edge : shape))
     }
 }

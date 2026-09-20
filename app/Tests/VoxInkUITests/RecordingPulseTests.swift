@@ -41,7 +41,8 @@ struct RecordingPulseTests {
         for index in -14...14 {
             let first = RecordingPulse.sample(index: index, time: 0, level: 0, reduceMotion: true)
             let next = RecordingPulse.sample(index: index, time: 10, level: 1, reduceMotion: true)
-            #expect(first.height == next.height && first.opacity == next.opacity)
+            #expect(first.height == next.height)
+            if abs(index) < 14 { #expect(next.opacity > first.opacity) }
         }
     }
 }

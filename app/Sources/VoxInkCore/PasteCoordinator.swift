@@ -22,6 +22,16 @@ public enum RemotePasteTiming: String, CaseIterable, Sendable {
     }
 }
 
+public struct RemoteApplicationProfile: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { bundleID }
+    public let bundleID: String
+    public let name: String
+    public var usesControl: Bool
+    public init(bundleID: String, name: String, usesControl: Bool = false) {
+        self.bundleID = bundleID; self.name = name; self.usesControl = usesControl
+    }
+}
+
 public struct PasteTarget: Sendable, Equatable {
     public let pid: Int32
     public let bundleID: String
@@ -166,10 +176,12 @@ public final class PasteCoordinator {
     private var pendingCleanup: Task<Void, Never>?
     private var cleanupFailureHandler: (@MainActor (UUID) -> Void)?
     private var remoteTiming: RemotePasteTiming = .stable
+    private var remoteApplications: [RemoteApplicationProfile] = []
     private var uuWindowsPaste = false
     private var remoteDevices: [String: Bool] = [:]
 
     public func setRemotePasteTiming(_ timing: RemotePasteTiming) { remoteTiming = timing }
+    public func setRemoteApplications(_ profiles: [RemoteApplicationProfile]) { remoteApplications = profiles }
     public func setUUWindowsPaste(_ enabled: Bool) { uuWindowsPaste = enabled }
     public func setRemoteDevices(_ devices: [String: Bool]) { remoteDevices = devices }
     public func setCleanupFailureHandler(_ handler: @escaping @MainActor (UUID) -> Void) {
@@ -187,7 +199,11 @@ public final class PasteCoordinator {
 
     public func captureTarget() -> PasteTarget? {
         guard let target = environment.captureTarget() else { return nil }
-        guard target.bundleID == "com.netease.uuremote" else { return target }
+        guard target.bundleID == "com.netease.uuremote" else {
+            guard let profile = remoteApplications.first(where: { $0.bundleID == target.bundleID }) else { return target }
+            return PasteTarget(pid: target.pid, bundleID: target.bundleID, name: target.name,
+                               remoteUsesControl: profile.usesControl)
+        }
         let device = environment.remoteDeviceName(for: target, candidates: Array(remoteDevices.keys))
         let name = device.map { "\(target.name) · \($0)" } ?? target.name
         return PasteTarget(pid: target.pid, bundleID: target.bundleID, name: name,
@@ -278,10 +294,11 @@ public final class PasteCoordinator {
             }
         }
 
-        // UU synchronizes the clipboard asynchronously; restoring it too soon can
+        // Remote clients synchronize the clipboard asynchronously; restoring it too soon can
         // make the remote computer paste the previous contents instead.
-        let isUURemote = target.bundleID == "com.netease.uuremote"
-        await environment.delay(for: isUURemote ? remoteTiming.delay : .milliseconds(150))
+        let isRemote = target.bundleID == "com.netease.uuremote" || target.remoteUsesControl != nil
+            || remoteApplications.contains(where: { $0.bundleID == target.bundleID })
+        await environment.delay(for: isRemote ? remoteTiming.delay : .milliseconds(150))
 
         if cancellationRequested {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
@@ -311,11 +328,11 @@ public final class PasteCoordinator {
         guard remoteTargetMatches(target) else {
             return failBeforeSend("UU 远端设备已切换或无法识别，请回到原设备重试", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        guard environment.postPaste(to: target, usingControl: isUURemote && (target.remoteUsesControl ?? uuWindowsPaste)) else {
+        guard environment.postPaste(to: target, usingControl: isRemote && (target.remoteUsesControl ?? remoteApplications.first(where: { $0.bundleID == target.bundleID })?.usesControl ?? (target.bundleID == "com.netease.uuremote" && uuWindowsPaste))) else {
             return failBeforeSend("无法发送粘贴按键", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
 
-        if isUURemote {
+        if isRemote {
             pendingCleanup = Task { @MainActor in
                 await environment.delayIgnoringCancellation(for: .seconds(3))
                 if environment.currentPasteboardChangeCount() == ownedChangeCount,

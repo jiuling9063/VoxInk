@@ -218,6 +218,25 @@ import VoxInkCore
     @Published public private(set) var uuWindowsPaste = false
     @Published public private(set) var uuMacDevices = ""
     @Published public private(set) var uuWindowsDevices = ""
+    @Published public private(set) var remoteApplications: [RemoteApplicationProfile] = []
+    public func setRemoteApplication(_ profile: RemoteApplicationProfile) {
+        guard canStart, !profile.bundleID.isEmpty, profile.bundleID != "com.netease.uuremote" else { return }
+        var changed = remoteApplications
+        if let index = changed.firstIndex(where: { $0.bundleID == profile.bundleID }) {
+            changed[index] = profile
+        } else { changed.append(profile) }
+        saveRemoteApplications(changed)
+    }
+    public func removeRemoteApplication(_ bundleID: String) {
+        guard canStart else { return }
+        saveRemoteApplications(remoteApplications.filter { $0.bundleID != bundleID })
+    }
+    private func saveRemoteApplications(_ profiles: [RemoteApplicationProfile]) {
+        guard let data = try? JSONEncoder().encode(profiles) else { return }
+        preferences?.set(data, forKey: "remoteApplications")
+        remoteApplications = profiles
+        pasteService.setRemoteApplications(profiles)
+    }
     public func setUUDevices(mac: String, windows: String) {
         guard canStart else { return }
         uuMacDevices = mac
@@ -346,6 +365,11 @@ import VoxInkCore
         self.dictionary = dictionary
         remotePasteTiming = preferences?.string(forKey: "remotePasteTiming").flatMap(RemotePasteTiming.init(rawValue:)) ?? .stable
         pasteService.setRemotePasteTiming(remotePasteTiming)
+        if let data = preferences?.data(forKey: "remoteApplications"),
+           let profiles = try? JSONDecoder().decode([RemoteApplicationProfile].self, from: data) {
+            remoteApplications = profiles
+        }
+        pasteService.setRemoteApplications(remoteApplications)
         uuWindowsPaste = preferences?.bool(forKey: "uuWindowsPaste") ?? false
         pasteService.setUUWindowsPaste(uuWindowsPaste)
         uuMacDevices = preferences?.string(forKey: "uuMacDevices") ?? ""

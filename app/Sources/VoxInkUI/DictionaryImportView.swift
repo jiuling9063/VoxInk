@@ -42,7 +42,7 @@ struct DictionaryImportView: View {
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(controller.isUpdating)
-                Button("导入 \(preview.additions.count) 条") {
+                Button(controller.isUpdating ? "正在导入…" : "导入 \(preview.additions.count) 条") {
                     Task { if await controller.importConfirmed(preview) { dismiss() } }
                 }.keyboardShortcut(.defaultAction)
                     .disabled(!canEdit || controller.isUpdating || preview.additions.isEmpty || preview.blockingError != nil)

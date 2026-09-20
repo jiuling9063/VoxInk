@@ -88,3 +88,15 @@ import Testing
         feedback.hide()
     }
 }
+
+@Test func processingFeedbackNamesPhaseAndKeepsAccessibleInputLevel() {
+    let recording = RecordingFeedbackPresentation(phase: .recording, status: "录音中", target: "test", level: 0.5)
+    #expect(recording.accessibilityStatus.contains("50%"))
+    let recognizing = RecordingFeedbackPresentation(phase: .transcribing, status: "正在识别", target: "test")
+    #expect(recognizing.phaseTitle == "识别中")
+    #expect(recognizing.accessibilityStatus == "正在识别")
+    let polishing = RecordingFeedbackPresentation(phase: .transcribing, status: "正在润色…", target: "test")
+    #expect(polishing.phaseTitle == "润色中")
+    let pasting = RecordingFeedbackPresentation(phase: .pasting, status: "正在写入", target: "test")
+    #expect(pasting.phaseTitle == "写入中")
+}

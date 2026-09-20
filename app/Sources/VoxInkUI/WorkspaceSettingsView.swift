@@ -79,35 +79,16 @@ struct WorkspaceSettingsView: View {
 struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
-        Picker("快捷键", selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
+        WorkspacePicker("快捷键", selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
             ForEach(ShortcutCombination.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canChangeShortcut)
         Text(store.shortcutStatus).font(.caption).foregroundStyle(.secondary)
-        Picker("操作方式", selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
+        WorkspacePicker("操作方式", selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
             ForEach(ShortcutMode.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canChangeShortcut)
         Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
         LabeledContent("单次录音", value: "最长 60 秒 · Esc 取消")
-        DisclosureGroup("远程输入（UU）") {
-            TextField("UU Mac 设备名称", text: Binding(get: { store.uuMacDevices }, set: { store.setUUDevices(mac: $0, windows: store.uuWindowsDevices) }))
-                .disabled(!store.canStart)
-            TextField("UU Windows 设备名称", text: Binding(get: { store.uuWindowsDevices }, set: { store.setUUDevices(mac: store.uuMacDevices, windows: $0) }))
-                .disabled(!store.canStart)
-            Text("填写 UU 窗口显示的完整设备名，多个名称用逗号分隔。窗口模式下自动匹配：Mac 用 Command+V，Windows 用 Ctrl+V。")
-                .font(.caption).foregroundStyle(.secondary)
-            Toggle("未识别设备时使用 Windows 粘贴", isOn: Binding(get: { store.uuWindowsPaste }, set: { store.setUUWindowsPaste($0) }))
-                .disabled(!store.canStart)
-            Text("全屏、设备名未填写或名称重复时可能无法识别，届时使用此手动选择：打开为 Windows，关闭为 Mac。已匹配设备不受此开关影响。")
-                .font(.caption).foregroundStyle(.secondary)
-            Picker("UU 远程同步等待", selection: Binding(get: { store.remotePasteTiming }, set: { store.setRemotePasteTiming($0) })) {
-                ForEach(RemotePasteTiming.allCases, id: \.self) { Text($0.title).tag($0) }
-            }.disabled(!store.canStart)
-            Text("仅用于 UU 远程。建议先用稳定档；较快档需在远端试用，若出现旧文字或未写入，请切回稳定。粘贴发出后会在后台恢复剪贴板。")
-                .font(.caption).foregroundStyle(.secondary)
-            if !store.clipboardCleanupWarning.isEmpty {
-                Text(store.clipboardCleanupWarning).foregroundStyle(.orange)
-            }
-        }
+        RemoteInputSettingsView(store: store)
     }
 }
 
@@ -125,7 +106,7 @@ struct PolishSettingsContent: View {
     var body: some View {
         Toggle("自动润色后写入", isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
             .disabled(!store.canStart || store.isInstallingPolishModel)
-        Picker("模型选择", selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
+        WorkspacePicker("模型选择", selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
             if $0 == "auto" { store.setAutomaticPolishModel(true) }
             else if let model = PolishModel(rawValue: $0) { store.setPolishModel(model) }
         })) {
@@ -134,7 +115,7 @@ struct PolishSettingsContent: View {
                 Text(model.title).tag(model.rawValue)
             }
         }.disabled(!store.canStart || store.isInstallingPolishModel)
-        Picker("使用偏好", selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) })) {
+        WorkspacePicker("使用偏好", selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) })) {
             ForEach(PolishPreference.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canStart || store.isInstallingPolishModel)
         VStack(alignment: .leading, spacing: 12) {
