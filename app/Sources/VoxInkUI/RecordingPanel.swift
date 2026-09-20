@@ -19,6 +19,8 @@ struct RecordingPanelPlacement {
     private var dismissal: Task<Void, Never>?
     private var selectedScreen: NSScreen?
     private var wasBusy = false
+    private let hostingView = NSHostingView(rootView: AnyView(EmptyView()))
+    private var boundStore: ObjectIdentifier?
 
     public init() {
         panel = NonactivatingRecordingPanel(contentRect: .zero,
@@ -32,24 +34,28 @@ struct RecordingPanelPlacement {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
+        panel.contentView = hostingView
     }
 
     public func update(store: AppStore) {
         guard store.shortcutTargetName != nil else { hide(); return }
         let presentation = RecordingFeedbackPresentation(store: store)
-        show(presentation: presentation) { width in
+        let replaceContent = boundStore != ObjectIdentifier(store)
+        boundStore = ObjectIdentifier(store)
+        show(presentation: presentation, replaceContent: replaceContent) { width in
             AnyView(LiveRecordingFeedback(store: store).frame(width: width))
         }
     }
 
     // The standalone visual checker uses the same panel and view without recording or pasting.
     public func showPreview(_ presentation: RecordingFeedbackPresentation) {
+        boundStore = nil
         show(presentation: presentation) { width in
             AnyView(RecordingFeedbackView(presentation: presentation).frame(width: width))
         }
     }
 
-    private func show(presentation: RecordingFeedbackPresentation, content: (CGFloat) -> AnyView) {
+    private func show(presentation: RecordingFeedbackPresentation, replaceContent: Bool = true, content: (CGFloat) -> AnyView) {
         guard presentation.dismissAfter != .zero else { hide(); return }
         dismissal?.cancel()
         let connected = selectedScreen.map { chosen in NSScreen.screens.contains { $0 == chosen } } ?? false
@@ -59,11 +65,15 @@ struct RecordingPanelPlacement {
         wasBusy = presentation.busy
         guard let frame = selectedScreen?.visibleFrame else { hide(); return }
         let width = RecordingPanelPlacement.width(in: frame)
-        let measured = NSHostingView(rootView: RecordingFeedbackView(presentation: presentation).frame(width: width))
-        let size = NSSize(width: width, height: ceil(measured.fittingSize.height))
-        panel.contentView = NSHostingView(rootView: content(width))
-        panel.setFrame(NSRect(origin: RecordingPanelPlacement.origin(size: size, in: frame), size: size), display: true)
-        panel.orderFrontRegardless()
+        let size = NSSize(width: width, height: presentation.panelHeight)
+        if replaceContent || panel.frame.width != width { hostingView.rootView = content(width) }
+        let rect = NSRect(origin: RecordingPanelPlacement.origin(size: size, in: frame), size: size)
+        if panel.frame != rect { panel.setFrame(rect, display: false) }
+        if !panel.isVisible {
+            hostingView.layoutSubtreeIfNeeded()
+            panel.orderFrontRegardless()
+            panel.displayIfNeeded()
+        }
         if let delay = presentation.dismissAfter {
             dismissal = Task { [weak self] in
                 do { try await Task.sleep(for: delay) } catch { return }

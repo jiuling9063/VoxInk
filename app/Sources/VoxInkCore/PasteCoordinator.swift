@@ -177,11 +177,12 @@ public final class PasteCoordinator {
     private var cleanupFailureHandler: (@MainActor (UUID) -> Void)?
     private var remoteTiming: RemotePasteTiming = .stable
     private var remoteApplications: [RemoteApplicationProfile] = []
+    private var legacyRemoteEnabled = true
     private var uuWindowsPaste = false
     private var remoteDevices: [String: Bool] = [:]
 
     public func setRemotePasteTiming(_ timing: RemotePasteTiming) { remoteTiming = timing }
-    public func setRemoteApplications(_ profiles: [RemoteApplicationProfile]) { remoteApplications = profiles }
+    public func setRemoteApplications(_ profiles: [RemoteApplicationProfile]) { remoteApplications = profiles; legacyRemoteEnabled = false }
     public func setUUWindowsPaste(_ enabled: Bool) { uuWindowsPaste = enabled }
     public func setRemoteDevices(_ devices: [String: Bool]) { remoteDevices = devices }
     public func setCleanupFailureHandler(_ handler: @escaping @MainActor (UUID) -> Void) {
@@ -199,15 +200,12 @@ public final class PasteCoordinator {
 
     public func captureTarget() -> PasteTarget? {
         guard let target = environment.captureTarget() else { return nil }
-        guard target.bundleID == "com.netease.uuremote" else {
-            guard let profile = remoteApplications.first(where: { $0.bundleID == target.bundleID }) else { return target }
-            return PasteTarget(pid: target.pid, bundleID: target.bundleID, name: target.name,
-                               remoteUsesControl: profile.usesControl)
-        }
+        let profile = remoteApplications.first { $0.bundleID == target.bundleID }
+        guard profile != nil || (legacyRemoteEnabled && target.bundleID == "com.netease.uuremote") else { return target }
         let device = environment.remoteDeviceName(for: target, candidates: Array(remoteDevices.keys))
         let name = device.map { "\(target.name) · \($0)" } ?? target.name
         return PasteTarget(pid: target.pid, bundleID: target.bundleID, name: name,
-                           remoteDeviceName: device, remoteUsesControl: device.flatMap { remoteDevices[$0] } ?? uuWindowsPaste)
+                           remoteDeviceName: device, remoteUsesControl: device.flatMap { remoteDevices[$0] } ?? profile?.usesControl ?? uuWindowsPaste)
     }
 
     private func remoteTargetMatches(_ target: PasteTarget) -> Bool {
@@ -261,7 +259,7 @@ public final class PasteCoordinator {
               await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
             return .failed("无法确认粘贴目标")
         }
-        guard remoteTargetMatches(target) else { return .failed("UU 远端设备已切换或无法识别，请回到原设备重试") }
+        guard remoteTargetMatches(target) else { return .failed("远程设备已切换或无法识别，请回到原设备重试") }
         guard !environment.isKnownSecureFocusedField() else {
             return .failed("安全输入框不允许自动粘贴")
         }
@@ -296,7 +294,7 @@ public final class PasteCoordinator {
 
         // Remote clients synchronize the clipboard asynchronously; restoring it too soon can
         // make the remote computer paste the previous contents instead.
-        let isRemote = target.bundleID == "com.netease.uuremote" || target.remoteUsesControl != nil
+        let isRemote = (legacyRemoteEnabled && target.bundleID == "com.netease.uuremote") || target.remoteUsesControl != nil
             || remoteApplications.contains(where: { $0.bundleID == target.bundleID })
         await environment.delay(for: isRemote ? remoteTiming.delay : .milliseconds(150))
 
@@ -326,30 +324,24 @@ public final class PasteCoordinator {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard remoteTargetMatches(target) else {
-            return failBeforeSend("UU 远端设备已切换或无法识别，请回到原设备重试", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend("远程设备已切换或无法识别，请回到原设备重试", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.postPaste(to: target, usingControl: isRemote && (target.remoteUsesControl ?? remoteApplications.first(where: { $0.bundleID == target.bundleID })?.usesControl ?? (target.bundleID == "com.netease.uuremote" && uuWindowsPaste))) else {
             return failBeforeSend("无法发送粘贴按键", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
 
-        if isRemote {
-            pendingCleanup = Task { @MainActor in
-                await environment.delayIgnoringCancellation(for: .seconds(3))
-                if environment.currentPasteboardChangeCount() == ownedChangeCount,
-                   environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
-                    cleanupFailureHandler?(sessionID)
-                }
-                pendingCleanup = nil
+        // A successful key dispatch completes the visible operation. Clipboard retention
+        // remains serialized in the background for local and remote applications alike.
+        let cleanupDelay: Duration = isRemote ? .seconds(3) : .milliseconds(1_200)
+        pendingCleanup = Task { @MainActor in
+            await environment.delayIgnoringCancellation(for: cleanupDelay)
+            if environment.currentPasteboardChangeCount() == ownedChangeCount,
+               environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
+                cleanupFailureHandler?(sessionID)
             }
-            return .sent
+            pendingCleanup = nil
         }
-        await environment.delayIgnoringCancellation(for: .milliseconds(1_200))
-        let wasCancelled = cancellationRequested
-        if environment.currentPasteboardChangeCount() == ownedChangeCount,
-           environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
-            return .sentWithCleanupFailure("已发送粘贴，但剪贴板恢复失败")
-        }
-        return wasCancelled ? .cancelledAfterSend : .sent
+        return .sent
     }
 
     private func waitForModifierRelease() async -> Bool {
@@ -408,29 +400,19 @@ final class AppKitPasteEnvironment: PasteEnvironment {
     }
 
     func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String? {
-        guard target.bundleID == "com.netease.uuremote", !candidates.isEmpty else { return nil }
+        guard !candidates.isEmpty else { return nil }
         let application = AXUIElementCreateApplication(target.pid)
+        AXUIElementSetMessagingTimeout(application, 0.05)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &value) == .success,
               let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
         let window = unsafeDowncast(value, to: AXUIElement.self)
-        var labels: [String] = []
-        // UU exposes its connection name in window chrome. Do not walk remote content.
-        func collect(_ element: AXUIElement, depth: Int) {
-            for attribute in [kAXTitleAttribute, kAXValueAttribute] {
-                var text: CFTypeRef?
-                if AXUIElementCopyAttributeValue(element, attribute as CFString, &text) == .success,
-                   let text = text as? String { labels.append(text) }
-            }
-            guard depth < 2 else { return }
-            var children: CFTypeRef?
-            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
-               let children = children as? [AXUIElement] {
-                for child in children.prefix(40) { collect(child, depth: depth + 1) }
-            }
-        }
-        collect(window, depth: 0)
-        return RemoteDeviceProfiles.match(labels: labels, candidates: candidates)
+        // Never walk remote content on the shortcut path. Device overrides require a window title match.
+        AXUIElementSetMessagingTimeout(window, 0.05)
+        var title: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &title) == .success,
+              let title = title as? String else { return nil }
+        return RemoteDeviceProfiles.match(labels: [title], candidates: candidates)
     }
 
     var accessibilityGranted: Bool { AXIsProcessTrusted() }

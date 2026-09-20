@@ -20,6 +20,7 @@ import VoxInkCore
     private var shortcuts: GlobalShortcutController?
     private var feedback: RecordingPanel?
     private var observation: AnyCancellable?
+    private var feedbackUpdate: Task<Void, Never>?
     private var mainWindow: WorkspaceWindowController?
 
     func showMainWindow() {
@@ -53,8 +54,10 @@ import VoxInkCore
         self.shortcuts = shortcuts
         store.configureShortcutRegistration { [weak shortcuts] in shortcuts?.changeShortcut(to: $0) ?? false }
         observation = Publishers.CombineLatest(store.$phase, store.$status).sink { [weak self] _ in
-            Task { @MainActor [weak self] in
+            guard let self, self.feedbackUpdate == nil else { return }
+            self.feedbackUpdate = Task { @MainActor [weak self] in
                 guard let self, let store = self.store else { return }
+                defer { self.feedbackUpdate = nil }
                 let enabled = store.shortcutTargetName != nil && store.canCancel
                 let registered = self.shortcuts?.setCancellationEnabled(enabled) == true
                 store.setCancellationShortcutAvailable(enabled && registered)
@@ -85,6 +88,7 @@ import VoxInkCore
         guard let store else { return .terminateNow }
         quitting = true
         shortcuts?.stop()
+        feedbackUpdate?.cancel(); feedbackUpdate = nil
         feedback?.hide()
         Task { await store.shutdown(); sender.reply(toApplicationShouldTerminate: true) }
         return .terminateLater

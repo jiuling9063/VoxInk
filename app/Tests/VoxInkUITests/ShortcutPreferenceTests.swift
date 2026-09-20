@@ -4,6 +4,18 @@ import VoxInkCore
 @testable import VoxInkUI
 
 @MainActor struct ShortcutPreferenceTests {
+    @Test func legacyRemoteConfigurationMigratesOnceAndRemovalSticks() throws {
+        let name = "VoxInk.RemoteMigration.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        preferences.set("Mini", forKey: "uuMacDevices")
+        let store = AppStore(preferences: preferences)
+        #expect(store.remoteApplications.count == 1)
+        #expect(store.remoteApplications.first?.name == "已保存的远程工具")
+        store.removeRemoteApplication("com.netease.uuremote")
+        #expect(AppStore(preferences: preferences).remoteApplications.isEmpty)
+    }
+
     @Test func remoteApplicationProfilesPersistUpdateAndRemoveIndependently() throws {
         let name = "VoxInk.RemoteApplications.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: name))

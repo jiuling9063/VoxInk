@@ -100,3 +100,17 @@ import Testing
     let pasting = RecordingFeedbackPresentation(phase: .pasting, status: "正在写入", target: "test")
     #expect(pasting.phaseTitle == "写入中")
 }
+
+@Test @MainActor func hudReusesItsHostingViewAcrossPhases() {
+    let feedback = RecordingPanel()
+    defer { feedback.hide() }
+    let content = feedback.panel.contentView
+    for phase in [AppStore.Phase.recording, .transcribing, .pasting, .failed] {
+        let presentation = RecordingFeedbackPresentation(phase: phase, status: "test", target: "test")
+        feedback.showPreview(presentation)
+        #expect(feedback.panel.contentView === content)
+        #expect(feedback.panel.frame.height == presentation.panelHeight)
+    }
+    feedback.showPreview(.init(phase: .ready, status: "done", target: "test"))
+    #expect(!feedback.panel.isVisible)
+}

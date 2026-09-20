@@ -220,7 +220,7 @@ import VoxInkCore
     @Published public private(set) var uuWindowsDevices = ""
     @Published public private(set) var remoteApplications: [RemoteApplicationProfile] = []
     public func setRemoteApplication(_ profile: RemoteApplicationProfile) {
-        guard canStart, !profile.bundleID.isEmpty, profile.bundleID != "com.netease.uuremote" else { return }
+        guard canStart, !profile.bundleID.isEmpty else { return }
         var changed = remoteApplications
         if let index = changed.firstIndex(where: { $0.bundleID == profile.bundleID }) {
             changed[index] = profile
@@ -369,12 +369,18 @@ import VoxInkCore
            let profiles = try? JSONDecoder().decode([RemoteApplicationProfile].self, from: data) {
             remoteApplications = profiles
         }
-        pasteService.setRemoteApplications(remoteApplications)
         uuWindowsPaste = preferences?.bool(forKey: "uuWindowsPaste") ?? false
         pasteService.setUUWindowsPaste(uuWindowsPaste)
         uuMacDevices = preferences?.string(forKey: "uuMacDevices") ?? ""
         uuWindowsDevices = preferences?.string(forKey: "uuWindowsDevices") ?? ""
         pasteService.setRemoteDevices(RemoteDeviceProfiles.make(mac: uuMacDevices, windows: uuWindowsDevices))
+        // Migrate the previous built-in client into the same opt-in application profiles.
+        if preferences?.data(forKey: "remoteApplications") == nil,
+           !uuMacDevices.isEmpty || !uuWindowsDevices.isEmpty || uuWindowsPaste {
+            remoteApplications = [.init(bundleID: "com.netease.uuremote", name: "已保存的远程工具", usesControl: uuWindowsPaste)]
+            if let data = try? JSONEncoder().encode(remoteApplications) { preferences?.set(data, forKey: "remoteApplications") }
+        }
+        pasteService.setRemoteApplications(remoteApplications)
         pasteService.setCleanupFailureHandler { [weak self] _ in
             self?.clipboardCleanupWarning = "粘贴按键已发出，但原剪贴板恢复失败。请检查剪贴板；不要重复粘贴。"
         }
@@ -996,7 +1002,7 @@ import VoxInkCore
     }
 
     private func deliver(_ text: String, to target: PasteTarget, token: UUID) async {
-        phase = .pasting; status = "正在写入 \(target.name) 并清理剪贴板…"
+        phase = .pasting; status = "正在写入 \(target.name)…"
         let outcome = await pasteService.paste(text: text, to: target, sessionID: token)
         pasteOutcome = outcome
         guard generation == token else { return }

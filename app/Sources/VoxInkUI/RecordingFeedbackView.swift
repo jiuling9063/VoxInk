@@ -35,6 +35,7 @@ public struct RecordingFeedbackPresentation {
     var accessibilityStatus: String {
         phase == .recording ? "\(status)，麦克风音量 \(Int(safeLevel * 100))%" : status
     }
+    var panelHeight: CGFloat { phase == .failed ? 60 : 44 }
     var busy: Bool { phase != .ready && phase != .failed }
     var dismissAfter: Duration? { busy ? nil : .seconds(phase == .failed ? 8 : 0) }
     var hint: String {
@@ -88,7 +89,7 @@ public struct RecordingFeedbackView: View {
                     .accessibilityLabel(presentation.status)
             }
         }
-        .frame(height: presentation.phase == .failed ? 60 : 44)
+        .frame(height: presentation.panelHeight)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityValue(presentation.accessibilityStatus)

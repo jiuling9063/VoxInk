@@ -286,6 +286,7 @@ func localPasteKeepsExistingTiming() async {
     let environment = FakePasteEnvironment()
     let coordinator = PasteCoordinator(environment: environment)
     #expect(await coordinator.paste(text: "local", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
     #expect(environment.delays == [.milliseconds(150)])
     #expect(environment.cleanupDelays == [.milliseconds(1_200)])
 }
@@ -323,6 +324,7 @@ func restoresAllPasteboardItemsAndTypesAfterSend() async {
     let coordinator = PasteCoordinator(environment: environment)
 
     #expect(await coordinator.paste(text: "new", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
     #expect(environment.postedPasteCount == 1)
     #expect(environment.restored == snapshot)
 }
@@ -346,6 +348,7 @@ func userCopyAfterKeyKeepsNewClipboardAndStillReportsSent() async {
     let coordinator = PasteCoordinator(environment: environment)
 
     #expect(await coordinator.paste(text: "new", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
     #expect(environment.postedPasteCount == 1)
     #expect(environment.restored == nil)
 }
@@ -362,12 +365,13 @@ func cancellationBeforeKeyStopsPostingAndCleansUp() async {
 }
 
 @Test @MainActor
-func cancellationAfterKeyWaitsForCleanupAndCannotClaimRetraction() async {
+func cancellationAfterDispatchCannotRetractAndCleanupCompletes() async {
     let environment = FakePasteEnvironment()
     let coordinator = PasteCoordinator(environment: environment)
     environment.onCleanupDelay = { coordinator.cancel() }
 
-    #expect(await coordinator.paste(text: "new", to: target, sessionID: UUID()) == .cancelledAfterSend)
+    #expect(await coordinator.paste(text: "new", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
     #expect(environment.postedPasteCount == 1)
     #expect(environment.restored != nil)
 }
@@ -381,6 +385,7 @@ func taskCancellationAfterKeyStillUsesNonCancellableCleanupDelay() async {
     pasteTask = Task { await coordinator.paste(text: "new", to: target, sessionID: UUID()) }
 
     let outcome = await pasteTask.value
+    await coordinator.finishPendingCleanup()
     #expect(outcome == .sent)
     #expect(environment.cleanupDelays == [.milliseconds(1_200)])
     #expect(environment.restored != nil)
@@ -441,6 +446,7 @@ func userCopyDuringRestorePrebuildIsNeverCleared() async {
     let coordinator = PasteCoordinator(environment: environment)
 
     #expect(await coordinator.paste(text: "new", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
     #expect(environment.restored == nil)
 }
 
@@ -491,8 +497,13 @@ func cleanupFailureAfterKeyPreservesIssuedTruth() async {
     environment.restoreSucceeds = false
     let coordinator = PasteCoordinator(environment: environment)
 
-    let outcome = await coordinator.paste(text: "new", to: target, sessionID: UUID())
-    #expect(outcome == .sentWithCleanupFailure("已发送粘贴，但剪贴板恢复失败"))
+    let sessionID = UUID()
+    var failureID: UUID?
+    coordinator.setCleanupFailureHandler { failureID = $0 }
+    let outcome = await coordinator.paste(text: "new", to: target, sessionID: sessionID)
+    await coordinator.finishPendingCleanup()
+    #expect(outcome == .sent)
+    #expect(failureID == sessionID)
     #expect(outcome.wasIssued)
 }
 
@@ -552,4 +563,19 @@ func secureFieldAndHeldModifiersPreventKeyEvent() async {
         #expect(!outcome.wasIssued && env.postedPasteCount == 0)
         if !cancel { #expect(env.restored == nil) }
     }
+}
+
+@Test @MainActor func localPasteReportsSentBeforeClipboardCleanupFinishes() async {
+    let environment = FakePasteEnvironment()
+    environment.pauseCleanup = true
+    let coordinator = PasteCoordinator(environment: environment)
+    let outcome = await coordinator.paste(text: "new", to: target, sessionID: UUID())
+    #expect(outcome == .sent)
+    #expect(environment.postedPasteCount == 1)
+    #expect(environment.restored == nil)
+    while environment.cleanupContinuation == nil { await Task.yield() }
+    #expect(environment.cleanupDelays == [.milliseconds(1_200)])
+    environment.cleanupContinuation?.resume()
+    await coordinator.finishPendingCleanup()
+    #expect(environment.restored != nil)
 }
