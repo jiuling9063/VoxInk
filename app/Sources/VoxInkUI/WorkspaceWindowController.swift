@@ -1,3 +1,4 @@
+import VoxInkCore
 import AppKit
 import Combine
 import SwiftUI
@@ -19,7 +20,7 @@ import SwiftUI
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         super.init(window: window)
-        window.title = "语音工作台 — 语落 VoxInk"
+        window.title = L("语音工作台 — 语落 VoxInk")
         window.titleVisibility = .hidden
         window.toolbarStyle = .unified
         window.identifier = NSUserInterfaceItemIdentifier(restoresFrame ? "voxink-main" : "voxink-window-preview")
@@ -42,7 +43,7 @@ import SwiftUI
         }
         selectionObservation = navigation.$page.sink { [weak self] page in
             self?.pageLabel.stringValue = page.title
-            self?.window?.title = "\(page.title) — 语落 VoxInk"
+            self?.window?.title = L("\(page.title) — 语落 VoxInk")
         }
     }
 
@@ -69,18 +70,18 @@ import SwiftUI
         let item = NSToolbarItem(itemIdentifier: identifier)
         switch identifier {
         case .voxinkBrand:
-            item.label = "语落 VoxInk"
+            item.label = L("语落 VoxInk")
             item.view = NSHostingView(rootView: ToolbarBrand())
             item.view?.widthAnchor.constraint(equalToConstant: 102).isActive = true
         case .voxinkPage:
-            item.label = "当前页面"
+            item.label = L("当前页面")
             pageLabel.font = .systemFont(ofSize: 13, weight: .semibold)
             pageLabel.textColor = .labelColor
-            pageLabel.setAccessibilityLabel("当前页面")
+            pageLabel.setAccessibilityLabel(L("当前页面"))
             item.view = pageLabel
             pageLabel.widthAnchor.constraint(equalToConstant: 150).isActive = true
         case .voxinkModel:
-            item.label = "本地模型状态"
+            item.label = L("本地模型状态")
             item.visibilityPriority = .high
             item.view = NSHostingView(rootView: ToolbarModelStatus(store: store) { [weak self] in
                 self?.navigation.page = .engine
@@ -107,11 +108,11 @@ private struct ToolbarBrand: View {
                let logo = NSImage(contentsOf: url) {
                 Image(nsImage: logo).resizable().scaledToFit().frame(width: 20, height: 20)
             }
-            Text("语落").font(.system(size: 13, weight: .medium))
+            Text(L("语落")).font(.system(size: 13, weight: .medium))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("语落 VoxInk")
+        .accessibilityLabel(L("语落 VoxInk"))
         .allowsHitTesting(false)
     }
 }
@@ -130,7 +131,7 @@ private struct ToolbarModelStatus: View {
                     Image(systemName: store.modelState == .ready ? "circle.fill" : "exclamationmark.circle")
                         .font(.system(size: store.modelState == .ready ? 6 : 12, weight: .medium))
                 }
-                Text(store.modelState == .ready ? "本机就绪" : store.modelState.title)
+                Text(store.modelState == .ready ? L("本机就绪") : store.modelState.title)
                     .font(.system(size: 12, weight: .medium)).lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
             }
@@ -139,8 +140,8 @@ private struct ToolbarModelStatus: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("查看转录引擎与模型状态")
-        .accessibilityLabel("本地模型：\(store.modelState.title)")
-        .accessibilityHint("打开转录引擎设置")
+        .help(L("查看转录引擎与模型状态"))
+        .accessibilityLabel(L("本地模型：\(store.modelState.title)"))
+        .accessibilityHint(L("打开转录引擎设置"))
     }
 }

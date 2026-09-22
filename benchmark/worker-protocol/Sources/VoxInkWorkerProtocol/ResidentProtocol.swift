@@ -5,6 +5,7 @@ public struct ResidentRequest: Codable, Sendable {
     public let request_id: String
     public let sample_id: String
     public let audio_path: String
+    public let language: String?
 
     public static func decode(_ data: Data) throws -> Self {
         guard data.count <= 65536 else { throw ProtocolError.invalidRequest }
@@ -13,6 +14,9 @@ public struct ResidentRequest: Codable, Sendable {
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.utf8.count <= 128
         }), value.audio_path.hasPrefix("/"), !value.audio_path.contains("\0"),
         !value.audio_path.split(separator: "/").contains(where: { $0 == ".." || $0 == "." }) else {
+            throw ProtocolError.invalidRequest
+        }
+        guard value.language.map({ ["auto", "zh", "yue", "en", "ja", "ko"].contains($0) }) ?? true else {
             throw ProtocolError.invalidRequest
         }
         return value

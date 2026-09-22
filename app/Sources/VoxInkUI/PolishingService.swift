@@ -15,11 +15,15 @@ public struct PolishResult: Codable, Sendable {
 public protocol PolishingService: Sendable {
     func polish(_ text: String, model: PolishModel) async throws -> PolishResult
     func polish(_ text: String, model: PolishModel, timeout: Duration) async throws -> PolishResult
+    func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult
     func prepare(model: PolishModel) async throws
     func release() async
 }
 
 extension PolishingService {
+    public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult {
+        try await polish(text, model: model, timeout: timeout)
+    }
     public func polish(_ text: String, model: PolishModel, timeout: Duration) async throws -> PolishResult {
         try await polish(text, model: model)
     }
@@ -38,10 +42,10 @@ public actor LocalPolishingService: PolishingService {
         case unavailable, tooLong, timeout, failed
         public var errorDescription: String? {
             switch self {
-            case .unavailable: "本地润色模型或运行环境尚未安装，原文已保留。"
-            case .tooLong: "单次润色最多支持 2000 字，原文已保留。"
-            case .timeout: "润色超过等待上限，已停止并保留原文。"
-            case .failed: "本地润色失败，原文已保留。"
+            case .unavailable: L("本地润色模型或运行环境尚未安装，原文已保留。")
+            case .tooLong: L("单次润色最多支持 2000 字，原文已保留。")
+            case .timeout: L("润色超过等待上限，已停止并保留原文。")
+            case .failed: L("本地润色失败，原文已保留。")
             }
         }
     }
@@ -128,6 +132,10 @@ public actor LocalPolishingService: PolishingService {
     }
 
     public func polish(_ text: String, model: PolishModel, timeout: Duration) async throws -> PolishResult {
+        try await polish(text, model: model, timeout: timeout, language: .mandarin)
+    }
+
+    public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult {
         guard text.count <= 2000 else { throw Failure.tooLong }
         guard activeRequest == nil else { throw Failure.failed }
         try Task.checkCancellation()
@@ -148,9 +156,9 @@ public actor LocalPolishingService: PolishingService {
                 try Task.checkCancellation()
                 let remaining = ContinuousClock.now.duration(to: deadline)
                 guard remaining > .zero else { throw Failure.timeout }
-                struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int }
+                struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int; let language: SpeechLanguage }
                 struct Response: Decodable { let result: PolishResult }
-                let request = Request(request_id: id, text: text, max_tokens: min(4096, max(128, text.utf8.count + 64)))
+                let request = Request(request_id: id, text: text, max_tokens: min(4096, max(128, text.utf8.count + 64)), language: language)
                 let response = try await client.exchange(requestID: id, payload: JSONEncoder().encode(request), timeout: remaining)
                 try Task.checkCancellation()
                 let result = try JSONDecoder().decode(Response.self, from: response).result

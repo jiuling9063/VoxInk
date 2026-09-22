@@ -1,10 +1,11 @@
+import VoxInkCore
 import Darwin
 import Foundation
 
 public enum PolishPreference: String, CaseIterable, Sendable {
     case responsive, balanced, quality
     public var title: String {
-        switch self { case .responsive: "响应更快"; case .balanced: "兼顾速度与效果"; case .quality: "效果优先" }
+        switch self { case .responsive: L("响应更快"); case .balanced: L("兼顾速度与效果"); case .quality: L("效果优先") }
     }
     var waitSeconds: Double {
         switch self { case .responsive: 6; case .balanced: 12; case .quality: 30 }
@@ -37,7 +38,7 @@ public struct PolishDevice: Sendable {
                      thermalPressure: info.thermalState == .serious || info.thermalState == .critical)
     }
     var signature: String { "v1-\(appleSilicon)-\(memoryGB)-\(cores)" }
-    var summary: String { "\(appleSilicon ? "Apple Silicon" : "Intel") · \(memoryGB) GB 内存 · \(cores) 核" }
+    var summary: String { L("\(appleSilicon ? "Apple Silicon" : "Intel") · \(memoryGB) GB 内存 · \(cores) 核") }
 }
 
 struct PolishTiming: Codable, Sendable {

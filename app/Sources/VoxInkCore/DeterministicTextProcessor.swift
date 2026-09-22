@@ -6,13 +6,14 @@ import Foundation
     public convenience init() { self.init(converter: .shared) }
     init(converter: SimplifiedTextConverter) { self.converter = converter }
 
-    public func process(_ raw: String, dictionary: UserDictionaryRules = .empty) -> SimplifiedTextResult {
+    public func process(_ raw: String, dictionary: UserDictionaryRules = .empty, dictionaryFirst: Bool = false) -> SimplifiedTextResult {
         guard let segments = ProtectedText.segments(in: raw) else { return .init(text: raw, mode: .unconverted) }
         var normalized: [Unit] = []
         for segment in segments {
             if segment.isProtected { normalized.append(Unit(text: segment.text, protected: true)); continue }
             normalized.append(contentsOf: normalize(segment.text).map { Unit(text: String($0), protected: false) })
         }
+        if dictionaryFirst { normalized = applyDictionary(dictionary, to: normalized) }
         var units: [Unit] = []
         var pending = ""
         var mode = SimplifiedTextResult.Mode.openCC
@@ -38,6 +39,23 @@ import Foundation
         return .init(text: cleanSpacing(units).map(\.text).joined(), mode: mode)
     }
 
+    public func preservingScript(_ raw: String, dictionary: UserDictionaryRules = .empty,
+                                 convert: ((String) -> String)? = nil) -> SimplifiedTextResult {
+        guard let segments = ProtectedText.segments(in: raw) else { return .init(text: raw, mode: .preserved) }
+        let units = segments.flatMap { segment -> [Unit] in
+            if segment.isProtected { return [Unit(text: segment.text, protected: true)] }
+            return segment.text.map { Unit(text: String($0), protected: false) }
+        }
+        var result = "", prose = ""
+        func flush() { result += convert?(prose) ?? prose; prose = "" }
+        for unit in applyDictionary(dictionary, to: units) {
+            if unit.protected { flush(); result += unit.text }
+            else { prose += unit.text }
+        }
+        flush()
+        return .init(text: result, mode: .preserved)
+    }
+
     private func applyDictionary(_ dictionary: UserDictionaryRules, to units: [Unit]) -> [Unit] {
         guard !dictionary.isEmpty else { return units }
         var result: [Unit] = []
@@ -55,7 +73,9 @@ import Foundation
         for (index, unit) in units.enumerated() {
             let previous = index > 0 ? units[index - 1].text : ""
             let next = index + 1 < units.count ? units[index + 1].text : ""
-            let codeNeighbor = [".", "_", "(" , "[", "{", "+", "-", "="].contains(next) || [".", "_"].contains(previous)
+            let followsDot = previous == "." && index >= 2 && units[index - 2].text.rangeOfCharacter(from: .alphanumerics) != nil
+            let beforeDot = next == "." && index + 2 < units.count && units[index + 2].text.rangeOfCharacter(from: .alphanumerics) != nil
+            let codeNeighbor = beforeDot || followsDot || ["_", "(" , "[", "{", "+", "-", "="].contains(next) || previous == "_"
             if !unit.protected || (UserDictionaryRules.isDictionaryFragment(unit.text) && !codeNeighbor) { pending += unit.text }
             else { flush(); result.append(unit) }
         }

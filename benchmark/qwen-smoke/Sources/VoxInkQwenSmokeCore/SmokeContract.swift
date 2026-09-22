@@ -272,3 +272,17 @@ public enum JSONLineEncoder {
         return line
     }
 }
+
+public enum RecognitionLanguage {
+    public static func hint(for code: String?) throws -> String? {
+        switch code ?? "zh" {
+        case "auto": return nil
+        case "zh": return "Chinese"
+        case "yue": return "Cantonese"
+        case "en": return "English"
+        case "ja": return "Japanese"
+        case "ko": return "Korean"
+        default: throw CocoaError(.coderInvalidValue)
+        }
+    }
+}

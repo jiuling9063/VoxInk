@@ -63,7 +63,7 @@ import VoxInkCore
                 let registered = self.shortcuts?.setCancellationEnabled(enabled) == true
                 store.setCancellationShortcutAvailable(enabled && registered)
                 if !registered {
-                    store.setShortcutStatus("Esc 注册失败，可在语落窗口点击取消")
+                    store.setShortcutStatus(L("Esc 注册失败，可在语落窗口点击取消"))
                 }
                 self.feedback?.update(store: store)
             }
@@ -100,17 +100,17 @@ import VoxInkCore
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = ApplicationState.store
     var body: some Scene {
-        MenuBarExtra("语落 VoxInk", systemImage: "waveform") {
-            Text(store.phase == .failed ? "需要处理 · 打开语落查看" : store.modelState.title)
-            Button("打开语落") { delegate.showMainWindow() }
-            Button(store.phase == .recording ? "停止并识别" : "开始录音") {
+        MenuBarExtra(L("语落 VoxInk"), systemImage: "waveform") {
+            Text(store.phase == .failed ? L("需要处理 · 打开语落查看") : store.modelState.title)
+            Button(L("打开语落")) { delegate.showMainWindow() }
+            Button(store.phase == .recording ? L("停止并识别") : L("开始录音")) {
                 delegate.showMainWindow()
                 if store.phase == .recording { store.finishRecording() } else { store.beginRecording() }
             }.disabled(!store.canStart && store.phase != .recording)
-            Button("复制结果") { store.copyResult() }.disabled(store.transcript.isEmpty || !store.canStart)
+            Button(L("复制结果")) { store.copyResult() }.disabled(store.transcript.isEmpty || !store.canStart)
             Divider()
-            SettingsLink { Text("设置…") }.keyboardShortcut(",")
-            Button("退出语落") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            SettingsLink { Text(L("设置…")) }.keyboardShortcut(",")
+            Button(L("退出语落")) { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
         Settings {
             PreferencesView(store: store, loginItem: ApplicationState.loginItem,

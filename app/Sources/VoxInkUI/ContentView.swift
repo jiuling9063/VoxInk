@@ -1,3 +1,4 @@
+import VoxInkCore
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -33,21 +34,21 @@ public struct ContentView: View {
                     VStack(spacing: 0) {
                     ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("工作空间").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                        Text(L("工作空间")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                             .padding(.horizontal, 12).padding(.bottom, 12)
-                        navigation("语音工作台", icon: "rectangle.grid.2x2", destination: .input)
-                        navigation("转录历史", icon: "clock", destination: .history)
-                        navigation("统计", icon: "chart.bar", destination: .statistics)
-                        Text("设置").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                        navigation(L("语音工作台"), icon: "rectangle.grid.2x2", destination: .input)
+                        navigation(L("转录历史"), icon: "clock", destination: .history)
+                        navigation(L("统计"), icon: "chart.bar", destination: .statistics)
+                        Text(L("设置")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                             .padding(.horizontal, 12).padding(.top, 22)
-                        navigation("转录引擎", icon: "waveform", destination: .engine)
-                        navigation("快捷键与输入", icon: "command", destination: .shortcut)
-                        navigation("文字与词典", icon: "text.badge.checkmark", destination: .postprocess)
-                        navigation("润色模型", icon: "wand.and.stars", destination: .polish)
-                        navigation("使用方法", icon: "questionmark.circle", destination: .help)
+                        navigation(L("转录引擎"), icon: "waveform", destination: .engine)
+                        navigation(L("快捷键与输入"), icon: "command", destination: .shortcut)
+                        navigation(L("文字与词典"), icon: "text.badge.checkmark", destination: .postprocess)
+                        navigation(L("润色模型"), icon: "wand.and.stars", destination: .polish)
+                        navigation(L("使用方法"), icon: "questionmark.circle", destination: .help)
                         if !store.setupCompleted {
                             Button { store.showSetup(); page = .input } label: {
-                                Label("首次准备", systemImage: "checklist")
+                                Label(L("首次准备"), systemImage: "checklist")
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                             }
                         }
@@ -55,13 +56,13 @@ public struct ContentView: View {
                     }.scrollIndicators(.hidden)
                     VStack(alignment: .leading, spacing: 6) {
                         Divider().padding(.bottom, 8)
-                        Label("本机处理 · 安心表达", systemImage: "lock.shield")
+                        Label(L("本机处理 · 安心表达"), systemImage: "lock.shield")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
-                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")")
+                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版"))")
                             .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 12)
-                    }.frame(width: 176).workspaceChrome()
+                    }.frame(width: 192).workspaceChrome()
                     Divider()
                 switch page {
                 case .engine, .shortcut, .postprocess, .polish, .help:
@@ -72,13 +73,13 @@ public struct ContentView: View {
                         if page == .history || page == .statistics {
                             SessionHistoryView(store: store, statistics: page == .statistics)
                         } else if page == .result {
-                            WorkspaceHeading(title: "本次结果", subtitle: "查看原文，整理表达，随时复制。")
+                            WorkspaceHeading(title: L("本次结果"), subtitle: L("查看原文，整理表达，随时复制。"))
                             result.padding(22).writingSurface()
                         } else {
                         if !store.setupCompleted { SetupView(store: store) }
                         else {
                             statusHero
-                            Label("音频在本机处理，文字只留在当前会话。", systemImage: "lock.shield")
+                            Label(L("音频在本机处理，文字只留在当前会话。"), systemImage: "lock.shield")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if !store.setupCompleted { recordingControls.padding(22).writingSurface().id("activity") }
@@ -132,7 +133,7 @@ public struct ContentView: View {
     private var statusHero: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("语音工作台", systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+                Label(L("语音工作台"), systemImage: "waveform").font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
                 Spacer()
                 Text(store.shortcutCombination.title).font(.system(.caption, design: .monospaced))
                     .padding(.horizontal, 10).padding(.vertical, 6)
@@ -144,7 +145,7 @@ public struct ContentView: View {
             DisclosureGroup(isExpanded: $showingReadiness) {
                 dashboardReadiness.padding(.top, 10)
             } label: {
-                Label(store.canCompleteSetup ? "权限与模型已就绪" : (store.canStart ? "检查权限与模型" : "权限与模型"),
+                Label(store.canCompleteSetup ? L("权限与模型已就绪") : (store.canStart ? L("检查权限与模型") : L("权限与模型")),
                       systemImage: store.canCompleteSetup ? "checkmark.shield" : (store.canStart ? "exclamationmark.circle" : "shield"))
                     .font(.callout.weight(.medium))
                     .foregroundStyle(store.canCompleteSetup ? theme.accent : (store.canStart ? .orange : .secondary))
@@ -155,25 +156,25 @@ public struct ContentView: View {
     private var dashboardReadiness: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("准备状态").font(.headline)
+                Text(L("准备状态")).font(.headline)
                 Spacer()
                 if store.canRecord {
-                    Label("可以开始说话", systemImage: "checkmark.circle.fill")
+                    Label(L("可以开始说话"), systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.medium)).foregroundStyle(.green)
                 } else {
-                    Text(store.canStart ? "点击即可处理" : "正在处理，请稍候").font(.caption).foregroundStyle(.secondary)
+                    Text(store.canStart ? L("点击即可处理") : L("正在处理，请稍候")).font(.caption).foregroundStyle(.secondary)
                 }
             }
-            dashboardRow(icon: "mic.fill", title: "麦克风",
-                         detail: store.microphoneAuthorization == .authorized ? "已允许" : "需要允许录音",
+            dashboardRow(icon: "mic.fill", title: L("麦克风"),
+                         detail: store.microphoneAuthorization == .authorized ? L("已允许") : L("需要允许录音"),
                          ready: store.microphoneAuthorization == .authorized) {
                 if store.microphoneAuthorization == .notDetermined { store.requestMicrophonePermission() }
                 else { store.openSystemSettings() }
             }
-            dashboardRow(icon: "cursorarrow.and.square.on.square.dashed", title: "文字写入",
-                         detail: store.pastePermissionGranted ? "已允许自动写入" : "需要辅助功能权限",
+            dashboardRow(icon: "cursorarrow.and.square.on.square.dashed", title: L("文字写入"),
+                         detail: store.pastePermissionGranted ? L("已允许自动写入") : L("需要辅助功能权限"),
                          ready: store.pastePermissionGranted) { store.requestPastePermission() }
-            dashboardRow(icon: "internaldrive.fill", title: "本地模型",
+            dashboardRow(icon: "internaldrive.fill", title: L("本地模型"),
                          detail: store.modelState.title, ready: store.modelState == .ready) {
                 if store.modelState == .needsDownload { store.installModel() } else { store.warmUp() }
             }
@@ -201,14 +202,14 @@ public struct ContentView: View {
             }.contentShape(Rectangle())
         }
         .buttonStyle(.plain).disabled(ready || !store.canStart)
-        .accessibilityHint(ready ? "已完成" : "点击处理")
+        .accessibilityHint(ready ? L("已完成") : L("点击处理"))
     }
 
     private var dailyInstruction: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(store.shortcutMode == .holdToTalk ? "按住说话，松开写入。" : "按一下说话，再按一下写入。")
+            Text(store.shortcutMode == .holdToTalk ? L("按住说话，松开写入。") : L("按一下说话，再按一下写入。"))
                 .font(.system(size: 27, weight: .semibold)).tracking(-0.6).foregroundStyle(theme.ink)
-            Text("先点选输入框，再使用 \(store.shortcutCombination.title)。识别完成后，文字会自动写入。")
+            Text(L("先点选输入框，再使用 \(store.shortcutCombination.title)。识别完成后，文字会自动写入。"))
                 .foregroundStyle(.secondary)
 
         }
@@ -225,7 +226,7 @@ public struct ContentView: View {
                 Text(store.status).accessibilityIdentifier("dictationStatus")
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                if store.phase == .recording { Text("\(Int(store.elapsed)) / 60 秒").monospacedDigit() }
+                if store.phase == .recording { Text(L("\(Int(store.elapsed)) / 60 秒")).monospacedDigit() }
             }
             if store.phase == .recording { ProgressView(value: Double(store.level)).tint(theme.accent) }
             if let recovery = store.recovery {
@@ -233,26 +234,26 @@ public struct ContentView: View {
                 recoveryButton(recovery)
             }
             HStack {
-                Button(store.phase == .recording ? "停止并识别" : "开始录音",
+                Button(store.phase == .recording ? L("停止并识别") : L("开始录音"),
                     systemImage: store.phase == .recording ? "stop.fill" : "mic.fill") {
                     if store.phase == .recording { store.finishRecording() } else { store.beginRecording() }
                 }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canStart && store.phase != .recording)
-                Button("导入音频…", systemImage: "doc.badge.plus") { importing = true }.disabled(!store.canStart)
-                if store.canCancel { Button("取消") { Task { await store.cancel() } } }
+                Button(L("导入音频…"), systemImage: "doc.badge.plus") { importing = true }.disabled(!store.canStart)
+                if store.canCancel { Button(L("取消")) { Task { await store.cancel() } } }
                 Spacer()
             }
-            Text("窗口内试录与导入只展示结果；使用快捷键录音才会自动写入目标应用。")
+            Text(L("窗口内试录与导入只展示结果；使用快捷键录音才会自动写入目标应用。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
 
     @ViewBuilder private func recoveryButton(_ recovery: RecoveryAction) -> some View {
         switch recovery {
-        case .installModel: Button("下载或继续安装") { store.installModel() }.disabled(!store.canStart)
-        case .reloadModel: Button("重新加载模型") { store.warmUp() }.disabled(!store.canStart)
-        case .microphone: Button("打开系统设置") { store.openSystemSettings() }
-        case .pastePermission: Button("允许文字写入") { store.requestPastePermission() }.disabled(!store.canStart)
-        case .chooseAudio: Button("选择音频…") { importing = true }.disabled(!store.canStart)
+        case .installModel: Button(L("下载或继续安装")) { store.installModel() }.disabled(!store.canStart)
+        case .reloadModel: Button(L("重新加载模型")) { store.warmUp() }.disabled(!store.canStart)
+        case .microphone: Button(L("打开系统设置")) { store.openSystemSettings() }
+        case .pastePermission: Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
+        case .chooseAudio: Button(L("选择音频…")) { importing = true }.disabled(!store.canStart)
         case .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation: EmptyView()
         }
     }
@@ -260,13 +261,13 @@ public struct ContentView: View {
     @ViewBuilder private var retainedRecording: some View {
         if let record = store.retainedAudio {
             VStack(alignment: .leading, spacing: 10) {
-                Label("有一条未完成录音", systemImage: "waveform.badge.exclamationmark")
+                Label(L("有一条未完成录音"), systemImage: "waveform.badge.exclamationmark")
                     .font(.headline)
-                Text("保留至 \(record.expiresAt.formatted(date: .abbreviated, time: .shortened))。重试只展示文字，不会自动写入。")
+                Text(L("保留至 \(record.expiresAt.formatted(date: .abbreviated, time: .shortened))。重试只展示文字，不会自动写入。"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button("重试识别") { store.retryRetainedAudio() }.disabled(!store.canRetryAudio)
-                    Button("删除保留录音", role: .destructive) { store.deleteRetainedAudio() }
+                    Button(L("重试识别")) { store.retryRetainedAudio() }.disabled(!store.canRetryAudio)
+                    Button(L("删除保留录音"), role: .destructive) { store.deleteRetainedAudio() }
                         .disabled(!store.canStart)
                 }
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
@@ -286,23 +287,23 @@ public struct ContentView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Text("识别结果").font(.headline)
+                Text(L("识别结果")).font(.headline)
                 Spacer()
                 if store.canPasteAgain {
-                    Button("重新粘贴") { store.pasteAgain() }
-                        .help("重新粘贴到 \(store.repasteTargetName ?? "原目标应用")，请先确认没有重复文字。")
+                    Button(L("重新粘贴")) { store.pasteAgain() }
+                        .help(L("重新粘贴到 \(store.repasteTargetName ?? L("原目标应用"))，请先确认没有重复文字。"))
                 }
-                Button("复制", systemImage: "doc.on.doc") { store.copyResult() }
+                Button(L("复制"), systemImage: "doc.on.doc") { store.copyResult() }
                     .disabled(store.transcript.isEmpty || !store.canStart)
             }
             if let target = store.repasteTargetName {
-                Text("上次写入目标：\(target)").font(.caption).foregroundStyle(.secondary)
+                Text(L("上次写入目标：\(target)")).font(.caption).foregroundStyle(.secondary)
             }
             if store.transcript.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "text.alignleft").font(.title2).foregroundStyle(.tertiary)
-                    Text("你的文字将在这里出现").foregroundStyle(.secondary)
-                    Text("试着说一句话，或导入不超过 60 秒的音频。")
+                    Text(L("你的文字将在这里出现")).foregroundStyle(.secondary)
+                    Text(L("试着说一句话，或导入不超过 60 秒的音频。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, minHeight: 120)
             } else {
@@ -319,9 +320,9 @@ public struct ContentView: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 if !store.rawTranscript.isEmpty {
-                    DisclosureGroup("查看识别原文", isExpanded: $showingOriginal) {
+                    DisclosureGroup(L("查看识别原文"), isExpanded: $showingOriginal) {
                         if store.rawTranscript == store.transcript {
-                            Text("本次原文无需调整。").font(.caption).foregroundStyle(.secondary)
+                            Text(L("本次原文无需调整。")).font(.caption).foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         Text(store.rawTranscript).font(.callout).textSelection(.enabled)
@@ -334,13 +335,13 @@ public struct ContentView: View {
     }
 
     private var diagnostics: some View {
-        DisclosureGroup("开发验证工具") {
+        DisclosureGroup(L("开发验证工具")) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("只用于可清空的测试输入框，固定文字不会经过语音识别。")
+                Text(L("只用于可清空的测试输入框，固定文字不会经过语音识别。"))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button("3 秒后测试写入") { store.scheduleFixedTextTest() }.disabled(!store.canStart)
-                    Button(store.fixedTextTestArmed ? "关闭固定文字测试" : "准备固定文字测试") { store.armFixedTextTest() }
+                    Button(L("3 秒后测试写入")) { store.scheduleFixedTextTest() }.disabled(!store.canStart)
+                    Button(store.fixedTextTestArmed ? L("关闭固定文字测试") : L("准备固定文字测试")) { store.armFixedTextTest() }
                         .disabled(!store.canStart)
                 }
             }.padding(.top, 8)

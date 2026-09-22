@@ -20,7 +20,7 @@ let package = Package(
         .package(url: "https://github.com/doggy8088/opencc-swift.git", revision: "69fdd9601a7bee4485ea60847910e40744608012")
     ],
     targets: [
-        .target(name: "VoxInkCore", dependencies: [.product(name: "OpenCCSwift", package: "opencc-swift")]),
+        .target(name: "VoxInkCore", dependencies: [.product(name: "OpenCCSwift", package: "opencc-swift")], resources: [.process("Resources")]),
         .target(name: "VoxInkUI", dependencies: ["VoxInkCore"], resources: [.process("Resources")]),
         .executableTarget(name: "VoxInkApp", dependencies: ["VoxInkUI"]),
         .executableTarget(name: "VoxInkFeedbackCheck", dependencies: ["VoxInkUI"]),

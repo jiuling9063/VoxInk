@@ -95,7 +95,7 @@ import Testing
     let recognizing = RecordingFeedbackPresentation(phase: .transcribing, status: "正在识别", target: "test")
     #expect(recognizing.phaseTitle == "识别中")
     #expect(recognizing.accessibilityStatus == "正在识别")
-    let polishing = RecordingFeedbackPresentation(phase: .transcribing, status: "正在润色…", target: "test")
+    let polishing = RecordingFeedbackPresentation(phase: .transcribing, status: "Arbitrary localized status", target: "test", isPolishing: true)
     #expect(polishing.phaseTitle == "润色中")
     let pasting = RecordingFeedbackPresentation(phase: .pasting, status: "正在写入", target: "test")
     #expect(pasting.phaseTitle == "写入中")

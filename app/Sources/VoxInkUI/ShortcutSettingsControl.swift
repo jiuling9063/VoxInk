@@ -1,3 +1,4 @@
+import VoxInkCore
 import AppKit
 import Carbon
 import SwiftUI
@@ -7,18 +8,18 @@ struct ShortcutSettingsControl: View {
     @State private var showingRecorder = false
 
     var body: some View {
-        WorkspacePicker("快捷键", selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
+        WorkspacePicker(L("快捷键"), selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
             ForEach(ShortcutCombination.allCases, id: \.self) { combination in
-                Text(combination.title + (combination == .optionSpace ? "（推荐）" : "")).tag(combination)
+                Text(combination.title + (combination == .optionSpace ? L("（推荐）") : "")).tag(combination)
             }
             if !ShortcutCombination.allCases.contains(store.shortcutCombination) {
-                Text(store.shortcutCombination.title + "（自定义）").tag(store.shortcutCombination)
+                Text(store.shortcutCombination.title + L("（自定义）")).tag(store.shortcutCombination)
             }
         }.disabled(!store.canChangeShortcut)
         HStack(alignment: .firstTextBaseline) {
             Text(store.shortcutStatus).font(.caption).foregroundStyle(.secondary)
             Spacer(minLength: 12)
-            Button("自定义…") {
+            Button(L("自定义…")) {
                 if store.beginShortcutRecording() { showingRecorder = true }
             }.disabled(!store.canChangeShortcut)
         }
@@ -32,17 +33,17 @@ private struct ShortcutRecorderSheet: View {
     @ObservedObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var candidate: ShortcutCombination?
-    @State private var message = "搭配 Control、Option 或 Command，再按一个键。"
+    @State private var message = L("搭配 Control、Option 或 Command，再按一个键。")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("自定义快捷键").font(.title2.bold())
-            Text("按下你想使用的组合键。保存前，原快捷键暂时停用。")
+            Text(L("自定义快捷键")).font(.title2.bold())
+            Text(L("按下你想使用的组合键。保存前，原快捷键暂时停用。"))
                 .foregroundStyle(.secondary)
             ZStack {
                 RoundedRectangle(cornerRadius: 12).fill(.quaternary.opacity(0.5))
                 RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.6))
-                Text(candidate?.title ?? "请按下组合键")
+                Text(candidate?.title ?? L("请按下组合键"))
                     .font(.title2.monospaced().weight(.medium)).allowsHitTesting(false)
                 ShortcutKeyCapture { event in
                     if event.keyCode == UInt16(kVK_Escape) { cancel(); return }
@@ -54,16 +55,16 @@ private struct ShortcutRecorderSheet: View {
                         candidate = nil; message = error
                     } else {
                         candidate = ShortcutCombination(keyCode: UInt32(event.keyCode), modifiers: modifiers)
-                        message = "可以继续按键修改；保存时会检查是否被其他应用占用。"
+                        message = L("可以继续按键修改；保存时会检查是否被其他应用占用。")
                     }
                 }
             }.frame(height: 88)
             Text(message).font(.callout).foregroundStyle(.secondary).frame(height: 40, alignment: .topLeading)
             HStack {
-                Text("Return 保存 · Esc 取消").font(.caption).foregroundStyle(.secondary)
+                Text(L("Return 保存 · Esc 取消")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("取消", action: cancel).keyboardShortcut(.cancelAction)
-                Button("保存", action: save).keyboardShortcut(.defaultAction).disabled(candidate == nil)
+                Button(L("取消"), action: cancel).keyboardShortcut(.cancelAction)
+                Button(L("保存"), action: save).keyboardShortcut(.defaultAction).disabled(candidate == nil)
             }
         }
         .padding(24).frame(width: 440)
@@ -91,8 +92,8 @@ private struct ShortcutKeyCapture: NSViewRepresentable {
         view.receive = receive
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.textField)
-        view.setAccessibilityLabel("快捷键录制区域")
-        view.setAccessibilityHelp("按组合键录制；按 Return 保存，按 Esc 取消。")
+        view.setAccessibilityLabel(L("快捷键录制区域"))
+        view.setAccessibilityHelp(L("按组合键录制；按 Return 保存，按 Esc 取消。"))
         return view
     }
 

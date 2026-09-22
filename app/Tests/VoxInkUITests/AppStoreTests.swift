@@ -64,6 +64,7 @@ private actor CompletionProbe {
     @Test func deterministicRulesKeepReadOnlyRecognitionOriginal() async {
         let raw = "呃，請用Swift整理  檔案，， 地址是 https://example.com/繁體。"
         let store = AppStore(service: StubTranscriber(text: raw), preferences: nil)
+        store.setSpeechLanguage(.mandarin)
         await store.transcribePrepared(URL(fileURLWithPath: "/non-owned-fixture.wav"))
         #expect(store.rawTranscript == raw)
         #expect(store.transcript == "请用Swift整理文件，地址是 https://example.com/繁體。")
@@ -72,7 +73,8 @@ private actor CompletionProbe {
 
     @Test func showsSimplifiedTextAndKeepsRawTranscript() async {
         let raw = "  軟體平台，今天的天氣很好。English 123。  "
-        let store = AppStore(service: StubTranscriber(text: raw))
+        let store = AppStore(service: StubTranscriber(text: raw), preferences: nil)
+        store.setSpeechLanguage(.mandarin)
         await store.transcribePrepared(URL(fileURLWithPath: "/non-owned-fixture.wav"))
         #expect(store.rawTranscript == raw)
         #expect(store.transcript == "软件平台，今天的天气很好。English 123。")

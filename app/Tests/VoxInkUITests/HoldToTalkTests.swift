@@ -198,8 +198,10 @@ private actor HoldTranscriber: TranscriptionService {
     }
 
     private func make(_ recorder: HoldRecorder, _ paste: HoldPaste) -> AppStore {
-        AppStore(service: HoldTranscriber(), pasteService: paste, recorder: recorder,
+        let store = AppStore(service: HoldTranscriber(), pasteService: paste, recorder: recorder,
                  preferences: nil, audioCleaner: { _ in })
+        store.setSpeechLanguage(.mandarin)
+        return store
     }
 
     @Test func releaseStopsOnceAndPastesSimplifiedText() async {

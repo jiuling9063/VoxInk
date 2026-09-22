@@ -83,12 +83,17 @@ cp "$WORKER_BIN/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
   "$BUNDLE/Contents/Resources/Worker/mlx.metallib"
 cp "$ROOT/benchmark/model-manifest.json" "$BUNDLE/Contents/Resources/"
 cp "$ROOT/app/ThirdPartyNotices.txt" "$BUNDLE/Contents/Resources/"
+for localization in "$ROOT/app/Localization/"*.lproj; do
+  /usr/bin/ditto --norsrc --noextattr "$localization" "$BUNDLE/Contents/Resources/$(basename "$localization")"
+done
 mkdir -p "$BUNDLE/Contents/Resources/Polish"
 cp "$ROOT/script/polish_worker.py" "$ROOT/script/polish_guard.py" "$ROOT/script/check_polish_model.py" "$ROOT/script/download_polish_model.py" "$BUNDLE/Contents/Resources/Polish/"
 cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
+<key>CFBundleLocalizations</key><array><string>zh-Hans</string><string>zh-Hant</string><string>en</string><string>ja</string><string>ko</string></array>
 <key>CFBundleExecutable</key><string>VoxInk</string>
 <key>CFBundleIdentifier</key><string>local.voxink.preview</string>
 <key>CFBundleName</key><string>语落 VoxInk</string>

@@ -46,7 +46,7 @@ private actor DictionaryMemoryStore: UserDictionaryStorage {
         let data = Data("识别词,正确写法\n雨落,語落\n雨落,VoxInk\n软件,应用\n软件,程序\n123,456\n".utf8)
         let preview = try controller.previewImport(data)
         #expect(preview.additions.count == 1)
-        #expect(preview.duplicates == 1 && preview.conflicts == 2 && preview.invalid == 1)
+        #expect(preview.duplicates == 0 && preview.conflicts == 3 && preview.invalid == 1)
         #expect(controller.entries.count == 1)
         #expect(await controller.importConfirmed(preview))
         #expect(controller.entries.map(\.replacement) == ["语落", "应用"])
@@ -87,7 +87,7 @@ private actor DictionaryMemoryStore: UserDictionaryStorage {
         await controller.load()
         #expect(await controller.save(source: " 雨落 ", replacement: "語落"))
         let entry = try #require(controller.entries.first)
-        #expect(entry.source == "雨落" && entry.replacement == "语落")
+        #expect(entry.source == "雨落" && entry.replacement == "語落")
         #expect(await controller.save(source: "雨落", replacement: "VoxInk", id: entry.id))
         let next = UserDictionaryController(storage: storage); await next.load()
         #expect(next.entries.first?.id == entry.id)
@@ -96,11 +96,11 @@ private actor DictionaryMemoryStore: UserDictionaryStorage {
         #expect(try await storage.load().isEmpty)
         #expect(next.entries.isEmpty)
     }
-    @Test func duplicateCanonicalSourceIsRejectedWithoutSaving() async {
+    @Test func duplicateExactSourceIsRejectedWithoutSaving() async {
         let storage = DictionaryMemoryStore(); let controller = UserDictionaryController(storage: storage)
         await controller.load()
         #expect(await controller.save(source: "軟件", replacement: "VoxInk"))
-        #expect(await !controller.save(source: "软件", replacement: "Whisper"))
+        #expect(await !controller.save(source: "軟件", replacement: "Whisper"))
         #expect(controller.entries.count == 1)
         #expect(await storage.writes == 1)
         #expect(controller.errorMessage != nil)

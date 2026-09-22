@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "语落 VoxInk";
+"NSMicrophoneUsageDescription" = "语落需要麦克风录制你的语音，并仅在本机转换为文字。点击开始录音后才会采集。";

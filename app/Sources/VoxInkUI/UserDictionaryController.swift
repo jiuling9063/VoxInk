@@ -33,15 +33,15 @@ import VoxInkCore
             rules = try UserDictionaryRules(entries: normalized)
             entries = normalized; isReady = true; errorMessage = nil
         } catch {
-            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? "词典读取失败，请检查磁盘访问权限后重试。"
+            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? L("词典读取失败，请检查磁盘访问权限后重试。")
         }
     }
 
     public func candidate(source: String, replacement: String, id: UUID = UUID()) throws -> UserDictionaryEntry {
         guard source.utf8.count <= 512, replacement.utf8.count <= 512 else { throw UserDictionaryError.termTooLong }
-        // Match the same canonical prose that reaches the dictionary during transcription.
-        let cleanSource = DeterministicTextProcessor.shared.process(source).text
-        let cleanTarget = DeterministicTextProcessor.shared.process(replacement).text
+        // Preserve script and proper names in multilingual dictionaries.
+        let cleanSource = source.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanTarget = replacement.precomposedStringWithCanonicalMapping.trimmingCharacters(in: .whitespacesAndNewlines)
         return try UserDictionaryEntry(id: id, source: cleanSource, replacement: cleanTarget)
     }
 
@@ -56,7 +56,7 @@ import VoxInkCore
             } else { changed.append(entry) }
             return await persist(changed)
         } catch {
-            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? "词条无效，请检查内容。"
+            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? L("词条无效，请检查内容。")
             return false
         }
     }
@@ -89,14 +89,14 @@ import VoxInkCore
                     if target == entry.replacement { duplicates += 1 }
                     else {
                         conflicts += 1
-                        notices.append("第 \(row.number) 行：\(entry.source) 已有写法“\(target)”，跳过冲突项。")
+                        notices.append(L("第 \(row.number) 行：\(entry.source) 已有写法“\(target)”，跳过冲突项。"))
                     }
                 } else {
                     known[entry.source] = entry.replacement; additions.append(entry)
                 }
             } catch {
                 invalid += 1
-                notices.append("第 \(row.number) 行：\(error.localizedDescription)")
+                notices.append(L("第 \(row.number) 行：\(error.localizedDescription)"))
             }
         }
         var blockingError: String?
@@ -109,7 +109,7 @@ import VoxInkCore
     @discardableResult public func importConfirmed(_ preview: ImportPreview) async -> Bool {
         guard isReady, !isUpdating, preview.blockingError == nil, !preview.additions.isEmpty else { return false }
         guard entries == preview.original else {
-            errorMessage = "词库已变化，请重新选择文件并预览。"; return false
+            errorMessage = L("词库已变化，请重新选择文件并预览。"); return false
         }
         return await persist(entries + preview.additions)
     }
@@ -122,7 +122,7 @@ import VoxInkCore
             entries = changed; rules = updatedRules; errorMessage = nil
             return true
         } catch {
-            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? "词典保存失败，上次有效配置仍然生效。请检查磁盘空间与访问权限。"
+            errorMessage = (error as? UserDictionaryError)?.localizedDescription ?? L("词典保存失败，上次有效配置仍然生效。请检查磁盘空间与访问权限。")
             return false
         }
     }

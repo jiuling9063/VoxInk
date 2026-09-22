@@ -1,3 +1,4 @@
+import VoxInkCore
 import Combine
 import ServiceManagement
 
@@ -6,10 +7,10 @@ public enum LoginItemState: Equatable, Sendable {
 
     public var title: String {
         switch self {
-        case .disabled: "未开启"
-        case .enabled: "已开启"
-        case .requiresApproval: "等待系统允许"
-        case .unavailable: "当前安装不可用"
+        case .disabled: L("未开启")
+        case .enabled: L("已开启")
+        case .requiresApproval: L("等待系统允许")
+        case .unavailable: L("当前安装不可用")
         }
     }
 }
@@ -64,8 +65,8 @@ public enum LoginItemState: Equatable, Sendable {
             }
         } catch {
             errorMessage = enabled
-                ? "无法开启登录启动。请检查 App 安装位置与系统的登录项设置后重试。"
-                : "关闭登录启动失败，请在系统登录项中检查语落。"
+                ? L("无法开启登录启动。请检查 App 安装位置与系统的登录项设置后重试。")
+                : L("关闭登录启动失败，请在系统登录项中检查语落。")
         }
     }
 }

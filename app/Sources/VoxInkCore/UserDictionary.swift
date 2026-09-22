@@ -39,18 +39,18 @@ public enum UserDictionaryError: Error, LocalizedError {
     case emptyTerm, termTooLong, invalidTerm, identicalTerms, protectedSource, changedNumbers, duplicateSource, duplicateID, tooManyEntries, budgetExceeded, unsupportedVersion, invalidFile
     public var errorDescription: String? {
         switch self {
-        case .emptyTerm: "请填写识别词和正确写法。"
-        case .termTooLong: "每个词最多 64 个字符。"
-        case .invalidTerm: "词条需含文字。识别词可包含数字与空格；正确写法还可包含点、下划线、加号和连字符。"
-        case .identicalTerms: "识别词与正确写法相同，无需添加。"
-        case .protectedSource: "数字、金额、网址、路径和代码不参与词典替换。"
-        case .changedNumbers: "纠正词不能增加或改变原有数字，请保留原来的数字写法。"
-        case .duplicateSource: "此识别词已存在，请编辑已有词条。"
-        case .duplicateID: "词典条目重复，无法读取。"
-        case .tooManyEntries: "最多保存 100 条纠正词。"
-        case .budgetExceeded: "词典总长度最多 4096 个字符，请精简词条。"
-        case .unsupportedVersion: "此词典版本暂不兼容，原文件已保留。"
-        case .invalidFile: "词典文件无法读取，原文件已保留。"
+        case .emptyTerm: L("请填写识别词和正确写法。")
+        case .termTooLong: L("每个词最多 64 个字符。")
+        case .invalidTerm: L("词条需含文字。识别词可包含数字与空格；正确写法还可包含点、下划线、加号和连字符。")
+        case .identicalTerms: L("识别词与正确写法相同，无需添加。")
+        case .protectedSource: L("数字、金额、网址、路径和代码不参与词典替换。")
+        case .changedNumbers: L("纠正词不能增加或改变原有数字，请保留原来的数字写法。")
+        case .duplicateSource: L("此识别词已存在，请编辑已有词条。")
+        case .duplicateID: L("词典条目重复，无法读取。")
+        case .tooManyEntries: L("最多保存 100 条纠正词。")
+        case .budgetExceeded: L("词典总长度最多 4096 个字符，请精简词条。")
+        case .unsupportedVersion: L("此词典版本暂不兼容，原文件已保留。")
+        case .invalidFile: L("词典文件无法读取，原文件已保留。")
         }
     }
 }

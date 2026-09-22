@@ -6,10 +6,10 @@ public enum RemotePasteTiming: String, CaseIterable, Sendable {
     case stable, faster, fast, experimental
     public var title: String {
         switch self {
-        case .stable: "稳定 · 2 秒"
-        case .faster: "较快 · 1.5 秒"
-        case .fast: "快速 · 1 秒"
-        case .experimental: "试验 · 0.7 秒"
+        case .stable: L("稳定 · 2 秒")
+        case .faster: L("较快 · 1.5 秒")
+        case .fast: L("快速 · 1 秒")
+        case .experimental: L("试验 · 0.7 秒")
         }
     }
     var delay: Duration {
@@ -67,13 +67,13 @@ public enum PasteOutcome: Sendable, Equatable {
     public var message: String {
         switch self {
         case .sent:
-            "已发送粘贴"
+            L("已发送粘贴")
         case .sentWithCleanupFailure(let message), .failed(let message):
             message
         case .cancelledBeforeSend:
-            "已取消，未发送粘贴"
+            L("已取消，未发送粘贴")
         case .cancelledAfterSend:
-            "取消发生在粘贴发送后，剪贴板清理已完成"
+            L("取消发生在粘贴发送后，剪贴板清理已完成")
         }
     }
 }
@@ -229,13 +229,13 @@ public final class PasteCoordinator {
 
     public func paste(text: String, to target: PasteTarget, sessionID: UUID) async -> PasteOutcome {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .failed("没有可粘贴的文字")
+            return .failed(L("没有可粘贴的文字"))
         }
         guard !attemptedSessions.contains(sessionID) else {
-            return .failed("该会话已尝试粘贴")
+            return .failed(L("该会话已尝试粘贴"))
         }
         guard activeTransactionID == nil else {
-            return .failed("已有粘贴事务正在进行")
+            return .failed(L("已有粘贴事务正在进行"))
         }
         attemptedSessions.insert(sessionID)
         let transactionID = UUID()
@@ -253,15 +253,15 @@ public final class PasteCoordinator {
         await finishPendingCleanup()
         guard !cancellationRequested else { return .cancelledBeforeSend }
         guard environment.accessibilityGranted else {
-            return .failed("需要辅助功能权限")
+            return .failed(L("需要辅助功能权限"))
         }
         guard environment.isTargetValid(target),
               await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
-            return .failed("无法确认粘贴目标")
+            return .failed(L("无法确认粘贴目标"))
         }
-        guard remoteTargetMatches(target) else { return .failed("远程设备已切换或无法识别，请回到原设备重试") }
+        guard remoteTargetMatches(target) else { return .failed(L("远程设备已切换或无法识别，请回到原设备重试")) }
         guard !environment.isKnownSecureFocusedField() else {
-            return .failed("安全输入框不允许自动粘贴")
+            return .failed(L("安全输入框不允许自动粘贴"))
         }
         guard !cancellationRequested else {
             return .cancelledBeforeSend
@@ -271,24 +271,24 @@ public final class PasteCoordinator {
         do {
             snapshot = try environment.pasteboardSnapshot()
         } catch {
-            return .failed("无法完整读取剪贴板")
+            return .failed(L("无法完整读取剪贴板"))
         }
 
         let ownedChangeCount: Int
         do {
             guard environment.currentPasteboardChangeCount() == snapshot.changeCount else {
-                return .failed("剪贴板已被其他操作修改")
+                return .failed(L("剪贴板已被其他操作修改"))
             }
             ownedChangeCount = try environment.writePlainText(text)
         } catch {
             guard let mutation = error as? PasteboardMutationError else {
-                return .failed("无法写入剪贴板")
+                return .failed(L("无法写入剪贴板"))
             }
             switch environment.restorePasteboard(snapshot, expectedChangeCount: mutation.ownedChangeCount) {
             case .restored, .skippedOwnershipLost:
-                return .failed("无法写入剪贴板")
+                return .failed(L("无法写入剪贴板"))
             case .failed:
-                return .failed("无法写入剪贴板，且原剪贴板恢复失败")
+                return .failed(L("无法写入剪贴板，且原剪贴板恢复失败"))
             }
         }
 
@@ -302,32 +302,32 @@ public final class PasteCoordinator {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
-            return failBeforeSend("无法确认粘贴目标", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("无法确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard !environment.isKnownSecureFocusedField() else {
-            return failBeforeSend("安全输入框不允许自动粘贴", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("安全输入框不允许自动粘贴"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await waitForModifierRelease() else {
-            return failBeforeSend("修饰键未释放", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("修饰键未释放"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)),
               !environment.isKnownSecureFocusedField() else {
-            return failBeforeSend("无法再次确认粘贴目标", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("无法再次确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.accessibilityGranted else {
-            return failBeforeSend("辅助功能权限已失效", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("辅助功能权限已失效"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.currentPasteboardChangeCount() == ownedChangeCount else {
-            return .failed("剪贴板已被其他操作修改")
+            return .failed(L("剪贴板已被其他操作修改"))
         }
         guard !cancellationRequested else {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard remoteTargetMatches(target) else {
-            return failBeforeSend("远程设备已切换或无法识别，请回到原设备重试", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("远程设备已切换或无法识别，请回到原设备重试"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.postPaste(to: target, usingControl: isRemote && (target.remoteUsesControl ?? remoteApplications.first(where: { $0.bundleID == target.bundleID })?.usesControl ?? (target.bundleID == "com.netease.uuremote" && uuWindowsPaste))) else {
-            return failBeforeSend("无法发送粘贴按键", snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(L("无法发送粘贴按键"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
 
         // A successful key dispatch completes the visible operation. Clipboard retention
@@ -358,7 +358,7 @@ public final class PasteCoordinator {
     ) -> PasteOutcome {
         if environment.currentPasteboardChangeCount() == ownedChangeCount,
            environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
-            return .failed("已取消粘贴，但剪贴板恢复失败")
+            return .failed(L("已取消粘贴，但剪贴板恢复失败"))
         }
         return .cancelledBeforeSend
     }
@@ -370,7 +370,7 @@ public final class PasteCoordinator {
     ) -> PasteOutcome {
         if environment.currentPasteboardChangeCount() == ownedChangeCount,
            environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
-            return .failed("\(message)，且剪贴板恢复失败")
+            return .failed(L("\(message)，且剪贴板恢复失败"))
         }
         return .failed(message)
     }

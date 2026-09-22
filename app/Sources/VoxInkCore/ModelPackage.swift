@@ -94,14 +94,14 @@ public enum ModelInstallationError: Error, LocalizedError, Equatable {
     case invalidManifest, downloadRequired, unsafePath, checksum(String), response(Int), invalidRange, incomplete, busy
     public var errorDescription: String? {
         switch self {
-        case .invalidManifest: "模型安装清单无效，请重新安装 App。"
-        case .downloadRequired: "需要下载或修复本地模型。"
-        case .unsafePath: "模型目录包含非预期的文件或链接，请检查安装目录。"
-        case .checksum(let file): "模型文件校验失败：\(file)。请重试下载。"
-        case .response(let status): "模型下载服务返回错误（\(status)），请稍后重试。"
-        case .invalidRange: "下载服务返回了不匹配的文件范围，请稍后重试。"
-        case .incomplete: "模型下载未完成，已保留进度，可继续下载。"
-        case .busy: "模型正在准备中，请等待当前操作结束。"
+        case .invalidManifest: L("模型安装清单无效，请重新安装 App。")
+        case .downloadRequired: L("需要下载或修复本地模型。")
+        case .unsafePath: L("模型目录包含非预期的文件或链接，请检查安装目录。")
+        case .checksum(let file): L("模型文件校验失败：\(file)。请重试下载。")
+        case .response(let status): L("模型下载服务返回错误（\(status)），请稍后重试。")
+        case .invalidRange: L("下载服务返回了不匹配的文件范围，请稍后重试。")
+        case .incomplete: L("模型下载未完成，已保留进度，可继续下载。")
+        case .busy: L("模型正在准备中，请等待当前操作结束。")
         }
     }
 }
@@ -117,10 +117,10 @@ public struct ModelInstallationProgress: Sendable {
     public var fraction: Double { totalBytes > 0 ? min(1, max(0, Double(completedBytes) / Double(totalBytes))) : 0 }
     public var title: String {
         switch stage {
-        case .checking: "正在检查本地模型…"
-        case .importing: "正在复用本机已有模型…"
-        case .downloading: "正在下载本地模型…"
-        case .verifying: "正在校验模型文件…"
+        case .checking: L("正在检查本地模型…")
+        case .importing: L("正在复用本机已有模型…")
+        case .downloading: L("正在下载本地模型…")
+        case .verifying: L("正在校验模型文件…")
         }
     }
 }

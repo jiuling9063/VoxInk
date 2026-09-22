@@ -1,3 +1,4 @@
+import VoxInkCore
 import AppKit
 import Carbon
 
@@ -82,20 +83,20 @@ public struct ShortcutCombination: RawRepresentable, Hashable, Sendable, CaseIte
     static func validationMessage(keyCode: UInt32, modifiers: UInt32) -> String? {
         guard modifiers & ~modifierMask == 0,
               modifiers & UInt32(controlKey | optionKey | cmdKey) != 0 else {
-            return "请至少搭配 ⌃ Control、⌥ Option 或 ⌘ Command。"
+            return L("请至少搭配 ⌃ Control、⌥ Option 或 ⌘ Command。")
         }
         guard printableKeys[keyCode] != nil || specialKeys[keyCode] != nil else {
-            return "请选择字母、数字、标点、空格或 F1–F20；Esc 留作取消。"
+            return L("请选择字母、数字、标点、空格或 F1–F20；Esc 留作取消。")
         }
         if modifiers == UInt32(cmdKey) {
-            return "为避免占用复制、粘贴等操作，请再搭配一个修饰键。"
+            return L("为避免占用复制、粘贴等操作，请再搭配一个修饰键。")
         }
         if keyCode == UInt32(kVK_Space),
            [UInt32(cmdKey), UInt32(cmdKey | optionKey), UInt32(controlKey), UInt32(controlKey | optionKey | cmdKey)].contains(modifiers) {
-            return "这个组合常用于系统搜索或输入法，请换一个组合。"
+            return L("这个组合常用于系统搜索或输入法，请换一个组合。")
         }
         if modifiers == UInt32(cmdKey | shiftKey), [UInt32(kVK_ANSI_3), UInt32(kVK_ANSI_4), UInt32(kVK_ANSI_5)].contains(keyCode) {
-            return "这个组合用于系统截屏，请换一个组合。"
+            return L("这个组合用于系统截屏，请换一个组合。")
         }
         return nil
     }

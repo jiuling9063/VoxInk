@@ -1,3 +1,4 @@
+import VoxInkCore
 import Foundation
 
 public enum PolishModel: String, CaseIterable, Sendable {
@@ -5,10 +6,10 @@ public enum PolishModel: String, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .light: "轻量"
-        case .balanced: "均衡"
-        case .medium: "中量"
-        case .quality: "最佳效果"
+        case .light: L("轻量")
+        case .balanced: L("均衡")
+        case .medium: L("中量")
+        case .quality: L("最佳效果")
         }
     }
 
@@ -31,10 +32,10 @@ public enum PolishModel: String, CaseIterable, Sendable {
     }
     var detail: String {
         switch self {
-        case .light: "约 1 GB · 速度优先，适合短句"
-        case .balanced: "约 2.3 GB · 日常输入，兼顾速度与效果"
-        case .medium: "约 4.6 GB · 适合更复杂的表达，等待更久"
-        case .quality: "约 8.3 GB · 效果优先，建议 24 GB 及以上内存"
+        case .light: L("约 1 GB · 速度优先，适合短句")
+        case .balanced: L("约 2.3 GB · 日常输入，兼顾速度与效果")
+        case .medium: L("约 4.6 GB · 适合更复杂的表达，等待更久")
+        case .quality: L("约 8.3 GB · 效果优先，建议 24 GB 及以上内存")
         }
     }
 

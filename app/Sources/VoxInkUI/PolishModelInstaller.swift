@@ -1,10 +1,16 @@
+import VoxInkCore
 import Darwin
 import Foundation
 
-public enum PolishInstallationStage: String, Sendable {
-    case preparing = "正在准备本地组件…"
-    case downloading = "正在下载并校验模型…"
-    case verifying = "正在验证模型运行，请稍候…"
+public enum PolishInstallationStage: Sendable {
+    case preparing, downloading, verifying
+    public var rawValue: String {
+        switch self {
+        case .preparing: L("正在准备本地组件…")
+        case .downloading: L("正在下载并校验模型…")
+        case .verifying: L("正在验证模型运行，请稍候…")
+        }
+    }
 }
 
 public protocol PolishModelInstalling: Sendable {
@@ -22,11 +28,11 @@ public enum PolishInstallationFailure: Error, LocalizedError {
     case componentsMissing, preparationFailed, downloadFailed, verificationFailed, timedOut
     public var errorDescription: String? {
         switch self {
-        case .componentsMissing: "App 的本地组件不完整，请重新安装最新版语落后重试。无需手动配置环境。"
-        case .preparationFailed: "本地组件未能启动，请重新安装最新版语落后重试。"
-        case .downloadFailed: "模型下载未完成，请检查网络和可用磁盘空间后重试，已下载的部分会保留。"
-        case .verificationFailed: "模型运行验证未通过，请关闭占用大量内存的应用后重试。"
-        case .timedOut: "准备超过等待上限，请稍后重试。"
+        case .componentsMissing: L("App 的本地组件不完整，请重新安装最新版语落后重试。无需手动配置环境。")
+        case .preparationFailed: L("本地组件未能启动，请重新安装最新版语落后重试。")
+        case .downloadFailed: L("模型下载未完成，请检查网络和可用磁盘空间后重试，已下载的部分会保留。")
+        case .verificationFailed: L("模型运行验证未通过，请关闭占用大量内存的应用后重试。")
+        case .timedOut: L("准备超过等待上限，请稍后重试。")
         }
     }
 }

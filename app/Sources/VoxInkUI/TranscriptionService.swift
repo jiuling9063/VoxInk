@@ -5,10 +5,12 @@ public protocol TranscriptionService: Sendable {
     func prepare() async throws
     func prepare(allowDownload: Bool, progress: @escaping @Sendable (ModelInstallationProgress) -> Void) async throws
     func transcribe(url: URL) async throws -> String
+    func transcribe(url: URL, language: SpeechLanguage) async throws -> String
     func cancel() async
 }
 
 extension TranscriptionService {
+    public func transcribe(url: URL, language: SpeechLanguage) async throws -> String { try await transcribe(url: url) }
     public func prepare(allowDownload: Bool, progress: @escaping @Sendable (ModelInstallationProgress) -> Void) async throws {
         try await prepare()
     }
@@ -49,7 +51,9 @@ public actor QwenTranscriptionService: TranscriptionService {
         )
     }
 
-    public func transcribe(url: URL) async throws -> String {
+    public func transcribe(url: URL) async throws -> String { try await transcribe(url: url, language: .automatic) }
+
+    public func transcribe(url: URL, language: SpeechLanguage) async throws -> String {
         let hasSignal = try await Task.detached { try AudioFilePreparation.containsSignal(url: url) }.value
         try Task.checkCancellation()
         guard hasSignal else { throw ServiceError.noSpeech }
@@ -57,7 +61,7 @@ public actor QwenTranscriptionService: TranscriptionService {
         try Task.checkCancellation()
         guard hasSpeech else { throw ServiceError.noSpeechDetected }
         try await prepare()
-        let result = try await client.transcribe(sampleID: UUID().uuidString, audioPath: url.path)
+        let result = try await client.transcribe(sampleID: UUID().uuidString, audioPath: url.path, language: language)
         guard result.success else { throw ServiceError.noSpeech }
         return result.rawText
     }

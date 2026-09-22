@@ -1,3 +1,4 @@
+import VoxInkCore
 import AppKit
 import SwiftUI
 
@@ -25,7 +26,7 @@ struct RecordingPanelPlacement {
     public init() {
         panel = NonactivatingRecordingPanel(contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.title = "语落语音输入状态"
+        panel.title = L("语落语音输入状态")
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]

@@ -68,7 +68,7 @@ struct VoxInkQwenSmokeCommand {
             let request: BatchRequest
             if let residentInput {
                 let next = try residentInput.next()
-                request = BatchRequest(request_id: next.request_id, sample_id: next.sample_id, audio_path: next.audio_path)
+                request = BatchRequest(request_id: next.request_id, sample_id: next.sample_id, audio_path: next.audio_path, language: next.language)
             } else {
                 guard index < jobs.count else { break }
                 request = jobs[index]
@@ -95,8 +95,10 @@ struct VoxInkQwenSmokeCommand {
                     FileHandle.standardError.write(Data("VOXINK_PHASE transcribing\n".utf8))
                 }
                 let transcribeStart = ContinuousClock.now
+                let languageHint = try RecognitionLanguage.hint(for: request.language)
+                let context = request.language == nil || request.language == "zh" ? configuration.transcriptionContext : nil
                 let rawText = model.transcribe(audio: audio, sampleRate: SmokeContract.sampleRate,
-                    language: SmokeContract.language, context: hints.text ?? configuration.transcriptionContext)
+                    language: languageHint, context: hints.text ?? context)
                 let transcribeMs = elapsedMilliseconds(since: transcribeStart)
 
                 let result = SmokeResult(
@@ -106,7 +108,7 @@ struct VoxInkQwenSmokeCommand {
                     engineVersion: SmokeContract.engineRevision,
                     modelRevision: verified.revision,
                     deviceProfile: configuration.deviceProfile,
-                    language: SmokeContract.language,
+                    language: request.language ?? SmokeContract.language,
                     rawText: rawText,
                     loadMs: loadMs,
                     transcribeMs: transcribeMs,
@@ -136,6 +138,7 @@ struct VoxInkQwenSmokeCommand {
         let request_id: String
         let sample_id: String
         let audio_path: String
+        var language: String? = nil
         var hotwords: [String]? = nil
     }
     struct BatchResponse: Encodable {

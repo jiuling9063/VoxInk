@@ -10,11 +10,13 @@
 
 试用版建议使用 `.dmg` 安装盘：双击后将 VoxInk 拖到“应用程序”即可完成安装。安装包与 SHA-256 校验和见 [GitHub 预发布](https://github.com/jiuling9063/VoxInk/releases)。
 
+开发分支另已接入自定义快捷键和首批多语言（简体/繁体/英/日/韩界面，普通话/粤语/英/日/韩识别），尚未发布到上述安装版。范围与验证边界见 [多语言方案](plans/language-support.md) 和 [验证记录](docs/多语言验证-2026-09-22.md)。
+
 ## 构建与验证
 
 ```bash
 ./script/build_and_run.sh --build-only
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path app --scratch-path /tmp/voxink-app-xcode-beta
+VOXINK_UI_LANGUAGE=zh-Hans DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path app --scratch-path /tmp/voxink-app-xcode-beta
 ```
 
 更完整的使用说明与验证边界见 [`docs/最小App使用与验证.md`](docs/最小App使用与验证.md)。

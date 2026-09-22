@@ -2,14 +2,14 @@ import Foundation
 import OpenCCSwift
 
 public struct SimplifiedTextResult: Equatable, Sendable {
-    public enum Mode: Equatable, Sendable { case openCC, characterFallback, unconverted }
+    public enum Mode: Equatable, Sendable { case openCC, characterFallback, unconverted, preserved }
     public let text: String
     public let mode: Mode
     public var warning: String? {
         switch mode {
-        case .openCC: nil
-        case .characterFallback: "简体词库不可用，仅完成字符级转换"
-        case .unconverted: "简体转换失败，已保留原文"
+        case .openCC, .preserved: nil
+        case .characterFallback: L("简体词库不可用，仅完成字符级转换")
+        case .unconverted: L("文字转换失败，已保留原文")
         }
     }
 }

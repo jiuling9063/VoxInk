@@ -6,7 +6,7 @@ import sys
 import time
 
 from check_polish_model import digest
-from polish_guard import clean_disfluencies, messages, validate
+from polish_guard import clean_disfluencies, messages, validate, multilingual_messages, validate_multilingual
 
 
 def load_model(directory):
@@ -22,21 +22,25 @@ def load_model(directory):
     return load(str(directory), tokenizer_config={"trust_remote_code": False, "local_files_only": True})
 
 
-def polish(source, model, tokenizer, max_tokens=1024):
+def polish(source, model, tokenizer, max_tokens=1024, language="zh"):
     if not isinstance(source, str) or not source.strip() or len(source) > 2000:
         raise ValueError('Invalid input')
     from mlx_lm import stream_generate
     from mlx_lm.sample_utils import make_sampler
     started = time.monotonic()
-    cleaned = clean_disfluencies(source)
-    prompt = tokenizer.apply_chat_template(messages(cleaned or source), tokenize=False, add_generation_prompt=True,
+    if language not in {"auto", "zh", "yue", "en", "ja", "ko"}:
+        raise ValueError("Unsupported language")
+    cleaned = clean_disfluencies(source) if language == "zh" else source
+    prompt_messages = messages(cleaned or source) if language == "zh" else multilingual_messages(source, language)
+    prompt = tokenizer.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True,
                                            enable_thinking=False)
     output = ''
     last = None
     for response in stream_generate(model, tokenizer, prompt, max_tokens=max_tokens, sampler=make_sampler(temp=0)):
         output += response.text
         last = response
-    result = validate(source, output, last.finish_reason if last else None)
+    validator = validate if language == "zh" else validate_multilingual
+    result = validator(source, output, last.finish_reason if last else None)
     result['generationSeconds'] = time.monotonic() - started
     return result
 
@@ -58,7 +62,7 @@ def serve(model, tokenizer, load_seconds, input_stream, output_stream):
             if not isinstance(limit, int) or not 64 <= limit <= 4096:
                 raise ValueError('Invalid token budget')
             with contextlib.redirect_stdout(sys.stderr):
-                result = polish(request['text'], model, tokenizer, limit)
+                result = polish(request['text'], model, tokenizer, limit, language=request.get('language', 'zh'))
             emit(dict(request_id=request_id, result=result))
         except Exception:
             emit(dict(request_id=request_id, error_code='polish_failed'))

@@ -21,10 +21,10 @@ struct DictionaryImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("导入预览").font(.title2.bold())
-            Text("新增 \(preview.additions.count) · 重复 \(preview.duplicates) · 冲突 \(preview.conflicts) · 无效 \(preview.invalid)")
+            Text(L("导入预览")).font(.title2.bold())
+            Text(L("新增 \(preview.additions.count) · 重复 \(preview.duplicates) · 冲突 \(preview.conflicts) · 无效 \(preview.invalid)"))
                 .font(.callout).foregroundStyle(.secondary)
-            Text("仅合并下方新增词条；重复、冲突和无效项跳过，已有词条保持原样。")
+            Text(L("仅合并下方新增词条；重复、冲突和无效项跳过，已有词条保持原样。"))
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -41,8 +41,8 @@ struct DictionaryImportView: View {
             }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction).disabled(controller.isUpdating)
-                Button(controller.isUpdating ? "正在导入…" : "导入 \(preview.additions.count) 条") {
+                Button(L("取消")) { dismiss() }.keyboardShortcut(.cancelAction).disabled(controller.isUpdating)
+                Button(controller.isUpdating ? L("正在导入…") : L("导入 \(preview.additions.count) 条")) {
                     Task { if await controller.importConfirmed(preview) { dismiss() } }
                 }.keyboardShortcut(.defaultAction)
                     .disabled(!canEdit || controller.isUpdating || preview.additions.isEmpty || preview.blockingError != nil)

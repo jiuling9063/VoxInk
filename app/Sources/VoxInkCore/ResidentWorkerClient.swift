@@ -34,6 +34,7 @@ private struct Request: Encodable {
     let request_id: UUID
     let sample_id: String
     let audio_path: String
+    let language: SpeechLanguage
 }
 private struct Response: Decodable {
     let request_id: UUID
@@ -123,8 +124,8 @@ public actor ResidentWorkerClient {
     }
 
     public func transcribe(requestID: UUID = UUID(), sampleID: String, audioPath: String,
-                           timeout: Duration = .seconds(300)) async throws -> WorkerResult {
-        let data = try JSONEncoder().encode(Request(request_id: requestID, sample_id: sampleID, audio_path: audioPath))
+                           language: SpeechLanguage = .mandarin, timeout: Duration = .seconds(300)) async throws -> WorkerResult {
+        let data = try JSONEncoder().encode(Request(request_id: requestID, sample_id: sampleID, audio_path: audioPath, language: language))
         guard data.count < 4096 else { throw ResidentWorkerError.invalidProtocol }
         let response = try await exchange(requestID: requestID, payload: data, timeout: timeout)
         guard let result = try JSONDecoder().decode(Response.self, from: response).result else {

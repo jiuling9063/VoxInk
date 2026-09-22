@@ -9,7 +9,7 @@ public enum UserDictionaryCSV {
     }
     public enum FormatError: LocalizedError {
         case invalid
-        public var errorDescription: String? { "请使用 UTF-8 CSV 文件，首行为“识别词,正确写法”，每行两列，文件不超过 128 KB。" }
+        public var errorDescription: String? { L("请使用 UTF-8 CSV 文件，首行为“识别词,正确写法”，每行两列，文件不超过 128 KB。") }
     }
     public static func decode(_ data: Data) throws -> [Row] {
         guard data.count <= maximumBytes, var text = String(data: data, encoding: .utf8) else { throw FormatError.invalid }
@@ -47,6 +47,6 @@ public enum UserDictionaryCSV {
     public static func encode(_ entries: [UserDictionaryEntry]) -> Data {
         func quote(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
         let lines = entries.map { quote($0.source) + "," + quote($0.replacement) }
-        return Data(("\u{FEFF}识别词,正确写法\r\n" + lines.joined(separator: "\r\n") + "\r\n").utf8)
+        return Data(("\u{FEFF}source,replacement\r\n" + lines.joined(separator: "\r\n") + "\r\n").utf8)
     }
 }

@@ -6,7 +6,7 @@ import VoxInkCore
 @MainActor public final class AppStore: ObservableObject {
     public enum Phase: Equatable { case ready, loading, recording, transcribing, pasting, cancelling, failed }
     @Published public private(set) var phase: Phase = .ready
-    @Published public private(set) var status = "准备就绪"
+    @Published public private(set) var status = L("准备就绪")
     @Published public private(set) var transcript = ""
     @Published public private(set) var rawTranscript = ""
     @Published public private(set) var polishingEnabled = false
@@ -47,15 +47,15 @@ import VoxInkCore
     public var polishDownloadTarget: PolishModel { automaticPolishModel ? recommendedPolishModel : polishModel }
     public var polishRecommendationText: String {
         let actual = effectivePolishModel
-        if !polishDevice.appleSilicon { return "当前本地运行环境需要 Apple Silicon；本机暂不启用本地润色。" }
-        if polishDevice.pressure >= 2 { return "内存压力较高，暂时使用未润色文字，恢复后再启用。" }
+        if !polishDevice.appleSilicon { return L("当前本地运行环境需要 Apple Silicon；本机暂不启用本地润色。") }
+        if polishDevice.pressure >= 2 { return L("内存压力较高，暂时使用未润色文字，恢复后再启用。") }
         if !automaticPolishModel {
             return polishModel.rank > recommendedPolishModel.rank
-                ? "当前保留手动选择。本机建议使用\(recommendedPolishModel.title)，可减少等待和内存占用。"
-                : "保持手动选择，不自动更换模型。"
+                ? L("当前保留手动选择。本机建议使用\(recommendedPolishModel.title)，可减少等待和内存占用。")
+                : L("保持手动选择，不自动更换模型。")
         }
-        guard let actual else { return "尚无适合且已安装的模型。建议下载\(recommendedPolishModel.title)，点击下载前可查看大小。" }
-        return "本机建议\(recommendedPolishModel.title)，当前使用\(actual.title)。会结合实际耗时与系统负载调整已安装模型。"
+        guard let actual else { return L("尚无适合且已安装的模型。建议下载\(recommendedPolishModel.title)，点击下载前可查看大小。") }
+        return L("本机建议\(recommendedPolishModel.title)，当前使用\(actual.title)。会结合实际耗时与系统负载调整已安装模型。")
     }
 
     public func setAutomaticPolishModel(_ enabled: Bool) {
@@ -85,7 +85,7 @@ import VoxInkCore
         let previous = polishWarmTask
         previous?.cancel()
         let token = UUID(); warmGeneration = token; warmModel = model
-        polishWarmMessage = model == nil ? "" : "正在后台预热…"
+        polishWarmMessage = model == nil ? "" : L("正在后台预热…")
         polishWarmTask = Task {
             if model == nil || previous != nil { await polishingService.release() }
             await previous?.value
@@ -94,10 +94,10 @@ import VoxInkCore
             do {
                 try await polishingService.prepare(model: model)
                 guard !Task.isCancelled, warmGeneration == token else { return }
-                polishWarmMessage = "已预热；连续使用会复用模型，闲置 2 分钟后释放。"
+                polishWarmMessage = L("已预热；连续使用会复用模型，闲置 2 分钟后释放。")
             } catch {
                 guard !Task.isCancelled, warmGeneration == token else { return }
-                polishWarmMessage = "预热未完成，将在输入时尝试加载。"
+                polishWarmMessage = L("预热未完成，将在输入时尝试加载。")
             }
             // The service owns idle expiry; allow the next recording to ensure readiness again.
             polishWarmTask = nil
@@ -124,7 +124,7 @@ import VoxInkCore
         if level > 0, !isPolishing || level >= 2 {
             warmGeneration = UUID()
             polishWarmTask?.cancel(); polishWarmTask = nil; warmModel = nil
-            polishWarmMessage = "已释放润色模型以减轻内存压力。"
+            polishWarmMessage = L("已释放润色模型以减轻内存压力。")
             await polishingService.release()
         }
     }
@@ -136,8 +136,8 @@ import VoxInkCore
             preferences?.set(data, forKey: "polishTiming-" + polishDevice.signature)
         }
         if let seconds, seconds.isFinite {
-            polishPerformanceMessage = String(format: "最近一次 %@ 生成 %.1f 秒（不含加载）。", model.title, seconds)
-        } else if timedOut { polishPerformanceMessage = "最近一次超过等待上限，已使用未润色文字。" }
+            polishPerformanceMessage = String(format: L("最近一次 %@ 生成 %.1f 秒（不含加载）。"), model.title, seconds)
+        } else if timedOut { polishPerformanceMessage = L("最近一次超过等待上限，已使用未润色文字。") }
     }
 
     public func setPolishModel(_ model: PolishModel) {
@@ -157,7 +157,7 @@ import VoxInkCore
         refreshPolishDevice()
         let model = polishDownloadTarget
         guard PolishPerformancePolicy.canDownload(model, device: polishDevice) else {
-            polishInstallationMessage = "当前设备不支持或磁盘空间不足。请至少预留模型大小加 2 GB 空间。"
+            polishInstallationMessage = L("当前设备不支持或磁盘空间不足。请至少预留模型大小加 2 GB 空间。")
             return
         }
         polishWarmTask?.cancel(); warmGeneration = UUID(); warmModel = nil
@@ -175,14 +175,14 @@ import VoxInkCore
                 if installedPolishModels.contains(model) {
                     if enableAfterInstall && canStart { setPolishingEnabled(true) }
                     polishInstallationMessage = enableAfterInstall && !polishingEnabled
-                        ? "安装完成，当前任务结束后可开启润色。" : "安装完成，可以使用。"
+                        ? L("安装完成，当前任务结束后可开启润色。") : L("安装完成，可以使用。")
                 } else {
-                    polishInstallationMessage = "模型未就绪，请重新检查安装。"
+                    polishInstallationMessage = L("模型未就绪，请重新检查安装。")
                 }
             } catch is CancellationError {
-                polishInstallationMessage = "已取消下载，再次点击可继续。"
+                polishInstallationMessage = L("已取消下载，再次点击可继续。")
             } catch {
-                polishInstallationMessage = "安装未完成。" + ((error as? PolishInstallationFailure)?.errorDescription ?? "请检查网络和可用磁盘空间后重试。")
+                polishInstallationMessage = L("安装未完成。") + ((error as? PolishInstallationFailure)?.errorDescription ?? L("请检查网络和可用磁盘空间后重试。"))
             }
             refreshPolishModels()
             isInstallingPolishModel = false
@@ -210,7 +210,7 @@ import VoxInkCore
     @Published public private(set) var elapsed: TimeInterval = 0
     @Published public private(set) var level: Float = 0
     @Published public private(set) var shortcutTargetName: String?
-    @Published public private(set) var shortcutStatus = "快捷键尚未注册"
+    @Published public private(set) var shortcutStatus = L("快捷键尚未注册")
     @Published public private(set) var fixedTextTestArmed = false
     @Published public private(set) var shortcutMode: ShortcutMode
     @Published public private(set) var shortcutCombination: ShortcutCombination
@@ -277,6 +277,9 @@ import VoxInkCore
     private var transcriptAudioID: UUID?
     private var retryingAudioID: UUID?
     private var maintenanceTask: Task<Void, Never>?
+    @Published public private(set) var interfaceLanguage: InterfaceLanguage
+    @Published public private(set) var speechLanguage: SpeechLanguage
+    @Published public private(set) var chineseOutput: ChineseOutput
     private let preferences: UserDefaults?
     private let microphoneStatus: @MainActor () -> MicrophoneAuthorization
     private var registerShortcut: ((ShortcutCombination) -> Bool)?
@@ -285,7 +288,6 @@ import VoxInkCore
     private var suspendShortcut: (() -> Void)?
     private var holdRecording = false
     private let service: any TranscriptionService
-    private let textProcessor = DeterministicTextProcessor.shared
     public let dictionary: UserDictionaryController?
     private let pasteService: any PasteService
     private var activeTarget: PasteTarget?
@@ -353,6 +355,9 @@ import VoxInkCore
         self.installedPolishModels = polishInventory()
         self.pasteService = pasteService
         self.recorder = recorder
+        self.interfaceLanguage = preferences?.string(forKey: "interfaceLanguage").flatMap(InterfaceLanguage.init(rawValue:)) ?? .system
+        self.speechLanguage = preferences?.string(forKey: "speechLanguage").flatMap(SpeechLanguage.init(rawValue:)) ?? .automatic
+        self.chineseOutput = preferences?.string(forKey: "chineseOutput").flatMap(ChineseOutput.init(rawValue:)) ?? .simplified
         self.preferences = preferences
         self.polishingEnabled = preferences?.bool(forKey: "automaticPolishingEnabled") ?? false
         self.microphoneStatus = microphoneStatus
@@ -379,12 +384,12 @@ import VoxInkCore
         // Migrate the previous built-in client into the same opt-in application profiles.
         if preferences?.data(forKey: "remoteApplications") == nil,
            !uuMacDevices.isEmpty || !uuWindowsDevices.isEmpty || uuWindowsPaste {
-            remoteApplications = [.init(bundleID: "com.netease.uuremote", name: "已保存的远程工具", usesControl: uuWindowsPaste)]
+            remoteApplications = [.init(bundleID: "com.netease.uuremote", name: L("已保存的远程工具"), usesControl: uuWindowsPaste)]
             if let data = try? JSONEncoder().encode(remoteApplications) { preferences?.set(data, forKey: "remoteApplications") }
         }
         pasteService.setRemoteApplications(remoteApplications)
         pasteService.setCleanupFailureHandler { [weak self] _ in
-            self?.clipboardCleanupWarning = "粘贴按键已发出，但原剪贴板恢复失败。请检查剪贴板；不要重复粘贴。"
+            self?.clipboardCleanupWarning = L("粘贴按键已发出，但原剪贴板恢复失败。请检查剪贴板；不要重复粘贴。")
         }
     }
 
@@ -393,14 +398,14 @@ import VoxInkCore
         refreshPolishDevice(); schedulePolishWarmup()
         guard canStart else { return }
         let token = UUID(); generation = token
-        phase = .loading; status = "正在检查未完成录音…"
+        phase = .loading; status = L("正在检查未完成录音…")
         let task = Task {
             await dictionary?.load()
             guard generation == token else { return }
             do { try await Task.detached { [temporaryAudioJanitor] in try temporaryAudioJanitor() }.value }
             catch {
                 guard generation == token else { return }
-                recoveryStorageWarning = "过期临时录音未能清理，请检查磁盘访问权限。"
+                recoveryStorageWarning = L("过期临时录音未能清理，请检查磁盘访问权限。")
             }
             guard generation == token else { return }
             do {
@@ -409,7 +414,7 @@ import VoxInkCore
                 retainedAudio = record
             } catch {
                 guard generation == token else { return }
-                recoveryStorageWarning = "未能检查保留录音，请检查磁盘空间与访问权限。"
+                recoveryStorageWarning = L("未能检查保留录音，请检查磁盘空间与访问权限。")
             }
             phase = .ready
             startRecoveryMaintenance()
@@ -427,7 +432,7 @@ import VoxInkCore
                 await self?.removeExpiredAudio()
                 guard let janitor = self?.temporaryAudioJanitor else { return }
                 do { try await Task.detached { try janitor() }.value }
-                catch { self?.recoveryStorageWarning = "过期临时录音未能清理，请检查磁盘访问权限。" }
+                catch { self?.recoveryStorageWarning = L("过期临时录音未能清理，请检查磁盘访问权限。") }
             }
         }
     }
@@ -452,7 +457,7 @@ import VoxInkCore
             recoveryStorageWarning = nil
             return true
         } catch {
-            recoveryStorageWarning = "保留录音未能删除，请检查磁盘访问权限后再次删除。"
+            recoveryStorageWarning = L("保留录音未能删除，请检查磁盘访问权限后再次删除。")
             return false
         }
     }
@@ -460,12 +465,12 @@ import VoxInkCore
     public func deleteRetainedAudio() {
         guard canStart, let record = retainedAudio else { return }
         let token = UUID(); generation = token
-        phase = .loading; status = "正在删除保留录音…"
+        phase = .loading; status = L("正在删除保留录音…")
         let task = Task {
             let deleted = await discardAudio(record.id)
             guard generation == token else { return }
             phase = deleted ? .ready : .failed
-            status = deleted ? "保留录音已删除" : "录音删除失败，请重试"
+            status = deleted ? L("保留录音已删除") : L("录音删除失败，请重试")
         }
         operation = task; audioOperation = task
     }
@@ -476,7 +481,7 @@ import VoxInkCore
         let target = retainedTarget
         activeTarget = nil; lastTarget = nil; pasteOutcome = nil
         retryingAudioID = record.id
-        phase = .transcribing; status = "正在重试识别…"
+        phase = .transcribing; status = L("正在重试识别…")
         let task = Task {
             defer { if retryingAudioID == record.id { retryingAudioID = nil } }
             await service.cancel()
@@ -486,7 +491,7 @@ import VoxInkCore
             guard generation == token else { return }
             if retention == .transcript, phase == .ready {
                 transcriptAudioID = record.id; lastTarget = target
-                status = "重试识别完成，请复制或手动重新粘贴"
+                status = L("重试识别完成，请复制或手动重新粘贴")
             } else if retention == .discard { await discardAudio(record.id) }
         }
         operation = task; audioOperation = task
@@ -535,7 +540,7 @@ import VoxInkCore
     public func requestMicrophonePermission() {
         guard canStart else { return }
         let token = UUID(); generation = token
-        phase = .loading; recovery = nil; status = "正在检查麦克风权限…"
+        phase = .loading; recovery = nil; status = L("正在检查麦克风权限…")
         operation = Task {
             guard generation == token, !Task.isCancelled else { return }
             let allowed: Bool
@@ -546,14 +551,14 @@ import VoxInkCore
             }
             guard generation == token else { return }
             refreshPermissions()
-            if allowed { phase = .ready; status = "麦克风已允许，按快捷键或点击录音时才会采集声音。" }
-            else { fail("麦克风尚未允许，请在系统设置中开启。", recovery: .microphone) }
+            if allowed { phase = .ready; status = L("麦克风已允许，按快捷键或点击录音时才会采集声音。") }
+            else { fail(L("麦克风尚未允许，请在系统设置中开启。"), recovery: .microphone) }
         }
     }
 
     public func openSystemSettings() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") else {
-            status = "无法打开系统设置，请从苹果菜单手动打开。"
+            status = L("无法打开系统设置，请从苹果菜单手动打开。")
             return
         }
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, _ in }
@@ -566,7 +571,7 @@ import VoxInkCore
         guard canStart else { return }
         pasteOutcome = nil; recovery = nil
         let token = UUID(); generation = token
-        phase = .loading; modelState = .loading; status = "正在校验并加载本地模型…"
+        phase = .loading; modelState = .loading; status = L("正在校验并加载本地模型…")
         modelInstallationProgress = nil
         let report: @Sendable (ModelInstallationProgress) -> Void = { [weak self] progress in
             Task { @MainActor [weak self] in
@@ -581,7 +586,7 @@ import VoxInkCore
                 try await service.prepare(allowDownload: allowDownload, progress: report)
                 guard generation == token else { return }
                 modelInstallationProgress = nil
-                modelState = .ready; phase = .ready; status = "准备就绪 · 本地模型已加载"
+                modelState = .ready; phase = .ready; status = L("准备就绪 · 本地模型已加载")
             } catch let error as ModelInstallationError {
                 guard generation == token else { return }
                 failModelInstallation(error)
@@ -589,7 +594,7 @@ import VoxInkCore
                 guard generation == token else { return }
                 modelInstallationProgress = nil
                 modelState = allowDownload ? .needsDownload : .failed
-                fail(allowDownload ? "模型安装未完成，请检查网络与可用磁盘空间后继续。已保留下载进度。" : "模型加载失败，请检查本地模型后重试。",
+                fail(allowDownload ? L("模型安装未完成，请检查网络与可用磁盘空间后继续。已保留下载进度。") : L("模型加载失败，请检查本地模型后重试。"),
                     recovery: allowDownload ? .installModel : .reloadModel)
             }
         }
@@ -602,20 +607,20 @@ import VoxInkCore
         activeTarget = target; lastTarget = nil; pasteOutcome = nil; recovery = nil
         shortcutTargetName = target?.name
         let token = UUID(); generation = token
-        phase = .loading; status = "正在检查麦克风权限…"
+        phase = .loading; status = L("正在检查麦克风权限…")
         operation = Task {
             guard generation == token, !Task.isCancelled else { return }
             let allowed = await recorder.requestPermission()
             guard generation == token else { return }
             microphoneAuthorization = allowed ? .authorized : microphoneStatus()
-            guard allowed else { fail("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。", recovery: .microphone); return }
+            guard allowed else { fail(L("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。"), recovery: .microphone); return }
             do {
                 try recorder.start()
                 elapsed = 0; level = 0
                 refreshPolishDevice(); schedulePolishWarmup()
                 phase = .recording
-                status = holdRecording ? "正在录音 · 松开快捷键后识别并写入"
-                    : (target != nil ? "正在录音 · 再按快捷键结束并写入" : "正在录音 · 最长 60 秒")
+                status = holdRecording ? L("正在录音 · 松开快捷键后识别并写入")
+                    : (target != nil ? L("正在录音 · 再按快捷键结束并写入") : L("正在录音 · 最长 60 秒"))
                 meterTask = Task {
                     while !Task.isCancelled, generation == token, phase == .recording {
                         let sample = recorder.sample()
@@ -624,7 +629,7 @@ import VoxInkCore
                         try? await Task.sleep(for: .milliseconds(100))
                     }
                 }
-            } catch { fail("无法开始录音，请检查麦克风是否可用。", recovery: .recordAgain) }
+            } catch { fail(L("无法开始录音，请检查麦克风是否可用。"), recovery: .recordAgain) }
         }
     }
 
@@ -635,21 +640,21 @@ import VoxInkCore
         do {
             let url = try recorder.stop()
             let token = generation
-            phase = .transcribing; status = "正在识别…"
+            phase = .transcribing; status = L("正在识别…")
             let task = Task {
                 guard generation == token, !Task.isCancelled else { audioCleaner(url); return }
                 await transcribePrepared(url)
             }
             operation = task
             audioOperation = task
-        } catch { recorder.cancel(); fail("录音未保存成功，请重试。", recovery: .recordAgain) }
+        } catch { recorder.cancel(); fail(L("录音未保存成功，请重试。"), recovery: .recordAgain) }
     }
 
     public func importAudio(_ url: URL) {
         guard canStart else { return }
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil; pasteOutcome = nil; recovery = nil
         let token = UUID(); generation = token
-        phase = .loading; status = "正在准备音频…"
+        phase = .loading; status = L("正在准备音频…")
         let task = Task {
             guard generation == token, !Task.isCancelled else { return }
             do {
@@ -658,7 +663,7 @@ import VoxInkCore
                 await transcribePrepared(prepared)
             } catch {
                 guard generation == token else { return }
-                fail("音频无法读取或超过 60 秒，请选择有效的短音频。", recovery: .chooseAudio)
+                fail(L("音频无法读取或超过 60 秒，请选择有效的短音频。"), recovery: .chooseAudio)
             }
         }
         operation = task
@@ -673,7 +678,7 @@ import VoxInkCore
             let deleted = await discardAudio(previous.id)
             guard generation == token else { return }
             guard deleted else {
-                fail("请先删除上一条保留录音，再开始新的识别。", recovery: .recordAgain)
+                fail(L("请先删除上一条保留录音，再开始新的识别。"), recovery: .recordAgain)
                 return
             }
         }
@@ -695,7 +700,7 @@ import VoxInkCore
             recoveryStorageWarning = nil
         } catch {
             guard generation == token else { return }
-            recoveryStorageWarning = "录音未能保留，无法重试；请检查磁盘空间与访问权限。"
+            recoveryStorageWarning = L("录音未能保留，无法重试；请检查磁盘空间与访问权限。")
         }
         phase = finalPhase; status = finalStatus
     }
@@ -704,6 +709,8 @@ import VoxInkCore
 
     // Keep unrecognized audio separate from the previous transcript.
     private func recognize(_ url: URL, token: UUID) async -> RecognitionRetention {
+        let language = speechLanguage
+        let output = chineseOutput
         let shouldPolish = polishingEnabled
         refreshPolishDevice()
         let selectedPolishModel = effectivePolishModel
@@ -711,52 +718,54 @@ import VoxInkCore
         polishMessage = ""
         let dictionarySnapshot = dictionary?.rules ?? .empty
         let dictionaryUnavailable = dictionary != nil && dictionary?.isReady != true
-        phase = .transcribing; recovery = nil; status = "正在识别 · 首次使用可能需要加载模型…"
+        phase = .transcribing; recovery = nil; status = L("正在识别 · 首次使用可能需要加载模型…")
         do {
-            let raw = try await service.transcribe(url: url)
+            let raw = try await service.transcribe(url: url, language: language)
             guard generation == token else { return .discard }
             modelState = .ready
-            let converted = textProcessor.process(raw, dictionary: dictionarySnapshot)
+            let converted = LanguageTextProcessor.process(raw, language: language, output: output, dictionary: dictionarySnapshot)
             var text = converted.text
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                fail("没有识别到文字，请重试。", recovery: .recordAgain); return .audio
+                fail(L("没有识别到文字，请重试。"), recovery: .recordAgain); return .audio
             }
             rawTranscript = raw
-            let warnings = [converted.warning, dictionaryUnavailable ? "词典暂不可用，本次使用基础文字规则" : nil].compactMap { $0 }
+            let warnings = [converted.warning, dictionaryUnavailable ? L("词典暂不可用，本次使用基础文字规则") : nil].compactMap { $0 }
             conversionWarning = warnings.isEmpty ? nil : warnings.joined(separator: "；")
             transcript = text
             if shouldPolish, let selectedPolishModel, polishDevice.pressure < 2 {
                 isPolishing = true
-                status = "正在润色 · 完成后再写入，可按 Esc 取消…"
+                status = L("正在润色 · 完成后再写入，可按 Esc 取消…")
                 do {
-                    let result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds))
+                    let result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds), language: language.resolved(for: raw))
                     guard generation == token, !Task.isCancelled else { return .discard }
                     recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: result.generationSeconds, timedOut: false, preference: selectedPolishPreference)
                     if result.accepted && !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        // The worker validates against the already converted input. Converting
+                        // again would overwrite the dictionary's intentional proper-name script.
                         text = result.text
-                        polishMessage = text == converted.text ? "已检查，无需润色" : "已自动润色"
+                        polishMessage = text == converted.text ? L("已检查，无需润色") : L("已自动润色")
                     } else {
-                        polishMessage = "润色结果未通过检查，本次使用未润色文字。"
+                        polishMessage = L("润色结果未通过检查，本次使用未润色文字。")
                     }
                 } catch is CancellationError {
                     guard generation == token else { return .discard }
                     isPolishing = false
                     activeTarget = nil
-                    phase = .ready; status = "已取消 · 未发出粘贴"
+                    phase = .ready; status = L("已取消 · 未发出粘贴")
                     return .discard
                 } catch {
                     guard generation == token, !Task.isCancelled else { return .discard }
                     if error as? LocalPolishingService.Failure == .timeout {
                         recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: nil, timedOut: true, preference: selectedPolishPreference)
                     }
-                    polishMessage = "\((error as? LocalPolishingService.Failure)?.errorDescription ?? "润色未完成。")本次使用未润色文字。"
+                    polishMessage = L("\((error as? LocalPolishingService.Failure)?.errorDescription ?? L("润色未完成。"))本次使用未润色文字。")
                 }
                 isPolishing = false
                 if polishDevice.pressure > 0 || polishDevice.thermalPressure { await polishingService.release() }
                 guard generation == token, !Task.isCancelled else { return .discard }
                 transcript = text
             } else if shouldPolish {
-                polishMessage = "当前没有适合且可用的润色模型，本次使用未润色文字。"
+                polishMessage = L("当前没有适合且可用的润色模型，本次使用未润色文字。")
             }
             sessionHistory.insert(SessionTranscript(text: text, date: Date()), at: 0)
             if let target = activeTarget {
@@ -766,7 +775,7 @@ import VoxInkCore
                 case .sent, .sentWithCleanupFailure, .cancelledAfterSend: return .discard
                 default: return .transcript
                 }
-            } else { phase = .ready; status = "识别完成" }
+            } else { phase = .ready; status = L("识别完成") }
             return .transcript
         } catch let error as ModelInstallationError {
             guard generation == token else { return .discard }
@@ -775,20 +784,20 @@ import VoxInkCore
             guard generation == token else { return .discard }
             activeTarget = nil
             phase = .ready
-            status = "没有检测到有效音频，请检查麦克风或重新录音。未写入文字。"
+            status = L("没有检测到有效音频，请检查麦克风或重新录音。未写入文字。")
             return .discard
         } catch is SpeechActivityError {
             guard generation == token else { return .discard }
-            fail("语音检测暂不可用，请重试或重新录音。", recovery: .recordAgain)
+            fail(L("语音检测暂不可用，请重试或重新录音。"), recovery: .recordAgain)
         } catch QwenTranscriptionService.ServiceError.noSpeechDetected {
             guard generation == token else { return .discard }
             activeTarget = nil
             phase = .ready
-            status = "没有检测到清晰语音，未写入文字。可重试或删除本次录音。"
+            status = L("没有检测到清晰语音，未写入文字。可重试或删除本次录音。")
         } catch {
             guard generation == token else { return .discard }
             modelState = .failed
-            fail("识别失败。可重试识别，或重新加载模型。", recovery: .reloadModel)
+            fail(L("识别失败。可重试识别，或重新加载模型。"), recovery: .reloadModel)
         }
         return .audio
     }
@@ -810,7 +819,7 @@ import VoxInkCore
         audioOperation = nil
         meterTask?.cancel(); meterTask = nil
         recorder.cancel(); level = 0
-        phase = .cancelling; recovery = nil; status = "正在取消…"
+        phase = .cancelling; recovery = nil; status = L("正在取消…")
         let task = Task { [service] in
             await service.cancel()
             await pendingModelOperation?.value
@@ -834,17 +843,17 @@ import VoxInkCore
             status = message
         case .sent, .cancelledAfterSend:
             phase = .ready
-            status = "粘贴按键已发出；取消未撤回文字，剪贴板清理已结束"
+            status = L("粘贴按键已发出；取消未撤回文字，剪贴板清理已结束")
         case .cancelledBeforeSend, nil:
             phase = .ready
-            status = preparingModel ? "已取消模型准备，可稍后继续。" : "已取消 · 未发出粘贴"
+            status = preparingModel ? L("已取消模型准备，可稍后继续。") : L("已取消 · 未发出粘贴")
         }
     }
 
     public func copyResult() {
         guard canStart, !transcript.isEmpty else { return }
-        guard clipboardWriter(transcript) else { status = "复制失败，请重试"; return }
-        status = "已复制"
+        guard clipboardWriter(transcript) else { status = L("复制失败，请重试"); return }
+        status = L("已复制")
         guard let id = transcriptAudioID else { return }
         let token = UUID(); generation = token
         phase = .loading
@@ -873,7 +882,27 @@ import VoxInkCore
     public func configureShortcutRegistration(_ registration: @escaping (ShortcutCombination) -> Bool) {
         registerShortcut = registration
         shortcutAvailable = registration(shortcutCombination)
-        shortcutStatus = shortcutAvailable ? "\(shortcutCombination.title) 已就绪" : "快捷键注册失败，请在设置中选择其他组合"
+        shortcutStatus = shortcutAvailable ? L("\(shortcutCombination.title) 已就绪") : L("快捷键注册失败，请在设置中选择其他组合")
+    }
+
+    public func setInterfaceLanguage(_ language: InterfaceLanguage) {
+        guard canStart else { return }
+        interfaceLanguage = language
+        preferences?.set(language.rawValue, forKey: "interfaceLanguage")
+        if language == .system { preferences?.removeObject(forKey: "AppleLanguages") }
+        else { preferences?.set([language.rawValue], forKey: "AppleLanguages") }
+    }
+
+    public func setSpeechLanguage(_ language: SpeechLanguage) {
+        guard canStart else { return }
+        speechLanguage = language
+        preferences?.set(language.rawValue, forKey: "speechLanguage")
+    }
+
+    public func setChineseOutput(_ output: ChineseOutput) {
+        guard canStart else { return }
+        chineseOutput = output
+        preferences?.set(output.rawValue, forKey: "chineseOutput")
     }
 
     public func configureShortcutSuspension(_ suspend: @escaping () -> Void) {
@@ -896,7 +925,7 @@ import VoxInkCore
             if !accepted, let registerShortcut {
                 let failure = shortcutStatus
                 shortcutAvailable = registerShortcut(shortcutCombination)
-                shortcutStatus = shortcutAvailable ? failure : "快捷键恢复失败，请选择其他组合"
+                shortcutStatus = shortcutAvailable ? failure : L("快捷键恢复失败，请选择其他组合")
             }
         } else if let registerShortcut {
             configureShortcutRegistration(registerShortcut)
@@ -907,13 +936,13 @@ import VoxInkCore
         guard canChangeShortcut, let registerShortcut else { return false }
         guard registerShortcut(combination) else {
             shortcutStatus = shortcutAvailable
-                ? "\(combination.title) 不可用，仍使用 \(shortcutCombination.title)"
-                : "\(combination.title) 不可用，请选择其他组合"
+                ? L("\(combination.title) 不可用，仍使用 \(shortcutCombination.title)")
+                : L("\(combination.title) 不可用，请选择其他组合")
             return false
         }
         shortcutCombination = combination
         shortcutAvailable = true
-        shortcutStatus = "\(combination.title) 已就绪"
+        shortcutStatus = L("\(combination.title) 已就绪")
         preferences?.set(combination.rawValue, forKey: "shortcutCombination")
         return true
     }
@@ -954,15 +983,15 @@ import VoxInkCore
             meterTask?.cancel(); meterTask = nil
             recorder.cancel()
             holdRecording = false; activeTarget = nil; level = 0
-            phase = .ready; status = "按住时间过短，未识别或写入文字"
+            phase = .ready; status = L("按住时间过短，未识别或写入文字")
         }
     }
 
     public func requestPastePermission() {
         guard canStart else { return }
         status = pasteService.requestAccessibility()
-            ? "辅助功能已允许，可切换到输入框按 \(shortcutCombination.title)"
-            : "请在系统设置 → 隐私与安全性 → 辅助功能中允许语落 VoxInk"
+            ? L("辅助功能已允许，可切换到输入框按 \(shortcutCombination.title)")
+            : L("请在系统设置 → 隐私与安全性 → 辅助功能中允许语落 VoxInk")
         refreshPermissions()
     }
 
@@ -970,7 +999,7 @@ import VoxInkCore
         guard canStart else { return }
         fixedTextTestArmed.toggle()
         recovery = nil
-        status = fixedTextTestArmed ? "固定文字测试已就绪：切换到输入框按 \(shortcutCombination.title)" : "已关闭固定文字测试"
+        status = fixedTextTestArmed ? L("固定文字测试已就绪：切换到输入框按 \(shortcutCombination.title)") : L("已关闭固定文字测试")
     }
 
     public func scheduleFixedTextTest(after delay: Duration = .seconds(3)) {
@@ -978,7 +1007,7 @@ import VoxInkCore
         let token = UUID(); generation = token
         fixedTextTestArmed = false; pasteOutcome = nil; recovery = nil
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil
-        phase = .loading; status = "请切换到输入框，3 秒后写入固定测试文字…"
+        phase = .loading; status = L("请切换到输入框，3 秒后写入固定测试文字…")
         operation = Task {
             do { try await Task.sleep(for: delay) } catch { return }
             guard generation == token, !Task.isCancelled else { return }
@@ -992,13 +1021,13 @@ import VoxInkCore
         if phase == .recording { finishRecording(); return }
         guard canStart else { return }
         guard let target = pasteService.captureTarget() else {
-            fail("请先切换到目标应用的输入框，再按 \(shortcutCombination.title)", recovery: .checkTarget)
+            fail(L("请先切换到目标应用的输入框，再按 \(shortcutCombination.title)"), recovery: .checkTarget)
             return
         }
         shortcutTargetName = target.name
         pastePermissionGranted = pasteService.accessibilityGranted
         guard pastePermissionGranted else {
-            fail("文字写入需要辅助功能权限，请在语落窗口点击“允许文字写入”", recovery: .pastePermission)
+            fail(L("文字写入需要辅助功能权限，请在语落窗口点击“允许文字写入”"), recovery: .pastePermission)
             return
         }
         if fixedTextTestArmed {
@@ -1006,9 +1035,9 @@ import VoxInkCore
             let token = UUID(); generation = token
             activeTarget = target; lastTarget = target; pasteOutcome = nil; recovery = nil
             transcriptAudioID = nil
-            transcript = "语落固定文字测试：中文、English、123。"
+            transcript = L("语落固定文字测试：中文、English、123。")
             rawTranscript = transcript; conversionWarning = nil
-            phase = .pasting; status = "正在准备写入 \(target.name)…"
+            phase = .pasting; status = L("正在准备写入 \(target.name)…")
             let text = transcript
             let task = Task {
                 guard generation == token, !Task.isCancelled else { return }
@@ -1022,7 +1051,7 @@ import VoxInkCore
         guard canPasteAgain, let target = lastTarget else { return }
         let token = UUID(); generation = token
         activeTarget = target; shortcutTargetName = target.name; pasteOutcome = nil; recovery = nil
-        phase = .pasting; status = "正在准备写入 \(target.name)…"
+        phase = .pasting; status = L("正在准备写入 \(target.name)…")
         let text = transcript
         let task = Task {
             guard generation == token, !Task.isCancelled else { return }
@@ -1032,7 +1061,7 @@ import VoxInkCore
     }
 
     private func deliver(_ text: String, to target: PasteTarget, token: UUID) async {
-        phase = .pasting; status = "正在写入 \(target.name)…"
+        phase = .pasting; status = L("正在写入 \(target.name)…")
         let outcome = await pasteService.paste(text: text, to: target, sessionID: token)
         pasteOutcome = outcome
         guard generation == token else { return }

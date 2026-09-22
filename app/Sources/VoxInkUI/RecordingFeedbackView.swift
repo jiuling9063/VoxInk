@@ -1,3 +1,4 @@
+import VoxInkCore
 import SwiftUI
 
 public struct RecordingFeedbackPresentation {
@@ -7,33 +8,35 @@ public struct RecordingFeedbackPresentation {
     public let elapsed: TimeInterval
     public let level: Float
     public let cancellationAvailable: Bool
+    public let isPolishing: Bool
 
     public init(phase: AppStore.Phase, status: String, target: String, elapsed: TimeInterval = 0,
-                level: Float = 0, cancellationAvailable: Bool = false) {
+                level: Float = 0, cancellationAvailable: Bool = false, isPolishing: Bool = false) {
+        self.isPolishing = isPolishing
         self.phase = phase; self.status = status; self.target = target
         self.elapsed = elapsed; self.level = level; self.cancellationAvailable = cancellationAvailable
     }
 
     @MainActor init(store: AppStore) {
-        self.init(phase: store.phase, status: store.status, target: store.shortcutTargetName ?? "语落",
+        self.init(phase: store.phase, status: store.status, target: store.shortcutTargetName ?? L("语落"),
                   elapsed: store.elapsed, level: store.level,
-                  cancellationAvailable: store.cancellationShortcutAvailable)
+                  cancellationAvailable: store.cancellationShortcutAvailable, isPolishing: store.isPolishing)
     }
 
     var phaseTitle: String {
-        if status.hasPrefix("正在润色") { return "润色中" }
+        if isPolishing { return L("润色中") }
         switch phase {
-        case .loading: return "准备中"
-        case .recording: return "录音中"
-        case .transcribing: return "识别中"
-        case .pasting: return "写入中"
-        case .cancelling: return "取消中"
-        case .failed: return "未完成"
-        case .ready: return "已就绪"
+        case .loading: return L("准备中")
+        case .recording: return L("录音中")
+        case .transcribing: return L("识别中")
+        case .pasting: return L("写入中")
+        case .cancelling: return L("取消中")
+        case .failed: return L("未完成")
+        case .ready: return L("已就绪")
         }
     }
     var accessibilityStatus: String {
-        phase == .recording ? "\(status)，麦克风音量 \(Int(safeLevel * 100))%" : status
+        phase == .recording ? L("\(status)，麦克风音量 \(Int(safeLevel * 100))%") : status
     }
     var panelHeight: CGFloat { phase == .failed ? 60 : 44 }
     var busy: Bool { phase != .ready && phase != .failed }
@@ -41,11 +44,11 @@ public struct RecordingFeedbackPresentation {
     var hint: String {
         switch phase {
         case .loading, .recording, .transcribing:
-            cancellationAvailable ? "Esc 取消" : "打开语落窗口可取消"
+            cancellationAvailable ? L("Esc 取消") : L("打开语落窗口可取消")
         case .pasting:
-            cancellationAvailable ? "Esc 停止后续操作 · 已写入文字不会撤回" : "打开语落可停止后续操作 · 已写入文字不会撤回"
-        case .cancelling: "正在结束处理，请稍候"
-        case .failed: "打开语落查看处理方法"
+            cancellationAvailable ? L("Esc 停止后续操作 · 已写入文字不会撤回") : L("打开语落可停止后续操作 · 已写入文字不会撤回")
+        case .cancelling: L("正在结束处理，请稍候")
+        case .failed: L("打开语落查看处理方法")
         case .ready: ""
         }
     }
@@ -69,18 +72,18 @@ public struct RecordingFeedbackView: View {
         ZStack {
             if presentation.phase == .recording {
                 OutwardPulse(level: presentation.safeLevel, reduceMotion: reduceMotion)
-                    .accessibilityLabel("麦克风音量")
+                    .accessibilityLabel(L("麦克风音量"))
                     .accessibilityValue("\(Int(presentation.safeLevel * 100))%")
             } else if presentation.busy {
                 HStack(spacing: 10) {
-                    ProcessingDots(reduceMotion: reduceMotion).accessibilityLabel("正在处理")
+                    ProcessingDots(reduceMotion: reduceMotion).accessibilityLabel(L("正在处理"))
                     Text(presentation.phaseTitle).font(.caption).foregroundStyle(Color.white)
                 }
             } else if presentation.phase == .failed {
                 VStack(spacing: 5) {
-                    Label("未完成", systemImage: presentation.symbol)
+                    Label(L("未完成"), systemImage: presentation.symbol)
                         .font(.caption.weight(.semibold)).foregroundStyle(.orange)
-                    Text("打开语落查看详情")
+                    Text(L("打开语落查看详情"))
                         .font(.system(size: 11)).foregroundStyle(Color.white)
                 }
             } else {
