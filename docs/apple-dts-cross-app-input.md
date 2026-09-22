@@ -2,6 +2,8 @@
 
 状态：**未发送**。此文档是待审阅的咨询内容，不是 Apple 的答复，也不表示审核已获批准。
 
+2026-09-22 更新：已查到 Apple DTS 关于 macOS 输入法不能通过 Mac App Store 分发的答复及 2026 年 4 月后续说明（https://developer.apple.com/forums/thread/134115）。不再将 InputMethodKit 作为待实现的商店输入路线；下面仅询问是否存在其他公开支持的交互方案。
+
 提交入口：[Apple Code-level Support](https://developer.apple.com/support/technical/)。技术支持用于确认 API 和架构可行性；商店政策及最终审核结论仍由 App Review 决定。
 
 ## Subject
@@ -21,14 +23,18 @@ Our directly distributed Developer ID build currently uses:
 
 We understand that Mac App Store apps must use App Sandbox, and that Apple's “Protecting user data with App Sandbox” documentation lists assistive apps' use of Accessibility APIs as incompatible. We are not looking to use private entitlements, bypass the sandbox, or require a separately downloaded unsandboxed helper.
 
+We have also reviewed the DTS response and April 2026 follow-up in https://developer.apple.com/forums/thread/134115 about the absence of a supported Mac App Store distribution route for input methods. We are not proposing an InputMethodKit installation as a workaround.
+
 A local, Developer ID-signed sandbox probe on an Apple M5 running macOS 27.0 (26A428) established that microphone capture and our bundled native and Python/MLX inference helpers run inside App Sandbox. The helpers use com.apple.security.app-sandbox and com.apple.security.inherit. We have not yet repeated these tests on stable macOS versions or distributed the probe through TestFlight.
 
 RegisterEventHotKey returned success, but physical-keyboard event delivery is not yet verified. AXIsProcessTrusted and CGPreflightPostEventAccess returned false without Accessibility authorization. We did not post events into another app; these preflight results are not presented as proof of a specific sandbox denial.
 
+A separate sandboxed NSServices provider returned a fixed string to an empty TextEdit document via its service-specific pasteboard. That menu-driven test passed without AX or synthesized events. It did not test recording, asynchronous recognition, a global hold/release shortcut, or arbitrary controls.
+
 Our questions are:
 
 1. Is there a public, supported API or architecture for this user-initiated insertion into an arbitrary foreground app's text input while the dictation app remains sandboxed?
-2. If AX/CGEvent insertion is not supported, could an InputMethodKit input source, an NSServices workflow, or another public extension mechanism support this interaction? What installation, sandboxing and target-app limitations should we account for?
+2. If that global interaction is not supported, what public mechanism is recommended for an explicitly invoked dictation service that records for up to 60 seconds before returning text? For NSServices in particular, how should we handle service timeouts, cancellation and a change of target focus while recognition is pending?
 3. If no supported mechanism preserves this interaction, should we design the sandboxed edition around explicit copy/paste or an in-app editor?
 4. Is there a specific Apple sample or documentation describing the recommended approach? We understand that technical feasibility does not guarantee App Review acceptance.
 
