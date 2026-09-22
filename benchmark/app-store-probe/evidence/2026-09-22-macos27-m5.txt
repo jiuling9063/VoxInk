@@ -1,0 +1,45 @@
+OS: Version 27.0 (Build 26A428)
+sandbox entitlement: Optional(1)
+container home: $HOME/Library/Containers/local.voxink.sandbox-probe/Data
+Metal device: Apple M5
+microphone authorization: 0 (0=not determined, 3=authorized)
+AX trusted: false; event posting preflight: false
+Cross-app write: NOT TESTED; no input events sent and no Accessibility permission requested
+Carbon Ctrl+Option+Command+F18: handler=0, registration=0
+report: $HOME/Library/Containers/local.voxink.sandbox-probe/Data/Library/Application Support/VoxInkSandboxProbe/results.txt
+START Existing sandbox-exec wrapper
+END Existing sandbox-exec wrapper: exit=71, reason=1, time=0.101236208 seconds
+
+sandbox-exec: sandbox_apply: Operation not permitted
+
+START Python + MLX GPU
+END Python + MLX GPU: exit=0, reason=1, time=0.213308792 seconds
+GPU Device(gpu, 0) SUM 6
+
+
+START ASR load + silence inference
+END ASR load + silence inference: exit=0, reason=1, time=4.350049458 seconds
+{"context_tokens":0,"device_profile":"unverified-device","engine":"qwen3-asr-0.6b-mlx-4bit","engine_version":"d603472b11c21f5fb6492e9448a04ee669d0bf64","error_code":"empty_transcript","hotword_count":0,"language":"zh","load_ms":650,"model_revision":"bc441bd1e4295c1f42d9879f056049a925b6e013","peak_rss_bytes":828047360,"raw_text":"","run_id":"2577287c-4be6-4028-b118-fa4995fcc0d5","sample_id":"SMOKE-QWEN-001","success":false,"transcribe_ms":2875}
+
+MODEL 0% Downloading model...
+MODEL 80% Loading tokenizer...
+MODEL 85% Loading audio encoder weights...
+MODEL 92% Loading text decoder weights...
+MODEL 100% Ready
+Loaded 62 added tokens from tokenizer_config.json
+Loaded tokenizer with 151705 tokens, 151291 merges
+Found 1 safetensor files
+Loading: model.safetensors
+Loaded 1005 weight tensors from files
+Found 301 audio_tower weights
+Applied weights to audio encoder (18 layers)
+Found 704 text decoder weights
+Applied weights to text decoder (28 layers)
+
+START Polish load + fixed text inference
+END Polish load + fixed text inference: exit=0, reason=1, time=3.612913917 seconds
+{"accepted": false, "reason": "unsupported_content_edit", "text": "今天今天我们开会。", "generationSeconds": 1.4546624170034193}
+
+
+Probe run complete; this is not App Store approval
+Microphone: captured 16549 frames; temporary audio deleted
