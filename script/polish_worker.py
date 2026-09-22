@@ -19,7 +19,7 @@ def load_model(directory):
         if not path.is_relative_to(directory.resolve()) or digest(path, 'sha256') != entry['sha256']:
             raise ValueError('Model verification failed')
     from mlx_lm import load
-    return load(str(directory))
+    return load(str(directory), tokenizer_config={"trust_remote_code": False, "local_files_only": True})
 
 
 def polish(source, model, tokenizer, max_tokens=1024):

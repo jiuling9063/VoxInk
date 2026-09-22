@@ -37,23 +37,9 @@ def digest(path, algorithm):
 
 
 def download():
-    from huggingface_hub import HfApi, snapshot_download
+    from download_polish_model import install
 
-    info = HfApi().model_info(MODEL, revision=REVISION, files_metadata=True, timeout=30)
-    if info.sha != REVISION:
-        raise RuntimeError("Model revision mismatch")
-    snapshot_download(MODEL, revision=REVISION, local_dir=DIRECTORY, max_workers=2)
-    manifest = []
-    for entry in info.siblings:
-        path = DIRECTORY / entry.rfilename
-        if path.stat().st_size != entry.size:
-            raise RuntimeError(f"Size mismatch: {entry.rfilename}")
-        expected = entry.lfs.sha256 if entry.lfs else entry.blob_id
-        actual = digest(path, "sha256" if entry.lfs else "sha1")
-        if actual != expected:
-            raise RuntimeError(f"Hash mismatch: {entry.rfilename}")
-        manifest.append({"file": entry.rfilename, "sha256": digest(path, "sha256")})
-    (DIRECTORY / "verified.json").write_text(json.dumps(manifest, indent=2))
+    install(MODEL, REVISION, DIRECTORY)
     print("Download and hash verification complete", flush=True)
 
 

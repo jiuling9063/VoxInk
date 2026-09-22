@@ -1,6 +1,7 @@
 """Download pinned model files; publish readiness only after hash verification."""
 import argparse
 import json
+import re
 from pathlib import Path
 
 from check_polish_model import digest
@@ -16,6 +17,17 @@ def checked_path(directory, name):
     return path
 
 
+# Flat model data only; repository scripts, binaries and arbitrary JSON are not runtime dependencies.
+MODEL_DATA_FILES = frozenset({
+    "config.json", "generation_config.json", "chat_template.jinja", "tokenizer.json", "tokenizer_config.json",
+    "special_tokens_map.json", "added_tokens.json", "vocab.json", "merges.txt",
+    "model.safetensors.index.json", "LICENSE", "LICENSE.txt", "LICENSE.md", "NOTICE", "NOTICE.txt", "README.md",
+})
+
+def allowed_model_file(name):
+    return name in MODEL_DATA_FILES or re.fullmatch(r"model(?:-\d{5}-of-\d{5})?\.safetensors", name) is not None
+
+
 def install(repository, revision, directory):
     from huggingface_hub import HfApi, snapshot_download
 
@@ -29,16 +41,21 @@ def install(repository, revision, directory):
         raise ValueError("Revision mismatch")
     # Keep partial downloads resumable, but never expose them to inference.
     ready.unlink(missing_ok=True)
-    for entry in info.siblings:
+    entries = [entry for entry in info.siblings if allowed_model_file(entry.rfilename)]
+    names = {entry.rfilename for entry in entries}
+    if not {"config.json", "tokenizer.json"}.issubset(names) or not any(n.endswith(".safetensors") for n in names):
+        raise ValueError("Incomplete model data")
+    for entry in entries:
         path = checked_path(directory, entry.rfilename)
         expected = entry.lfs.sha256 if entry.lfs else entry.blob_id
         if path.exists() and (path.stat().st_size != entry.size or
                               digest(path, "sha256" if entry.lfs else "sha1") != expected):
             # Hub metadata may still call a locally corrupted file current.
             path.unlink()
-    snapshot_download(repository, revision=revision, local_dir=directory, max_workers=2)
+    snapshot_download(repository, revision=revision, local_dir=directory, max_workers=2,
+                      allow_patterns=sorted(names))
     manifest = []
-    for entry in info.siblings:
+    for entry in entries:
         path = checked_path(directory, entry.rfilename)
         if path.stat().st_size != entry.size:
             raise ValueError("Size mismatch")

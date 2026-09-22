@@ -90,7 +90,7 @@ struct RemoteOptionSpaceFilter {
     }
 }
 
-@MainActor final class RemoteOptionSpaceMonitor {
+@MainActor final class RemoteOptionSpaceMonitor: RemoteShortcutMonitoring {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var buffered: [CGEvent] = []
@@ -99,6 +99,7 @@ struct RemoteOptionSpaceFilter {
     private let released: () -> Void
     private let interrupted: () -> Void
     var isQuiescent: Bool { filter.isQuiescent }
+    var isActive: Bool { AXIsProcessTrusted() && tap.map { CGEvent.tapIsEnabled(tap: $0) } == true }
 
     init(pressed: @escaping () -> Void, released: @escaping () -> Void, interrupted: @escaping () -> Void) {
         self.pressed = pressed; self.released = released; self.interrupted = interrupted

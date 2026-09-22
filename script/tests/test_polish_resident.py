@@ -1,4 +1,8 @@
 import io
+import hashlib
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import Mock
 import json
 from pathlib import Path
 import sys
@@ -6,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from polish_worker import serve
+from polish_worker import load_model, serve
 
 
 class ResidentPolishTests(unittest.TestCase):
@@ -36,3 +40,13 @@ class ResidentPolishTests(unittest.TestCase):
     def test_oversized_request_is_rejected(self):
         with self.assertRaises(ValueError):
             serve(None, None, 0, io.BytesIO(b'x' * 32769), io.StringIO())
+
+    def test_model_load_explicitly_disallows_remote_code_and_network(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "config.json").write_bytes(b"{}")
+            (root / "verified.json").write_text(json.dumps([{"file": "config.json", "sha256": hashlib.sha256(b"{}").hexdigest()}]))
+            loader = Mock(return_value=("model", "tokenizer"))
+            with patch.dict(sys.modules, {"mlx_lm": SimpleNamespace(load=loader)}):
+                self.assertEqual(load_model(root), ("model", "tokenizer"))
+            loader.assert_called_once_with(str(root), tokenizer_config={"trust_remote_code": False, "local_files_only": True})

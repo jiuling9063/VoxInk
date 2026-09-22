@@ -4,6 +4,19 @@ import VoxInkCore
 @testable import VoxInkUI
 
 @MainActor struct ShortcutPreferenceTests {
+    @Test func permissionRefreshAlsoRetriesOptionalSupportForWorkingShortcut() async {
+        let store = AppStore(preferences: nil)
+        var refreshes = 0
+        store.configureShortcutRegistration { _ in refreshes += 1; return true }
+        store.refreshPermissions()
+        #expect(refreshes == 2 && store.shortcutAvailable)
+        store.scheduleFixedTextTest(after: .seconds(10))
+        let before = refreshes
+        store.refreshPermissions()
+        #expect(refreshes == before)
+        await store.cancel()
+    }
+
     @Test func legacyRemoteConfigurationMigratesOnceAndRemovalSticks() throws {
         let name = "VoxInk.RemoteMigration.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: name))

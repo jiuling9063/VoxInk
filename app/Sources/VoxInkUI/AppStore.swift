@@ -513,7 +513,7 @@ import VoxInkCore
     public func refreshPermissions() {
         microphoneAuthorization = microphoneStatus()
         pastePermissionGranted = pasteService.accessibilityGranted
-        if !shortcutAvailable, canStart, let registerShortcut {
+        if canChangeShortcut, let registerShortcut {
             configureShortcutRegistration(registerShortcut)
         }
     }
