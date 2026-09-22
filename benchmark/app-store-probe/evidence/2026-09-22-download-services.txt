@@ -1,0 +1,52 @@
+App Store feasibility, round 3 — 2026-09-22
+Host: Apple M5, macOS 27 beta (26A428), Xcode 27 beta (27A5252f).
+Developer ID signed isolated samples; no App Store upload or review.
+Installed VoxInk 0.1.10 (12) was not changed.
+
+Final download build: /tmp/voxink-store-probe.1w0ktQ/VoxInkSandboxProbe.app
+Runtime report (final build, HTTPS redirect restrictions enabled):
+MAIN pid=80665 sandbox=true network.client=false
+MAIN before XPC: loopback connect errno=1 (EPERM=1, EACCES=13)
+PASS XPC pid=80682 sandbox=true network.client=true bytes=7187; received through write-only file descriptor, verified again by main
+MAIN after XPC: loopback connect errno=1
+START Inherited Python network denial
+END Inherited Python network denial: exit=0, reason=1, time=0.111711334 seconds
+CHILD connect errno=1
+
+
+Saved pinned config in probe container; quit, reopen and use 读取已下载样例 to verify persistence
+
+Persistence: earlier identical transfer was followed by quit/relaunch, then
+读取已下载样例. Runtime report:
+PASS persisted config: 7187 bytes, pinned SHA256 matches; no network request
+
+Services build: /tmp/voxink-services-probe.zTzLKU/VoxInkServicesProbe.app
+Provider runtime report:
+Services callback: sandbox=true; network.client=false; returned fixed text using service pasteboard only
+
+
+Observed GUI sequence:
+1. Create an empty TextEdit document (未命名2).
+2. TextEdit menu → Services → VoxInk 插入测试文字 was available without selecting text.
+3. Click that service menu item.
+4. TextEdit's First Text View changed from empty to:
+   VoxInk 服务测试：今天我们开会。
+5. Save the test-only document to /tmp/VoxInk-services-probe-20260922.rtf,
+   then close it. Copy retained as evidence/services-textedit.rtf.
+No synthetic typing/pasting was used to populate the document. CUA operated
+only the new-document, Services and save/close UI. The sample itself uses
+only the service-specific pasteboard; no Accessibility permission was requested.
+
+Automated validation:
+PASS 17 download contract checks (offline)
+PASS Swift 6 type checks and build-script syntax
+Both sample build scripts completed, including codesign --verify --strict
+(--deep for the app containing XPC and inference helpers).
+
+Boundaries: fixed 7,187-byte config, not full model download/resume/install;
+network denial checked by socket connect, not an audit of all IPC routes;
+Services tested with fixed text in TextEdit only, not voice/global hold-release
+or arbitrary applications/remote sessions. Beta host only. No App Review result.
+
+Cleanup: both sample apps quit; the temporary Services bundle was unregistered
+with LaunchServices -u. The installed production app was left unchanged.

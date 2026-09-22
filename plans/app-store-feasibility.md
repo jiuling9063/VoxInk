@@ -30,7 +30,7 @@
 
 ## 确认的产品迁移点
 
-1. `TranscriptionService.swift`、`PolishingService.swift` 当前通过 `/usr/bin/sandbox-exec` 启动。商店架构应将推理隔离为单独的受限服务或继承沙盒 helper，不能简单删除网络禁令后让推理进程获得下载器网络权限。本轮离线探针的父 App 无网络权限；生产主 App 将需要下载权限，应单独设计下载/推理权限边界。
+1. `TranscriptionService.swift`、`PolishingService.swift` 当前通过 `/usr/bin/sandbox-exec` 启动。商店架构应将推理隔离为单独的受限服务或继承沙盒 helper，不能简单删除网络禁令后让推理进程获得下载器网络权限。第一轮离线探针的父 App 无网络权限；第三轮已验证由独立 XPC 服务承担下载、主 App 和推理 helper 保持无网络权限的最小方案，尚未迁入正式产品。
 2. 原生 worker 和 Python 可执行文件需要 app-sandbox + inherit 签名。依赖库仍需有效签名。本轮没有开启 disable-library-validation/JIT 例外；实际所有模型和系统版本仍需覆盖。
 3. 模型存储改为容器内位置，老用户迁移需用户授权。探针使用临时文件选择授权只证明基本访问可行，不是完整迁移方案。
 4. `GlobalShortcutController` 的默认 Option+Space 注册会先启动 `RemoteOptionSpaceMonitor`，后者要求 AXIsProcessTrusted 并创建可修改事件的全局 tap。普通快捷键注册和这项远程兼容补丁需要分离；本轮没有把探针注册成功等同于产品默认快捷键可用。
@@ -104,3 +104,38 @@
 - [App Sandbox 不兼容功能](https://developer.apple.com/documentation/security/protecting-user-data-with-app-sandbox)
 - [隐私清单及平台适用范围](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)
 - [商店构建上传要求](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
+
+## 第三轮 · 下载隔离与系统服务输入 · 2026-09-22
+
+本轮继续推进独立验证程序，正式安装版保持 0.1.10（12），没有切换或删减用户现有的自动写入功能。
+
+| 验证 | 结果 | 边界 |
+| --- | --- | --- |
+| 主 App 离线、独立 XPC 服务联网下载 | 通过 | 只下载固定 revision 的 7,187 字节配置，不是完整模型安装 |
+| XPC 仅接收输出文件句柄 | 通过 | 句柄为只写；接口不接收任意 URL、输出路径或待上传正文 |
+| 大小和 SHA-256 双重校验 | 通过 | 服务和主 App 分别校验；篡改、截断、超限另有离线测试 |
+| 下载前后主 App 及继承沙盒的 Python 网络限制 | 通过 | 实测 socket connect 返回 EPERM；不是所有 IPC 通道的安全审计 |
+| 重启后读取容器内下载结果 | 通过 | 不需要再次联网；没有覆盖旧模型目录迁移和持久 bookmark |
+| 系统“服务”向 TextEdit 空白文稿插入固定文字 | 通过 | 用户从目标应用菜单触发；未测试录音、全局按住/松开、网页、自定义控件或远程窗口 |
+
+系统服务样例没有请求辅助功能权限，也没有发送模拟按键。`NSServices` 仅声明返回文本类型，由系统与目标文本控件完成写入。这证明了一个可用的补充入口，**没有解决任意前台应用的全局自动输入**，也不能据此推定审核通过。
+
+测试：17 项离线下载契约检查通过；三个可执行目标的 Swift 6 类型检查、构建脚本语法、签名严格校验通过；真实 GUI 完成下载、重启读取及 TextEdit 服务菜单写入。没有重复计入之前正式产品的 265 项 Swift 测试。
+
+剩余门槛：
+
+1. P0 全局自动输入方案仍需明确。服务菜单不是现有体验的等价替换；Apple 技术咨询草稿仍未发送。
+2. 下载/推理权限分离的最小路线已成立，但正式迁移还需完整模型流式下载、断点续传、失败恢复、取消、容器数据迁移及可信连接校验。
+3. 需要稳定系统、另一台 Mac、实体快捷键和实际目标应用的端到端验证；本轮仍是 macOS 27 beta / Apple M5。
+4. 商店签名、App Store Connect、隐私政策及上架素材的缺口不变。
+
+文件清单：
+- `benchmark/app-store-probe/DownloadContract.swift`、`DownloadService.swift`、`DownloadProbe.swift`、`Download.entitlements`：隔离下载样例。
+- `benchmark/app-store-probe/ServicesProbe.swift`、`Services.entitlements`：系统服务输入样例。
+- `benchmark/app-store-probe/DownloadContractTests.swift`、`script/test_app_store_probe.sh`：自动检查。
+- `benchmark/app-store-probe/Probe.swift`、`script/run_app_store_probe.sh`：增加下载验证入口与嵌入式服务构建。
+- `script/build_services_probe.sh`：独立服务样例构建。
+- `benchmark/app-store-probe/README.md`、`evidence/2026-09-22-download-services.txt`、`evidence/services-textedit.rtf`：复现说明与实测证据。
+- `plans/app-store-feasibility.md`：进展、限制与剩余工作。
+
+官方参考：[XPC 权限分离](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html)、[系统服务提供方](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html)、[系统服务声明](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/properties.html)。

@@ -95,7 +95,7 @@ import Security
             } catch { record("Microphone: \(error.localizedDescription)") }
         }
     }
-    private func child(_ label: String, executable: URL, arguments: [String], environment: [String:String]? = nil, input: Data = Data()) async {
+    func child(_ label: String, executable: URL, arguments: [String], environment: [String:String]? = nil, input: Data = Data()) async {
         record("START \(label)")
         let root = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let fm = FileManager.default
@@ -135,6 +135,10 @@ import Security
                     Button("基础检查") { probe.basic() }
                     Button("选择模型副本并测试") { probe.modelTests() }
                     Button("麦克风测试（1 秒后删除）") { probe.microphone() }
+                }.disabled(probe.busy)
+                HStack {
+                    Button("模型下载隔离检查") { probe.networkTests() }
+                    Button("读取已下载样例") { probe.cachedDownloadTest() }
                 }.disabled(probe.busy)
                 Text(probe.busy ? "验证中…" : "测试日志只含固定样例与状态。")
                 ScrollView { Text(probe.lines.joined(separator: "\n")).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
