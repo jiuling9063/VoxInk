@@ -47,7 +47,7 @@ struct ShortcutLatch {
             return noErr
         }, events.count, &events, context, &handler)
         guard installed == noErr else { stop(); return false }
-        let registered = RegisterEventHotKey(UInt32(kVK_Space), combination.modifiers,
+        let registered = RegisterEventHotKey(combination.keyCode, combination.modifiers,
             EventHotKeyID(signature: 0x564F5849, id: 1), GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &toggleKey)
         guard registered == noErr else { stop(); return false }
@@ -64,7 +64,7 @@ struct ShortcutLatch {
         }
         guard remoteSupport.isQuiescent else { return false }
         var candidate: EventHotKeyRef?
-        let result = RegisterEventHotKey(UInt32(kVK_Space), combination.modifiers,
+        let result = RegisterEventHotKey(combination.keyCode, combination.modifiers,
             EventHotKeyID(signature: 0x564F5849, id: 1), GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &candidate)
         // Keep the existing registration until the replacement is known to work.

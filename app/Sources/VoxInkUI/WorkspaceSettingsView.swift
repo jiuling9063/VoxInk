@@ -79,10 +79,7 @@ struct WorkspaceSettingsView: View {
 struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
-        WorkspacePicker("快捷键", selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
-            ForEach(ShortcutCombination.allCases, id: \.self) { Text($0.title).tag($0) }
-        }.disabled(!store.canChangeShortcut)
-        Text(store.shortcutStatus).font(.caption).foregroundStyle(.secondary)
+        ShortcutSettingsControl(store: store)
         WorkspacePicker("操作方式", selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
             ForEach(ShortcutMode.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canChangeShortcut)

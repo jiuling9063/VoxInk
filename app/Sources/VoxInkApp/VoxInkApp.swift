@@ -52,6 +52,7 @@ import VoxInkCore
             cancel: { [weak store] in store?.handleShortcutCancelled() }
         )
         self.shortcuts = shortcuts
+        store.configureShortcutSuspension { [weak shortcuts] in shortcuts?.stop() }
         store.configureShortcutRegistration { [weak shortcuts] in shortcuts?.changeShortcut(to: $0) ?? false }
         observation = Publishers.CombineLatest(store.$phase, store.$status).sink { [weak self] _ in
             guard let self, self.feedbackUpdate == nil else { return }

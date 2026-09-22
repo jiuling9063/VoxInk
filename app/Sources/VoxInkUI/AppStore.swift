@@ -281,6 +281,8 @@ import VoxInkCore
     private let microphoneStatus: @MainActor () -> MicrophoneAuthorization
     private var registerShortcut: ((ShortcutCombination) -> Bool)?
     private var shortcutIsHeld = false
+    @Published public private(set) var isRecordingShortcut = false
+    private var suspendShortcut: (() -> Void)?
     private var holdRecording = false
     private let service: any TranscriptionService
     private let textProcessor = DeterministicTextProcessor.shared
@@ -297,7 +299,7 @@ import VoxInkCore
     private var audioOperation: Task<Void, Never>?
     private var cancellationTask: Task<Void, Never>?
     private var meterTask: Task<Void, Never>?
-    public var canStart: Bool { phase == .ready || phase == .failed }
+    public var canStart: Bool { !isRecordingShortcut && (phase == .ready || phase == .failed) }
     public var canRecord: Bool {
         canStart && microphoneAuthorization == .authorized && modelState == .ready
     }
@@ -874,18 +876,46 @@ import VoxInkCore
         shortcutStatus = shortcutAvailable ? "\(shortcutCombination.title) 已就绪" : "快捷键注册失败，请在设置中选择其他组合"
     }
 
-    public func setShortcutCombination(_ combination: ShortcutCombination) {
-        guard canChangeShortcut, let registerShortcut else { return }
+    public func configureShortcutSuspension(_ suspend: @escaping () -> Void) {
+        suspendShortcut = suspend
+    }
+
+    @discardableResult public func beginShortcutRecording() -> Bool {
+        guard canChangeShortcut, registerShortcut != nil else { return false }
+        isRecordingShortcut = true
+        suspendShortcut?()
+        return true
+    }
+
+    public func finishShortcutRecording(_ candidate: ShortcutCombination? = nil) {
+        guard isRecordingShortcut else { return }
+        isRecordingShortcut = false
+        if let candidate {
+            let accepted = setShortcutCombination(candidate)
+            // A rejected candidate must not leave the previous shortcut suspended.
+            if !accepted, let registerShortcut {
+                let failure = shortcutStatus
+                shortcutAvailable = registerShortcut(shortcutCombination)
+                shortcutStatus = shortcutAvailable ? failure : "快捷键恢复失败，请选择其他组合"
+            }
+        } else if let registerShortcut {
+            configureShortcutRegistration(registerShortcut)
+        }
+    }
+
+    @discardableResult public func setShortcutCombination(_ combination: ShortcutCombination) -> Bool {
+        guard canChangeShortcut, let registerShortcut else { return false }
         guard registerShortcut(combination) else {
             shortcutStatus = shortcutAvailable
                 ? "\(combination.title) 不可用，仍使用 \(shortcutCombination.title)"
                 : "\(combination.title) 不可用，请选择其他组合"
-            return
+            return false
         }
         shortcutCombination = combination
         shortcutAvailable = true
         shortcutStatus = "\(combination.title) 已就绪"
         preferences?.set(combination.rawValue, forKey: "shortcutCombination")
+        return true
     }
 
     public func setShortcutMode(_ mode: ShortcutMode) {
@@ -895,7 +925,7 @@ import VoxInkCore
     }
 
     public func handleShortcutPressed() {
-        guard !shortcutIsHeld else { return }
+        guard !isRecordingShortcut, !shortcutIsHeld else { return }
         shortcutIsHeld = true
         if fixedTextTestArmed { handleGlobalShortcut(); return }
         if shortcutMode == .holdToTalk {
