@@ -8,8 +8,11 @@ SOURCES="$ROOT/benchmark/app-store-probe"
 xcrun swiftc -swift-version 6 -parse-as-library "$SOURCES/DownloadContract.swift" \
   "$SOURCES/DownloadContractTests.swift" -o "$WORK/tests"
 "$WORK/tests"
+xcrun swiftc -swift-version 6 -parse-as-library "$SOURCES/DownloadContract.swift" \
+  "$SOURCES/DownloadTransfer.swift" "$SOURCES/DownloadTransferTests.swift" -o "$WORK/transfer-tests"
+"$WORK/transfer-tests"
 xcrun swiftc -swift-version 6 -typecheck -parse-as-library "$SOURCES/DownloadContract.swift" \
-  "$SOURCES/DownloadService.swift"
+  "$SOURCES/DownloadTransfer.swift" "$SOURCES/DownloadService.swift"
 xcrun swiftc -swift-version 6 -typecheck -parse-as-library "$SOURCES/DownloadContract.swift" \
   "$SOURCES/DownloadProbe.swift" "$SOURCES/Probe.swift"
 xcrun swiftc -swift-version 6 -typecheck -parse-as-library "$SOURCES/DownloadContract.swift" \

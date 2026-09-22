@@ -14,6 +14,7 @@ ditto --norsrc --noextattr "$SOURCE_APP/Contents/Resources" "$APP/Contents/Resou
 SERVICE="$APP/Contents/XPCServices/DownloadProbe.xpc"
 mkdir -p "$SERVICE/Contents/MacOS" "$SERVICE/Contents/Resources"
 xcrun swiftc -swift-version 6 -parse-as-library "$ROOT/benchmark/app-store-probe/DownloadContract.swift" \
+  "$ROOT/benchmark/app-store-probe/DownloadTransfer.swift" \
   "$ROOT/benchmark/app-store-probe/DownloadService.swift" -o "$SERVICE/Contents/MacOS/DownloadProbe"
 python3 - "$ROOT/benchmark/model-manifest.json" "$APP/Contents/Resources" "$SERVICE/Contents/Resources" <<'PY'
 import json,pathlib,sys

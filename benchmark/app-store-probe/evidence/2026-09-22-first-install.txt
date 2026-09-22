@@ -1,0 +1,14 @@
+Isolated first-install files: /tmp/voxink-store-fresh-isolated.uK0xis
+Building for debugging...
+Build complete! (0.37秒)
+◇ Test run started.
+↳ Testing Library Version: 2078
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite BundledPolishIntegrationTests started.
+◇ Test freshUserDownloadsAndRunsWithoutRuntimeConfiguration() started.
+正在准备本地组件…
+正在下载并校验模型…
+正在验证模型运行，请稍候…
+✔ Test freshUserDownloadsAndRunsWithoutRuntimeConfiguration() passed after 23.580 seconds.
+✔ Suite BundledPolishIntegrationTests passed after 23.580 seconds.
+✔ Test run with 1 test in 1 suite passed after 23.580 seconds.

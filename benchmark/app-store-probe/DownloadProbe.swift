@@ -66,6 +66,39 @@ extension Probe {
         } catch { record("FAIL persisted config: \(error.localizedDescription)") }
     }
 
+    func failedDestinationTest() {
+        guard !busy else { return }
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let original = try Data(contentsOf: downloadedConfig)
+                try DownloadFixture.load().verify(original)
+                let handle = try FileHandle(forReadingFrom: downloadedConfig)
+                defer { try? handle.close() }
+                do {
+                    _ = try await DownloadRequest().run(to: handle)
+                    record("FAIL read-only destination: service reported success")
+                    return
+                } catch {
+                    let failure = error as NSError
+                    let underlying = failure.userInfo[NSUnderlyingErrorKey] as? NSError
+                    guard (failure.domain == NSPOSIXErrorDomain && failure.code == Int(EBADF)) ||
+                          (underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(EBADF)) else {
+                        record("FAIL read-only destination: unexpected error \(failure.domain)/\(failure.code); underlying=\(String(describing: underlying))")
+                        return
+                    }
+                    guard try Data(contentsOf: downloadedConfig) == original else {
+                        record("FAIL read-only destination: previously verified file changed")
+                        return
+                    }
+                    record("PASS XPC rejects read-only destination with EBADF; verified file unchanged")
+                    record("Run 模型下载隔离检查 again to verify a fresh connection recovers")
+                }
+            } catch { record("FAIL read-only destination setup: \(error.localizedDescription)") }
+        }
+    }
+
     func networkTests() {
         guard !busy else { return }
         busy = true

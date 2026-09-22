@@ -1,0 +1,80 @@
+{
+  "app": "/Applications/VoxInk.app",
+  "version": "0.1.10",
+  "build": "12",
+  "checks": [
+    {
+      "check": "app-sandbox",
+      "status": "FAIL",
+      "detail": "Main app must enable App Sandbox for Mac App Store distribution."
+    },
+    {
+      "check": "distribution-signature",
+      "status": "FAIL",
+      "detail": "Developer ID/ad-hoc signatures are not Mac App Store distribution signatures."
+    },
+    {
+      "check": "debug-entitlement",
+      "status": "PASS",
+      "detail": "Distribution must not allow debugger attachment."
+    },
+    {
+      "check": "microphone-description",
+      "status": "PASS",
+      "detail": "Microphone usage description must be present."
+    },
+    {
+      "check": "version",
+      "status": "PASS",
+      "detail": "Bundle identity, version, build and deployment target must be present."
+    },
+    {
+      "check": "interface-languages",
+      "status": "PASS",
+      "detail": "Project's five declared interface languages must be present."
+    },
+    {
+      "check": "signature-integrity",
+      "status": "PASS",
+      "detail": "Deep/strict verification passed."
+    },
+    {
+      "check": "main-executable",
+      "status": "PASS",
+      "detail": "/Applications/VoxInk.app/Contents/MacOS/VoxInk"
+    },
+    {
+      "check": "native-dependencies",
+      "status": "PASS",
+      "detail": "44 native files: no non-system absolute dependency."
+    },
+    {
+      "check": "native-minimum-os",
+      "status": "PASS",
+      "detail": {
+        "declared": "15.0",
+        "incompatible": [],
+        "unknown": []
+      }
+    },
+    {
+      "check": "offline-inherited-helper:Worker/voxink-qwen-smoke",
+      "status": "FAIL",
+      "detail": "Project's proposed store architecture needs signed sandbox-inheriting helpers and an offline parent."
+    },
+    {
+      "check": "offline-inherited-helper:PolishRuntime/bin/python3.12",
+      "status": "FAIL",
+      "detail": "Project's proposed store architecture needs signed sandbox-inheriting helpers and an offline parent."
+    },
+    {
+      "check": "provisioning-and-upload",
+      "status": "MANUAL",
+      "detail": {
+        "embedded_profile_present": false,
+        "remaining": "Validate registered App ID, capabilities, distribution profile if required, archive/upload and TestFlight."
+      }
+    }
+  ],
+  "scope": "Static project preflight only; excludes runtime sandbox behavior, App Review approval and TestFlight."
+}

@@ -139,3 +139,15 @@
 - `plans/app-store-feasibility.md`：进展、限制与剩余工作。
 
 官方参考：[XPC 权限分离](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html)、[系统服务提供方](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/providing.html)、[系统服务声明](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/SysServices/Articles/properties.html)。
+
+## 第四轮 · 上架测试与异常处理 · 2026-09-22
+
+详见 `docs/App-Store测试清单-2026-09-22.md`。Swift 完整回归 278 项通过，默认跳过的真实首次安装项随后单独通过（共覆盖 279 个不同测试）；Python 原有 74 项和新增包预检 7 项通过。译文覆盖与占位符检查通过。
+
+新增 13 个下载服务异常/取消/重试场景，与原有 17 项契约检查均通过。修正独立样例在客户端失效后没有主动取消下载的问题。真实沙盒复核了只读目标拒写、原文件保持及新连接下载恢复；未将模拟断网当作真实长时网络测试。
+
+实际首次使用测试用全新的模型目录和 Hub/Xet 缓存，约 24 秒完成轻量模型下载、校验和固定句生成，无手动配置运行环境。该结果验证当前直装组件的首装链路，不等于完整商店沙盒版或另一台 Mac 首装通过。
+
+新增只读安装包预检：当前 App 的深度签名、44 个原生文件的依赖和最低系统版本检查通过；主程序 App Sandbox、商店分发签名和两个推理 helper 的所提沙盒继承配置未通过。当前仍是 0.1.10（12）直装版，上述是已知迁移阻塞，未提交商店审核。
+
+下一步必需真实环境：商店输入路线确定后的完整沙盒链路，稳定 macOS/其他机型、实体快捷键与目标应用、权限撤回和设备变化、全档模型断网/低磁盘恢复、多语言与无障碍实机、上传后的 TestFlight 安装升级。隐私和商店资料仍需与最终版本一致。

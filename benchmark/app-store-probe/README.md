@@ -36,7 +36,9 @@ Click 模型下载隔离检查. The main App creates a private partial file in i
 
 Review all three checks: main-process loopback connect denied before and after download, XPC sandbox/network entitlements reported, inherited Python loopback connect denied with exit 0. A successful transfer alone is insufficient. Quit and reopen the App, then click 读取已下载样例 to verify the persisted file without another network request. Preserve `results.txt` before restarting: logs are per-run.
 
-This is a small config transfer, **not** full model installation: multi-GB streaming/resume, cancellation during transfer, retry/recovery, peer validation hardening, old-cache migration, and integrated production inference remain unimplemented. The loopback check demonstrates tested socket denial; it is not a complete audit of every possible IPC/network path.
+This is a small config transfer, **not** full model installation: multi-GB streaming/resume, full-model recovery, peer validation hardening, old-cache migration, and integrated production inference remain unimplemented. A connection-owned task now cancels when XPC is invalidated/interrupted. Cancellation and URLSession failure behavior have deterministic offline tests; real connection invalidation during a long network transfer still needs integration coverage. The loopback check demonstrates tested socket denial; it is not a complete audit of every possible IPC/network path.
+
+After a successful download, click 只读目标失败检查. It passes the verified file to XPC as a read-only descriptor, requires an EBADF error and verifies that its bytes remain unchanged. Click 模型下载隔离检查 again to verify recovery using a new connection. Evidence: `evidence/2026-09-22-failure-recovery.txt`.
 
 ## System Services insertion sample
 
@@ -54,7 +56,7 @@ The service is a menu action advertised through `NSServices`, not a global hold/
 bash script/test_app_store_probe.sh
 ```
 
-Runs 17 offline contract checks (correct data, tampering, truncation, oversized data, unsafe destinations, invalid metadata) plus Swift 6 type checks for all three executables and shell syntax checks. No model download or UI automation runs in this command.
+Runs 17 offline contract checks (correct data, tampering, truncation, oversized data, unsafe destinations, invalid metadata), 13 URLProtocol/task lifecycle scenarios (HTTP errors, offline, timeout, corruption, truncation, overflow, cancellation, retry, read-only descriptor, duplicate request and invalidated connection), plus Swift 6 type checks for all three executables and shell syntax checks. No model download or UI automation runs in this command.
 
 Third-round live evidence: `evidence/2026-09-22-download-services.txt`; fixed TextEdit output: `evidence/services-textedit.rtf`. These experiments use Developer ID signatures on a beta OS; they are not Mac App Store archives.
 

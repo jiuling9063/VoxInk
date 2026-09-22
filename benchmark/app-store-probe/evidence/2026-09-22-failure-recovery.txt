@@ -1,0 +1,21 @@
+Round 4: real sandbox XPC read-only failure and fresh-connection recovery
+Host: macOS 27 beta / Apple M5
+Build: /tmp/voxink-store-probe.FhXK7i/VoxInkSandboxProbe.app
+
+PASS XPC rejects read-only destination with EBADF; verified file unchanged
+Run 模型下载隔离检查 again to verify a fresh connection recovers
+MAIN pid=84076 sandbox=true network.client=false
+MAIN before XPC: loopback connect errno=1 (EPERM=1, EACCES=13)
+PASS XPC pid=84104 sandbox=true network.client=true bytes=7187; received through write-only file descriptor, verified again by main
+MAIN after XPC: loopback connect errno=1
+START Inherited Python network denial
+END Inherited Python network denial: exit=0, reason=1, time=0.112880959 seconds
+CHILD connect errno=1
+
+
+Saved pinned config in probe container; quit, reopen and use 读取已下载样例 to verify persistence
+
+Offline injected scenarios (not real network failure):
+PASS 17 download contract checks (offline)
+PASS 13 transfer failure, cancellation, retry and job lifecycle scenarios (URLProtocol, no network)
+PASS Swift 6 type checks and build-script syntax

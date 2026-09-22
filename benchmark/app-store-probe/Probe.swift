@@ -139,6 +139,7 @@ import Security
                 HStack {
                     Button("模型下载隔离检查") { probe.networkTests() }
                     Button("读取已下载样例") { probe.cachedDownloadTest() }
+                    Button("只读目标失败检查") { probe.failedDestinationTest() }
                 }.disabled(probe.busy)
                 Text(probe.busy ? "验证中…" : "测试日志只含固定样例与状态。")
                 ScrollView { Text(probe.lines.joined(separator: "\n")).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
