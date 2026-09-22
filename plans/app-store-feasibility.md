@@ -80,3 +80,27 @@
 尚未完成：实体键盘全局事件、完整目标输入链路、下载网络及重试的商店沙盒版本、稳定系统测试、正式隐私政策和隐私清单、商店提交资料。基础快捷键解耦不等于跨应用写入获得商店支持；下载白名单也不等于全部审核问题已解决。
 
 白名单补充验证：在线核对全部四档固定 revision 的文件元数据（未下载权重）；均衡模型所需的 chat_template.jinja 明确列入白名单。轻量和均衡模型用仅含允许文件的副本重新加载并生成提示词，均通过。
+
+## 0.1.10 上架复核 · 2026-09-22
+
+本轮升级至 0.1.10（12），打包的是完整功能直装版。当前实现仍没有 `com.apple.security.app-sandbox`；本机可用签名仅为 Developer ID Application。没有声称已经具备商店上传或审核资格，也没有提交商店审核。
+
+| 优先级 | 当前障碍 | 完成标准 |
+| --- | --- | --- |
+| P0 | 任意前台应用自动写入的商店兼容路线未成立 | 明确公开可用方案，完成真实沙盒与实体键盘端到端验证；若需改变体验，由用户决定 |
+| P0 | 正式 App 未沙盒化，仍使用 sandbox-exec 启动推理 | 迁移进程与签名、独立限制推理网络访问；在完整产品中验证录音、下载、模型持久存储与文件授权 |
+| P1 | 未配置和验证商店分发构建 | 注册/核对正式 App ID、商店分发签名及描述文件、App Store Connect 记录；使用 Apple 接受的工具链验证上传并进行 TestFlight 测试 |
+| P1 | 隐私政策与商店资料尚未完成 | 可公开访问的政策链接、App 内入口、隐私问卷、支持网址、截图、分级、审核说明及模型许可复核 |
+| P1 | 发布质量覆盖不足 | 稳定系统及另一台 Mac 的首次安装/下载/重试、实体快捷键、长短句、远程粘贴、多语种真人语音与母语文案复核 |
+
+版本功能已新增自定义快捷键与五种界面语言，语言识别链路已实测。日语同音词错误属于识别质量问题，当前 P0 架构障碍仍优先于继续扩展语种。
+
+重新读取官方文档确认：审核指南 2.4.5 要求适当沙盒化；App Sandbox 文档仍将辅助应用使用 Accessibility APIs 列入不兼容功能。不能把授予辅助功能权限、Developer ID 公证或一个 API 注册成功当作商店认可的完整路线。Apple 技术咨询草稿仍未发送，未获得支持答复或审核意见。
+
+隐私项澄清：此前将 `PrivacyInfo.xcprivacy` 与所有平台的 required-reason API 要求合并列为统一必做项过于笼统。当前官方隐私清单文档对 required-reason API 信息明确列出 iOS/iPadOS/tvOS/visionOS/watchOS，不能直接认定 macOS App 因缺少该文件就必然被拒。应按实际数据收集、所含 SDK 和商店校验结果逐项核查；隐私政策链接和准确的商店隐私披露仍需完成。
+
+官方依据：
+- [App Review Guidelines 2.4.5、5.1.1](https://developer.apple.com/app-store/review/guidelines/)
+- [App Sandbox 不兼容功能](https://developer.apple.com/documentation/security/protecting-user-data-with-app-sandbox)
+- [隐私清单及平台适用范围](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)
+- [商店构建上传要求](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
