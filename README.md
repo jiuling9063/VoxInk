@@ -1,33 +1,121 @@
-# 语落 VoxInk
+<p align="center">
+  <img src="app/Sources/VoxInkUI/Resources/logo-rain-impression-v2.png" width="96" alt="语落 VoxInk 图标">
+</p>
+<h1 align="center">语落 VoxInk</h1>
+<p align="center">按住说话，松开写入。面向 Apple Silicon Mac 的本地语音输入工具。</p>
+<p align="center">
+  <a href="https://github.com/jiuling9063/VoxInk/releases/latest">下载正式版</a> ·
+  <a href="docs/安装与使用.md">安装与使用</a> ·
+  <a href="CHANGELOG.md">更新记录</a> ·
+  <a href="https://github.com/jiuling9063/VoxInk/issues">问题反馈</a>
+</p>
 
-语落 VoxInk 是一个 macOS 原生语音输入工具：录音在本机处理，识别结果可复制或写入当前输入目标。
+语落将语音转换为文字，可选在本机润色，再写入你正在使用的应用。运行组件已随 App 提供，首次使用只需授权和下载模型，无需自行安装 Python、MLX 或配置命令行环境。
 
-## 当前状态
+当前正式版本：**0.1.12（构建 14）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
 
-当前版本为 0.1.11（构建 13），优化润色和本机写入延迟：提前计算并复用固定润色规则，去掉本机写入前的固定等待，为目标输入框查询设置短超时。保留自定义快捷键、简体/繁体/英/日/韩界面，普通话/粤语/英/日/韩语音及自动检测、通用远程工具配置和 CSV 词库导入导出。模型权重按需下载，运行组件随 App 提供，无需手动配置环境。
+## 功能
 
-安装步骤与已知限制见 [试用版说明](docs/试用版说明-0.1.11.md)，问题反馈使用 [试用反馈模板](docs/试用反馈模板.md)。旧开发文档记录历史阶段，不作为当前安装指南。
+| 功能 | 说明 |
+| --- | --- |
+| 快捷语音输入 | 默认 `⌥ Space`，支持推荐组合、自定义快捷键、按住说话或切换录音 |
+| 本地识别 | 音频在 Mac 上处理，模型下载后可离线使用 |
+| 可选本地润色 | 整理口头词和明显重复；失败、超时或校验不通过时保留未润色文字 |
+| 自定义词库 | 专有名词纠正、CSV 导入预览与导出、文字预览 |
+| 多语言 | 简体中文、繁体中文、英语、日语、韩语界面；普通话、粤语、英语、日语、韩语识别及自动检测 |
+| 远程工具配置 | 按应用设置 Mac / Windows 粘贴方式及剪贴板同步等待 |
+| 工作台与恢复 | 录音试用、音频导入、复制结果、本次启动期间的转录历史；未完成录音可恢复 |
 
-试用版建议使用 `.dmg` 安装盘：双击后将 VoxInk 拖到“应用程序”即可完成安装。安装包与 SHA-256 校验和见 [GitHub 预发布](https://github.com/jiuling9063/VoxInk/releases)。
+## 系统要求
 
-多语言范围与验证边界见 [多语言方案](plans/language-support.md) 和 [验证记录](docs/多语言验证-2026-09-22.md)。
+- Apple Silicon Mac（M 系列），macOS 15+；当前安装包不支持 Intel Mac。
+- 首次下载模型需要网络，后续识别与润色可离线运行。
+- 识别模型约 **713 MB**；润色可选，下载量约 **1–8.3 GB**。请另留安装与缓存空间，模型文件大小不等于运行内存。
+- 高档润色模型需要更多内存；“最佳效果”档建议 24 GB 及以上内存。速度与质量取决于设备、输入长度和语言。
 
-## 构建与验证
+## 安装与开始使用
 
-```bash
+1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.12-macOS-arm64.dmg`。
+2. 打开安装盘，将 **VoxInk** 拖入 **应用程序**；更新前先退出旧版。
+3. 打开 App，允许麦克风。需要自动写入时，在系统设置中允许辅助功能权限。
+4. 在“转录引擎”下载识别模型，等待本机就绪。
+5. 点选目标输入框，按住 `⌥ Space` 说话，松开后识别并写入；`Esc` 取消。
+
+工作台录音与音频导入只展示结果，方便检查和手动复制。润色默认关闭，可在“润色模型”下载所需模型并开启。更新会沿用本机模型、词库和偏好。
+
+将发布页的 `SHA256SUMS.txt` 与 DMG 放在同一目录，可选运行 `shasum -a 256 -c SHA256SUMS.txt` 核对文件完整性。更多步骤见 [安装与使用](docs/安装与使用.md)。
+
+## 本地处理与隐私
+
+- 音频与文字不上传云端识别或润色，也不会自动切换到云端模型。
+- 模型从 Hugging Face 按固定版本下载；下载服务会接收正常网络连接信息。来源和校验数据见 [识别模型清单](benchmark/model-manifest.json) 与 [润色模型定义](app/Sources/VoxInkUI/PolishModel.swift)。
+- 转录历史在退出后清除。当前结果可查看识别原文，历史目前只保存最终文字。
+- 完成写入、成功复制或取消后清理对应录音。未完成录音最多一条，有效期 24 小时，App 运行时检查清理；退出期间没有后台进程到点删除。
+- 词库、偏好及不含原文的性能统计保存在本机。写入会临时使用系统剪贴板；只有剪贴板仍归本次操作所有时才恢复原内容。
+- 模型权重、私人录音和本机缓存不提交到仓库。反馈请使用无隐私示例。
+
+## 已知限制
+
+- 识别和润色可能出错，尤其是短句语言检测、日语同音词、姓名、口音和混合语言。重要内容仍需核对。
+- “已发送粘贴”表示按键已发出，不代表目标应用确认收到文字。录音到写入期间请保持同一输入位置；同一应用内切换标签、聊天或远程会话不能全部检测。
+- 输入框查询超时或失败时停止自动写入并保留结果；部分应用不提供标准辅助功能字段，兼容路径无法判断其内部是否为密码框，请勿用于安全输入。
+- 远程客户端需支持剪贴板同步；默认等待 2 秒，不保证所有客户端、远端系统和全屏模式均兼容。
+- 冷启动、切换语言和闲置释放后的首次输入仍有加载开销。润色下载目前只有阶段信息，尚无完整字节进度。
+- 历史原文对照与清理、词库搜索和删除撤销尚待完善；闲置释放后的预热提示可能滞后。
+- 尚未完成所有机型、干净系统首次安装和长期设备切换测试。当前版本直接分发，未在 Mac App Store 发布。
+
+改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版检查见 [发布验证](docs/发布验证-0.1.12.md)。
+
+## 从源码构建
+
+以下仅针对开发者。需要 Xcode（含 macOS SDK、Swift 6）、Python 3、`uv` 和构建依赖的网络访问。完整应用包含 Swift 识别组件及内置 Python 润色运行时。
+
+`xcode-select -p` 应指向完整 Xcode 的 Developer 目录；如果显示 `CommandLineTools`，请将下面的 `DEVELOPER_DIR` 改为实际安装的 Xcode 内 `Contents/Developer` 路径。
+
+```sh
+git clone https://github.com/jiuling9063/VoxInk.git
+cd VoxInk
+# 按实际 Xcode 安装位置选择开发工具
+export DEVELOPER_DIR="$(xcode-select -p)"
 ./script/build_and_run.sh --build-only
-VOXINK_UI_LANGUAGE=zh-Hans DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test --package-path app --scratch-path /tmp/voxink-app-xcode-beta
 ```
 
-更完整的使用说明与验证边界见 [`docs/最小App使用与验证.md`](docs/最小App使用与验证.md)。
+结果入口为 `dist/VoxInk.app`，实际开发包位于用户缓存目录。默认临时签名仅供本机开发，对外发布需维护者的 Developer ID 证书与公证流程。
 
-## 目录
+```sh
+# 独立临时构建目录可避免同步目录附加资源属性
+VOXINK_UI_LANGUAGE=zh-Hans swift test --package-path app \
+  --scratch-path /tmp/voxink-app-xcode-beta --no-parallel
+python3 -m unittest discover -s script/tests
+python3 script/check_localizations.py
+```
 
-- `app/`：SwiftPM 原生 macOS 应用与 UI
-- `benchmark/`：本地模型和识别实验工具
-- `script/`：构建、检查和回归脚本
-- `docs/`：设计、架构和验证记录
+下载和真实模型测试单独运行，会下载模型或占用较多资源。更多约定见 [贡献指南](CONTRIBUTING.md)。
 
-## 隐私
+## 项目结构
 
-录音与识别默认在本机执行。模型缓存、临时音频、构建产物和本地工具状态不会提交到仓库。
+```text
+app/
+  Sources/VoxInkApp/     App 入口、菜单与生命周期
+  Sources/VoxInkUI/      SwiftUI 界面和工作流
+  Sources/VoxInkCore/    写入、模型安装、词库与本地化
+  Tests/                Swift 回归测试
+script/                 构建、打包、润色 Worker 与验证脚本
+benchmark/              识别组件、模型清单和性能实验
+docs/                   使用说明、设计与发布验证
+plans/                  阶段性方案与历史计划
+```
+
+历史文档反映当时阶段；当前使用方式以本 README、安装说明和最新版本记录为准。
+
+## 反馈与贡献
+
+提交 [Issue](https://github.com/jiuling9063/VoxInk/issues) 时请附版本、Mac 芯片与内存、macOS 版本、目标应用、复现步骤和预期结果。远程问题请同时说明客户端与远端系统。不要提交私人聊天、录音、密码或令牌。
+
+代码变更请保持小范围，说明行为变化和验证结果，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 授权与致谢
+
+仓库尚未指定项目级开源许可证；源码可访问不代表已授予开源再分发授权。对外再分发或商业授权请先与维护者确认。
+
+感谢 Qwen、MLX、speech-swift、OpenCCSwift 等上游项目。第三方组件和模型适用各自许可，声明见 [ThirdPartyNotices](app/ThirdPartyNotices.txt)；随包运行时与下载模型保留各自许可文件。

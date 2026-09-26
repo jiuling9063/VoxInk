@@ -491,5 +491,6 @@
   "（推荐）": " (recommended)",
   "（自定义）": " (custom)",
   "跟随系统": "Follow system",
-  "文字转换失败，已保留原文": "Chinese script conversion failed; original kept"
+  "文字转换失败，已保留原文": "Chinese script conversion failed; original kept",
+  "无法检查输入框，请稍后重试或手动复制": "Unable to check the input field. Try again later or copy manually."
 }

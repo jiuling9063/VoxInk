@@ -8,6 +8,9 @@ private final class FakePasteEnvironment: PasteEnvironment {
     var targetIsValid = true
     var focused = true
     var secure = false
+    var fieldSafety: FocusedFieldSafety?
+    var fieldQueryCount = 0
+    var onFieldQuery: ((Int) -> Void)?
     var accessibility = true
     var modifiersReleased = true
     var snapshotResult: Result<PasteboardSnapshot, Error> = .success(.init(items: [], changeCount: 2))
@@ -39,7 +42,11 @@ private final class FakePasteEnvironment: PasteEnvironment {
     func requestAccessibility() -> Bool { accessibility }
     func isTargetValid(_ target: PasteTarget) -> Bool { targetIsValid }
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool { focused }
-    func isKnownSecureFocusedField() -> Bool { secure }
+    func focusedFieldSafety() -> FocusedFieldSafety {
+        fieldQueryCount += 1
+        onFieldQuery?(fieldQueryCount)
+        return fieldSafety ?? (secure ? .secure : .ordinary)
+    }
     func pasteboardSnapshot() throws -> PasteboardSnapshot {
         snapshotCount += 1
         onSnapshot?()
@@ -81,6 +88,55 @@ private final class FakePasteEnvironment: PasteEnvironment {
 }
 
 private struct FakeError: Error {}
+
+@Test @MainActor func failedFieldQueriesNeverIssuePaste() async {
+    for failedCheck in 1...3 {
+        let environment = FakePasteEnvironment()
+        environment.onFieldQuery = { check in
+            if check == failedCheck { environment.fieldSafety = .unavailable }
+        }
+        let coordinator = PasteCoordinator(environment: environment)
+        let result = await coordinator.paste(text: "test", to: target, sessionID: UUID())
+        #expect(result == .failed(L("无法检查输入框，请稍后重试或手动复制")))
+        #expect(environment.postedPasteCount == 0)
+        #expect(environment.snapshotCount == (failedCheck == 1 ? 0 : 1))
+        #expect((environment.restored != nil) == (failedCheck > 1))
+    }
+}
+
+@Test @MainActor func unsupportedRemoteFieldRetainsExplicitPasteCompatibility() async {
+    let environment = FakePasteEnvironment()
+    environment.fieldSafety = .unsupported
+    let coordinator = PasteCoordinator(environment: environment)
+    coordinator.setRemoteApplications([.init(bundleID: target.bundleID, name: target.name, usesControl: true)])
+    #expect(await coordinator.paste(text: "test", to: target, sessionID: UUID()) == .sent)
+    await coordinator.finishPendingCleanup()
+    #expect(environment.postedUsingControl)
+    #expect(environment.postedPasteCount == 1)
+}
+
+@Test @MainActor func failedFieldQueryDoesNotRestoreOverNewClipboard() async {
+    let environment = FakePasteEnvironment()
+    environment.onFieldQuery = { check in
+        if check == 2 { environment.fieldSafety = .unavailable; environment.changeCount = 99 }
+    }
+    let coordinator = PasteCoordinator(environment: environment)
+    #expect(!(await coordinator.paste(text: "test", to: target, sessionID: UUID())).wasIssued)
+    #expect(environment.postedPasteCount == 0)
+    #expect(environment.restored == nil)
+    #expect(environment.changeCount == 99)
+}
+
+@Test @MainActor func fieldQueryErrorsDistinguishUnsupportedFromUnavailable() {
+    for result: AXError in [.cannotComplete, .apiDisabled, .invalidUIElement, .failure, .noValue] {
+        #expect(AppKitPasteEnvironment.classifyFieldQueryFailure(result) == .unavailable)
+    }
+    for result: AXError in [.attributeUnsupported, .notImplemented] {
+        #expect(AppKitPasteEnvironment.classifyFieldQueryFailure(result) == .unsupported)
+    }
+    #expect(AppKitPasteEnvironment.classifyFieldQueryFailure(.noValue, queryingSubrole: true) == .unsupported)
+    #expect(AppKitPasteEnvironment.classifyFieldQueryFailure(.cannotComplete, queryingSubrole: true) == .unavailable)
+}
 
 @Test func remoteProfilesMatchExactlyAndRejectAmbiguity() {
     let profiles = RemoteDeviceProfiles.make(mac: " Mini ， Shared,Mini", windows: "PC\nShared")

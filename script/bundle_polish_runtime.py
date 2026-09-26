@@ -52,7 +52,7 @@ def bundle(python, destination, identity, requirements):
         command = ['/usr/bin/codesign', '--force', '--sign', identity]
         if identity != '-':
             command += ['--options', 'runtime', '--timestamp']
-        subprocess.run(command + [str(binary)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        subprocess.run(command + [str(binary)], check=True, stdout=subprocess.DEVNULL)
     executable = destination / 'bin/python3.12'
     with tempfile.TemporaryDirectory(prefix='voxink-runtime-probe-') as probe_root:
         environment = {'PATH': '/usr/bin:/bin', 'TMPDIR': probe_root}

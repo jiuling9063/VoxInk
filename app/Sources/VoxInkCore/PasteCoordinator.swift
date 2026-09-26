@@ -97,6 +97,18 @@ enum PasteboardRestoreResult: Equatable {
     case failed
 }
 
+enum FocusedFieldSafety: Equatable {
+    case ordinary, secure, unsupported, unavailable
+
+    var failureMessage: String? {
+        switch self {
+        case .ordinary, .unsupported: nil
+        case .secure: L("安全输入框不允许自动粘贴")
+        case .unavailable: L("无法检查输入框，请稍后重试或手动复制")
+        }
+    }
+}
+
 @MainActor
 protocol PasteEnvironment: AnyObject {
     func captureTarget() -> PasteTarget?
@@ -105,7 +117,7 @@ protocol PasteEnvironment: AnyObject {
     func requestAccessibility() -> Bool
     func isTargetValid(_ target: PasteTarget) -> Bool
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool
-    func isKnownSecureFocusedField() -> Bool
+    func focusedFieldSafety() -> FocusedFieldSafety
     func pasteboardSnapshot() throws -> PasteboardSnapshot
     func writePlainText(_ text: String) throws -> Int
     func currentPasteboardChangeCount() -> Int
@@ -260,8 +272,8 @@ public final class PasteCoordinator {
             return .failed(L("无法确认粘贴目标"))
         }
         guard remoteTargetMatches(target) else { return .failed(L("远程设备已切换或无法识别，请回到原设备重试")) }
-        guard !environment.isKnownSecureFocusedField() else {
-            return .failed(L("安全输入框不允许自动粘贴"))
+        if let message = environment.focusedFieldSafety().failureMessage {
+            return .failed(message)
         }
         guard !cancellationRequested else {
             return .cancelledBeforeSend
@@ -306,15 +318,17 @@ public final class PasteCoordinator {
         guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
             return failBeforeSend(L("无法确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        guard !environment.isKnownSecureFocusedField() else {
-            return failBeforeSend(L("安全输入框不允许自动粘贴"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        if let message = environment.focusedFieldSafety().failureMessage {
+            return failBeforeSend(message, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await waitForModifierRelease() else {
             return failBeforeSend(L("修饰键未释放"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)),
-              !environment.isKnownSecureFocusedField() else {
+        guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
             return failBeforeSend(L("无法再次确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        }
+        if let message = environment.focusedFieldSafety().failureMessage {
+            return failBeforeSend(message, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.accessibilityGranted else {
             return failBeforeSend(L("辅助功能权限已失效"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
@@ -442,19 +456,32 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         return matchesFrontmost(target)
     }
 
-    func isKnownSecureFocusedField() -> Bool {
+    func focusedFieldSafety() -> FocusedFieldSafety {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.1)
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused,
-              CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
+        let result = AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused)
+        guard result == .success else { return Self.classifyFieldQueryFailure(result) }
+        guard let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unavailable }
         let element = unsafeDowncast(focused, to: AXUIElement.self)
         AXUIElementSetMessagingTimeout(element, 0.1)
         var subrole: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
-              let value = subrole as? String else { return false }
-        return value == "AXSecureTextField"
+        let subroleResult = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
+        guard subroleResult == .success else {
+            return Self.classifyFieldQueryFailure(subroleResult, queryingSubrole: true)
+        }
+        guard let value = subrole as? String else { return .unavailable }
+        return value == "AXSecureTextField" ? .secure : .ordinary
+    }
+
+    static func classifyFieldQueryFailure(_ result: AXError, queryingSubrole: Bool = false) -> FocusedFieldSafety {
+        switch result {
+        // Some clients expose no subrole. Preserve that compatibility without
+        // treating a timeout, disabled API or vanished element as a successful check.
+        case .attributeUnsupported, .notImplemented: .unsupported
+        case .noValue where queryingSubrole: .unsupported
+        default: .unavailable
+        }
     }
 
     func pasteboardSnapshot() throws -> PasteboardSnapshot {
