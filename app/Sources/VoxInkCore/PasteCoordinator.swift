@@ -296,7 +296,9 @@ public final class PasteCoordinator {
         // make the remote computer paste the previous contents instead.
         let isRemote = (legacyRemoteEnabled && target.bundleID == "com.netease.uuremote") || target.remoteUsesControl != nil
             || remoteApplications.contains(where: { $0.bundleID == target.bundleID })
-        await environment.delay(for: isRemote ? remoteTiming.delay : .milliseconds(150))
+        // Local pasteboard writes are synchronous. Yield for cancellation without
+        // adding a timer; only remote clipboard synchronization needs a delay.
+        await environment.delay(for: isRemote ? remoteTiming.delay : .zero)
 
         if cancellationRequested {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
@@ -442,11 +444,13 @@ final class AppKitPasteEnvironment: PasteEnvironment {
 
     func isKnownSecureFocusedField() -> Bool {
         let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.1)
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let focused,
               CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
         let element = unsafeDowncast(focused, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(element, 0.1)
         var subrole: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
               let value = subrole as? String else { return false }

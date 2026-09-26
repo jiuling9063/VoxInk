@@ -277,17 +277,17 @@ func remoteTimingOnlyChangesUUPaste() async {
         #expect(environment.delays == [timing.delay])
         environment.delays = []
         #expect(await coordinator.paste(text: "next", to: target, sessionID: UUID()) == .sent)
-        #expect(environment.delays == [.milliseconds(150)])
+        #expect(environment.delays == [.zero])
     }
 }
 
 @Test @MainActor
-func localPasteKeepsExistingTiming() async {
+func localPasteHasNoSynchronizationWaitButKeepsClipboardRetention() async {
     let environment = FakePasteEnvironment()
     let coordinator = PasteCoordinator(environment: environment)
     #expect(await coordinator.paste(text: "local", to: target, sessionID: UUID()) == .sent)
     await coordinator.finishPendingCleanup()
-    #expect(environment.delays == [.milliseconds(150)])
+    #expect(environment.delays == [.zero])
     #expect(environment.cleanupDelays == [.milliseconds(1_200)])
 }
 
@@ -548,7 +548,7 @@ func secureFieldAndHeldModifiersPreventKeyEvent() async {
     #expect(captured.remoteUsesControl == nil)
     #expect(await coordinator.paste(text: "text", to: captured, sessionID: UUID()) == .sent)
     #expect(!env.postedUsingControl)
-    #expect(env.delays.first == .milliseconds(150))
+    #expect(env.delays.first == .zero)
 }
 
 @Test @MainActor func genericRemoteCancellationAndClipboardChangeNeverSendPaste() async throws {
