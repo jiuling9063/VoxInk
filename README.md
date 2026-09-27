@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/Sources/VoxInkUI/Resources/logo-rain-impression-v2.png" width="96" alt="语落 VoxInk 图标">
+  <img src="docs/images/voxink-intro/01-cover.png" width="100%" alt="语落 VoxInk：按住说话，松开写入。面向 Apple Silicon Mac 的本地语音输入工具。">
 </p>
 <h1 align="center">语落 VoxInk</h1>
 <p align="center">按住说话，松开写入。面向 Apple Silicon Mac 的本地语音输入工具。</p>
@@ -14,7 +14,11 @@
 
 当前正式版本：**0.1.12（构建 14）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
 
+![从说出想法，到本机成文，再写入当前应用](docs/images/voxink-intro/02-flow.png)
+
 ## 功能
+
+![语落功能总览：多语言表达、语音工作台、无需配置命令行环境](docs/images/voxink-intro/05-overview.png)
 
 | 功能 | 说明 |
 | --- | --- |
@@ -25,6 +29,14 @@
 | 多语言 | 简体中文、繁体中文、英语、日语、韩语界面；普通话、粤语、英语、日语、韩语识别及自动检测 |
 | 远程工具配置 | 按应用设置 Mac / Windows 粘贴方式及剪贴板同步等待 |
 | 工作台与恢复 | 录音试用、音频导入、复制结果、本次启动期间的转录历史；未完成录音可恢复 |
+
+### 词库与文字处理
+
+为姓名、产品名和专业词添加固定写法，后续识别时自动纠正。支持 CSV 导入预览与导出，可先通过文字预览检查替换结果。
+
+![个人词库：记住姓名和专有词的正确写法，支持 CSV 导入导出与文字预览](docs/images/voxink-intro/04-dictionary.png)
+
+<sub>实际界面截图来自 0.1.11；“雨落 → 语落”为功能示例，截图中尚未添加词条。</sub>
 
 ## 系统要求
 
@@ -46,6 +58,10 @@
 将发布页的 `SHA256SUMS.txt` 与 DMG 放在同一目录，可选运行 `shasum -a 256 -c SHA256SUMS.txt` 核对文件完整性。更多步骤见 [安装与使用](docs/安装与使用.md)。
 
 ## 本地处理与隐私
+
+![识别与可选润色在 Mac 本机完成，模型下载后可离线使用](docs/images/voxink-intro/03-local.png)
+
+<sub>转录引擎实际界面截图来自 0.1.11。当前功能与数据处理方式以下方说明为准。</sub>
 
 - 音频与文字不上传云端识别或润色，也不会自动切换到云端模型。
 - 模型从 Hugging Face 按固定版本下载；下载服务会接收正常网络连接信息。来源和校验数据见 [识别模型清单](benchmark/model-manifest.json) 与 [润色模型定义](app/Sources/VoxInkUI/PolishModel.swift)。
