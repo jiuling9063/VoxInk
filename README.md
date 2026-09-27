@@ -5,6 +5,7 @@
 <p align="center">本机说话，远程电脑输入。为远程控制场景而设计的语音输入工具。</p>
 <p align="center">
   <a href="https://github.com/jiuling9063/VoxInk/releases/latest">下载正式版</a> ·
+  <a href="#60-秒了解语落">观看宣传片</a> ·
   <a href="docs/安装与使用.md">安装与使用</a> ·
   <a href="CHANGELOG.md">更新记录</a> ·
   <a href="https://github.com/jiuling9063/VoxInk/issues">问题反馈</a>
@@ -15,6 +16,14 @@
 运行组件已随 App 提供，首次使用只需授权和下载模型，无需自行安装 Python、MLX 或配置命令行环境。
 
 当前正式版本：**0.1.13（构建 15）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
+
+## 60 秒了解语落
+
+[![观看语落 VoxInk 宣传片：本机说话，文字抵达远程 Windows 或 Mac](docs/images/voxink-intro/06-video-cover.png)](docs/media/voxink-product-promo.mp4)
+
+[▶ 观看宣传片](docs/media/voxink-product-promo.mp4) · 中文 · 60 秒 · 1080p
+
+从本机 Mac 开口，到远程 Windows / Mac 输入框落字，了解语落的核心使用场景。视频中的远程操作为流程示意，具体配置和兼容性以[安装与使用](docs/安装与使用.md#远程工具)为准。
 
 ## 为远程输入而设计
 
