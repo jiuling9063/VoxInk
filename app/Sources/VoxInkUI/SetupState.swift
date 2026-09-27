@@ -2,6 +2,53 @@ import VoxInkCore
 import AVFoundation
 import Foundation
 
+public enum SetupUsage: String, Codable, CaseIterable, Sendable {
+    case local, remote, both
+
+    public var needsRemote: Bool { self != .local }
+    public var title: String {
+        switch self {
+        case .local: L("本机输入")
+        case .remote: L("远程电脑输入")
+        case .both: L("两者都用")
+        }
+    }
+}
+
+public enum SetupStep: String, Codable, Sendable {
+    case usage, preparation, remote, text, speech
+
+    public var title: String {
+        switch self {
+        case .usage: L("选择使用场景")
+        case .preparation: L("基础准备")
+        case .remote: L("连接远程工具")
+        case .text: L("测试文字写入")
+        case .speech: L("试说第一句话")
+        }
+    }
+}
+
+public struct SetupProgress: Codable, Equatable, Sendable {
+    public internal(set) var usage: SetupUsage = .remote
+    public internal(set) var step: SetupStep = .usage
+    public internal(set) var clipboardSyncConfirmed = false
+    public internal(set) var textConfirmed = false
+    public internal(set) var speechConfirmed = false
+
+    public var steps: [SetupStep] {
+        usage.needsRemote ? [.usage, .preparation, .remote, .text, .speech] : [.usage, .preparation, .text, .speech]
+    }
+    public var verified: Bool {
+        textConfirmed && speechConfirmed && (!usage.needsRemote || clipboardSyncConfirmed)
+    }
+
+    mutating func invalidateTrials() {
+        textConfirmed = false
+        speechConfirmed = false
+    }
+}
+
 public enum MicrophoneAuthorization: Equatable, Sendable {
     case notDetermined, authorized, denied, restricted
 

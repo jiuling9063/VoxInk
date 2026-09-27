@@ -234,11 +234,13 @@ import VoxInkCore
     private func saveRemoteApplications(_ profiles: [RemoteApplicationProfile]) {
         guard let data = try? JSONEncoder().encode(profiles) else { return }
         preferences?.set(data, forKey: "remoteApplications")
+        if remoteApplications != profiles { invalidateRemoteSetup() }
         remoteApplications = profiles
         pasteService.setRemoteApplications(profiles)
     }
     public func setUUDevices(mac: String, windows: String) {
         guard canStart else { return }
+        if uuMacDevices != mac || uuWindowsDevices != windows { invalidateRemoteSetup() }
         uuMacDevices = mac
         uuWindowsDevices = windows
         pasteService.setRemoteDevices(RemoteDeviceProfiles.make(mac: mac, windows: windows))
@@ -249,6 +251,7 @@ import VoxInkCore
 
     public func setRemotePasteTiming(_ timing: RemotePasteTiming) {
         guard canStart else { return }
+        if remotePasteTiming != timing { invalidateRemoteSetup() }
         remotePasteTiming = timing
         pasteService.setRemotePasteTiming(timing)
         preferences?.set(timing.rawValue, forKey: "remotePasteTiming")
@@ -256,6 +259,7 @@ import VoxInkCore
 
     public func setUUWindowsPaste(_ enabled: Bool) {
         guard canStart else { return }
+        if uuWindowsPaste != enabled { invalidateRemoteSetup() }
         uuWindowsPaste = enabled
         pasteService.setUUWindowsPaste(enabled)
         preferences?.set(enabled, forKey: "uuWindowsPaste")
@@ -267,6 +271,11 @@ import VoxInkCore
     @Published public private(set) var modelState: ModelState = .notLoaded
     @Published public private(set) var modelInstallationProgress: ModelInstallationProgress?
     @Published public private(set) var setupCompleted: Bool
+    @Published public private(set) var setupDeferred: Bool
+    @Published public private(set) var setupProgress: SetupProgress
+    @Published public private(set) var setupTrialCanConfirm = false
+    private var setupTrialKind: SetupStep?
+    public var isShowingSetup: Bool { !setupCompleted && !setupDeferred }
     @Published public private(set) var recovery: RecoveryAction?
     @Published public private(set) var retainedAudio: RetainedAudio?
     @Published public private(set) var recoveryStorageWarning: String?
@@ -309,8 +318,19 @@ import VoxInkCore
     public var canPasteAgain: Bool { canStart && lastTarget != nil && !transcript.isEmpty }
     public var canRetryAudio: Bool { canStart && retainedAudio.map { $0.expiresAt > Date() } == true }
     public var repasteTargetName: String? { lastTarget?.name }
+    public var inputReady: Bool { canRecord && pastePermissionGranted && shortcutAvailable }
     public var canCompleteSetup: Bool {
-        canRecord && pastePermissionGranted && shortcutAvailable
+        inputReady && setupProgress.verified && (!setupProgress.usage.needsRemote || !remoteApplications.isEmpty)
+    }
+    public var canAdvanceSetup: Bool {
+        guard canStart, !fixedTextTestArmed else { return false }
+        switch setupProgress.step {
+        case .usage: return true
+        case .preparation: return inputReady
+        case .remote: return !remoteApplications.isEmpty && setupProgress.clipboardSyncConfirmed
+        case .text: return setupProgress.textConfirmed
+        case .speech: return canCompleteSetup
+        }
     }
     public var canChangeShortcut: Bool { canStart && !shortcutIsHeld }
     public var shortcutInstruction: String {
@@ -362,6 +382,9 @@ import VoxInkCore
         self.polishingEnabled = preferences?.bool(forKey: "automaticPolishingEnabled") ?? false
         self.microphoneStatus = microphoneStatus
         self.setupCompleted = preferences?.bool(forKey: "setupCompleted") ?? false
+        self.setupDeferred = preferences?.bool(forKey: "setupDeferred") ?? false
+        self.setupProgress = preferences?.data(forKey: "setupProgress")
+            .flatMap { try? JSONDecoder().decode(SetupProgress.self, from: $0) } ?? .init()
         self.shortcutMode = preferences?.string(forKey: "shortcutMode").flatMap(ShortcutMode.init(rawValue:)) ?? .holdToTalk
         self.shortcutCombination = preferences?.string(forKey: "shortcutCombination").flatMap(ShortcutCombination.init(rawValue:)) ?? .optionSpace
         self.audioPreparer = audioPreparer
@@ -525,15 +548,122 @@ import VoxInkCore
         }
     }
 
+    private func saveSetupProgress() {
+        if let data = try? JSONEncoder().encode(setupProgress) {
+            preferences?.set(data, forKey: "setupProgress")
+        }
+        preferences?.set(setupCompleted, forKey: "setupCompleted")
+        preferences?.set(setupDeferred, forKey: "setupDeferred")
+    }
+
+    private func clearSetupTrial() {
+        fixedTextTestArmed = false
+        setupTrialCanConfirm = false
+        setupTrialKind = nil
+    }
+
+    public func setSetupUsage(_ usage: SetupUsage) {
+        guard canStart, usage != setupProgress.usage else { return }
+        clearSetupTrial()
+        setupProgress.usage = usage
+        setupProgress.step = .usage
+        setupProgress.clipboardSyncConfirmed = false
+        setupProgress.invalidateTrials()
+        saveSetupProgress()
+    }
+
+    public func confirmSetupClipboardSync(_ confirmed: Bool) {
+        guard canStart else { return }
+        setupProgress.clipboardSyncConfirmed = confirmed
+        if !confirmed { setupProgress.invalidateTrials(); clearSetupTrial() }
+        saveSetupProgress()
+    }
+
+    private func invalidateRemoteSetup() {
+        guard setupProgress.usage.needsRemote else { return }
+        setupProgress.clipboardSyncConfirmed = false
+        setupProgress.invalidateTrials()
+        clearSetupTrial()
+        if setupProgress.step == .text || setupProgress.step == .speech { setupProgress.step = .remote }
+        saveSetupProgress()
+    }
+
+    public func advanceSetup() {
+        guard canAdvanceSetup else { return }
+        if setupProgress.step == .speech { completeSetup(); return }
+        let steps = setupProgress.steps
+        guard let index = steps.firstIndex(of: setupProgress.step), steps.indices.contains(index + 1) else { return }
+        clearSetupTrial()
+        setupProgress.step = steps[index + 1]
+        saveSetupProgress()
+    }
+
+    public func previousSetupStep() {
+        guard canStart, let index = setupProgress.steps.firstIndex(of: setupProgress.step), index > 0 else { return }
+        clearSetupTrial()
+        setupProgress.step = setupProgress.steps[index - 1]
+        saveSetupProgress()
+    }
+
+    public func startSetupTextTest() {
+        guard isShowingSetup, setupProgress.step == .text, canStart, pastePermissionGranted, shortcutAvailable else { return }
+        clearSetupTrial()
+        setupProgress.invalidateTrials()
+        saveSetupProgress()
+        armFixedTextTest()
+    }
+
+    public func stopSetupTextTest() {
+        guard canStart else { return }
+        clearSetupTrial()
+        status = L("已关闭固定文字测试")
+    }
+
+    public func copySetupTestText() {
+        guard canStart else { return }
+        status = clipboardWriter(L("语落固定文字测试：中文、English、123。")) ? L("已复制") : L("复制失败，请重试")
+    }
+
+    public func confirmSetupTrial(_ appeared: Bool) {
+        guard canStart, !fixedTextTestArmed else { return }
+        guard !appeared || setupTrialCanConfirm else { return }
+        switch setupProgress.step {
+        case .text:
+            setupProgress.textConfirmed = appeared
+            setupProgress.speechConfirmed = false
+        case .speech: setupProgress.speechConfirmed = appeared
+        default: return
+        }
+        clearSetupTrial()
+        saveSetupProgress()
+    }
+
     public func completeSetup() {
         guard canCompleteSetup else { return }
+        clearSetupTrial()
         setupCompleted = true
-        preferences?.set(true, forKey: "setupCompleted")
+        setupDeferred = false
+        saveSetupProgress()
+    }
+
+    public func deferSetup() {
+        guard canStart else { return }
+        clearSetupTrial()
+        setupDeferred = true
+        saveSetupProgress()
     }
 
     public func showSetup() {
+        guard canStart else { return }
+        clearSetupTrial()
+        if setupCompleted {
+            setupProgress.step = .usage
+            setupProgress.clipboardSyncConfirmed = false
+            setupProgress.invalidateTrials()
+        }
         setupCompleted = false
-        preferences?.set(false, forKey: "setupCompleted")
+        setupDeferred = false
+        saveSetupProgress()
         refreshPermissions()
     }
 
@@ -600,7 +730,12 @@ import VoxInkCore
         }
     }
 
-    public func beginRecording() { holdRecording = false; beginRecording(target: nil) }
+    public func beginRecording() {
+        guard canStart else { return }
+        clearSetupTrial()
+        holdRecording = false
+        beginRecording(target: nil)
+    }
 
     private func beginRecording(target: PasteTarget?) {
         guard canStart else { return }
@@ -652,6 +787,7 @@ import VoxInkCore
 
     public func importAudio(_ url: URL) {
         guard canStart else { return }
+        clearSetupTrial()
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil; pasteOutcome = nil; recovery = nil
         let token = UUID(); generation = token
         phase = .loading; status = L("正在准备音频…")
@@ -807,6 +943,7 @@ import VoxInkCore
             await cancellationTask.value
             return
         }
+        clearSetupTrial()
         let preparingModel = phase == .loading && modelState == .loading
         let pendingModelOperation = preparingModel ? operation : nil
         generation = UUID()
@@ -866,6 +1003,7 @@ import VoxInkCore
     }
 
     private func fail(_ message: String, recovery: RecoveryAction) {
+        setupTrialKind = nil; setupTrialCanConfirm = false
         self.recovery = recovery; phase = .failed; status = message
     }
 
@@ -1020,6 +1158,7 @@ import VoxInkCore
     public func handleGlobalShortcut() {
         if phase == .recording { finishRecording(); return }
         guard canStart else { return }
+        setupTrialKind = nil; setupTrialCanConfirm = false
         guard let target = pasteService.captureTarget() else {
             fail(L("请先切换到目标应用的输入框，再按 \(shortcutCombination.title)"), recovery: .checkTarget)
             return
@@ -1029,6 +1168,17 @@ import VoxInkCore
         guard pastePermissionGranted else {
             fail(L("文字写入需要辅助功能权限，请在语落窗口点击“允许文字写入”"), recovery: .pastePermission)
             return
+        }
+        if isShowingSetup {
+            let isRemoteTarget = remoteApplications.contains { $0.bundleID == target.bundleID }
+            if setupProgress.usage.needsRemote == isRemoteTarget {
+                if fixedTextTestArmed && setupProgress.step == .text { setupTrialKind = .text }
+                else if !fixedTextTestArmed && setupProgress.step == .speech {
+                    setupTrialKind = .speech
+                    setupProgress.speechConfirmed = false
+                    saveSetupProgress()
+                }
+            }
         }
         if fixedTextTestArmed {
             fixedTextTestArmed = false
@@ -1049,6 +1199,7 @@ import VoxInkCore
 
     public func pasteAgain() {
         guard canPasteAgain, let target = lastTarget else { return }
+        clearSetupTrial()
         let token = UUID(); generation = token
         activeTarget = target; shortcutTargetName = target.name; pasteOutcome = nil; recovery = nil
         phase = .pasting; status = L("正在准备写入 \(target.name)…")
@@ -1077,6 +1228,10 @@ import VoxInkCore
         case .sentWithCleanupFailure: phase = .failed; recovery = .inspectClipboard
         default: phase = .ready; recovery = nil
         }
+        if outcome == .sent, isShowingSetup, setupTrialKind == setupProgress.step {
+            setupTrialCanConfirm = true
+        }
+        setupTrialKind = nil
         status = outcome.message
     }
 }

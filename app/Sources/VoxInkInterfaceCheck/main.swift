@@ -4,6 +4,7 @@ import VoxInkCore
 import VoxInkUI
 
 private enum Scenario: String, CaseIterable, Identifiable {
+    case setupRemote = "引导：远程配置", setupText = "引导：文字测试", setupSpeech = "引导：语音试用"
     case setup = "首次引导", ready = "日常就绪", loading = "模型加载"
     case recording = "录音", transcribing = "识别", pasting = "写入", cancelling = "取消"
     case result = "长结果", empty = "空识别", failure = "目标失效", cleanup = "剪贴板恢复失败"
@@ -151,9 +152,22 @@ private actor PreviewDictionary: UserDictionaryStorage {
             if scenario == .setup { return }
             store.warmUp()
             try await waitFor { store.modelState == .ready && store.canStart }
-            store.completeSetup()
+            if [.setupRemote, .setupText, .setupSpeech].contains(scenario) {
+                store.advanceSetup(); store.advanceSetup()
+                store.setRemoteApplication(.init(bundleID: "preview", name: "模拟远程工具"))
+                if scenario != .setupRemote {
+                    store.confirmSetupClipboardSync(true); store.advanceSetup()
+                }
+                if scenario == .setupSpeech {
+                    store.startSetupTextTest(); store.handleGlobalShortcut()
+                    try await waitFor { store.canStart }
+                    store.confirmSetupTrial(true); store.advanceSetup()
+                }
+                return
+            }
+            store.deferSetup()
             switch scenario {
-            case .setup, .ready: break
+            case .setup, .setupRemote, .setupText, .setupSpeech, .ready: break
             case .loading:
                 await service.configure(held: .loading); store.warmUp()
             case .modelFailure:

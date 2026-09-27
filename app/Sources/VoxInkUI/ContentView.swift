@@ -76,23 +76,28 @@ public struct ContentView: View {
                             WorkspaceHeading(title: L("本次结果"), subtitle: L("查看原文，整理表达，随时复制。"))
                             result.padding(22).writingSurface()
                         } else {
-                        if !store.setupCompleted { SetupView(store: store) }
+                        if store.isShowingSetup { SetupView(store: store).id("setup") }
                         else {
                             statusHero
                             Label(L("音频在本机处理，文字只留在当前会话。"), systemImage: "lock.shield")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        if !store.setupCompleted { recordingControls.padding(22).writingSurface().id("activity") }
+                        if store.isShowingSetup && store.setupProgress.step == .speech { recordingControls.padding(22).writingSurface().id("activity") }
                         retainedRecording
-                        result.padding(18).writingSurface().id("result")
+                        if !store.isShowingSetup || store.setupProgress.step == .speech || !store.transcript.isEmpty {
+                            result.padding(18).writingSurface().id("result")
+                        }
                         #if DEBUG
-                        diagnostics
+                        if !store.isShowingSetup { diagnostics }
                         #endif
                         }
                     }.workspacePageMargins()
                 }
+                .onChange(of: store.setupProgress.step) { _, _ in
+                    if store.isShowingSetup { scroll.scrollTo("setup", anchor: .top) }
+                }
                 .onChange(of: store.transcript) { _, text in
-                    if !text.isEmpty { scroll.scrollTo("activity", anchor: .top) }
+                    if !text.isEmpty { scroll.scrollTo(store.isShowingSetup ? "setup" : "activity", anchor: .top) }
                 }
                 .onChange(of: store.retainedAudio?.id) { _, id in
                     if id != nil { scroll.scrollTo("activity", anchor: .top) }
@@ -145,10 +150,10 @@ public struct ContentView: View {
             DisclosureGroup(isExpanded: $showingReadiness) {
                 dashboardReadiness.padding(.top, 10)
             } label: {
-                Label(store.canCompleteSetup ? L("权限与模型已就绪") : (store.canStart ? L("检查权限与模型") : L("权限与模型")),
-                      systemImage: store.canCompleteSetup ? "checkmark.shield" : (store.canStart ? "exclamationmark.circle" : "shield"))
+                Label(store.inputReady ? L("权限与模型已就绪") : (store.canStart ? L("检查权限与模型") : L("权限与模型")),
+                      systemImage: store.inputReady ? "checkmark.shield" : (store.canStart ? "exclamationmark.circle" : "shield"))
                     .font(.callout.weight(.medium))
-                    .foregroundStyle(store.canCompleteSetup ? theme.accent : (store.canStart ? .orange : .secondary))
+                    .foregroundStyle(store.inputReady ? theme.accent : (store.canStart ? .orange : .secondary))
             }
         }.padding(24).writingSurface().id("activity")
     }

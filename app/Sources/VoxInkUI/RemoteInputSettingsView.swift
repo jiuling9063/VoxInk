@@ -6,9 +6,15 @@ struct RemoteInputSettingsView: View {
     @ObservedObject var store: AppStore
     @State private var choosingApplication = false
     @State private var errorMessage: String?
+    @State private var expanded: Bool
+
+    init(store: AppStore, initiallyExpanded: Bool = false) {
+        self.store = store
+        _expanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
-        DisclosureGroup(L("远程工具")) {
+        DisclosureGroup(L("远程工具"), isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 16) {
                 Text(L("为远程工具选择粘贴方式，并在该工具中开启剪贴板同步。"))
                     .font(.caption).foregroundStyle(.secondary)
