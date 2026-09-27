@@ -19,9 +19,9 @@
 
 ## 60 秒了解语落
 
-[![观看语落 VoxInk 宣传片：本机说话，文字抵达远程 Windows 或 Mac](docs/images/voxink-intro/06-video-cover.png)](docs/media/voxink-product-promo.mp4)
+https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 
-[▶ 观看宣传片](docs/media/voxink-product-promo.mp4) · 中文 · 60 秒 · 1080p
+中文 · 60 秒 · 1080p
 
 从本机 Mac 开口，到远程 Windows / Mac 输入框落字，了解语落的核心使用场景。视频中的远程操作为流程示意，具体配置和兼容性以[安装与使用](docs/安装与使用.md#远程工具)为准。
 
