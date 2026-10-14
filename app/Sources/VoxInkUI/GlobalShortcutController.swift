@@ -42,7 +42,7 @@ struct ShortcutLatch {
             let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
             MainActor.assumeIsolated {
                 let controller = Unmanaged<GlobalShortcutController>.fromOpaque(context).takeUnretainedValue()
-                controller.receiveCarbon(id: key.id, pressed: pressed)
+                controller.handleShortcutEvent(id: key.id, pressed: pressed)
             }
             return noErr
         }, events.count, &events, context, &handler)
@@ -112,18 +112,14 @@ struct ShortcutLatch {
 
     private func makeRemoteMonitor() -> RemoteOptionSpaceMonitor {
         RemoteOptionSpaceMonitor(
-            pressed: { [weak self] in self?.receive(id: 1, pressed: true) },
-            released: { [weak self] in self?.receive(id: 1, pressed: false) },
+            pressed: { [weak self] in self?.handleShortcutEvent(id: 1, pressed: true) },
+            released: { [weak self] in self?.handleShortcutEvent(id: 1, pressed: false) },
             interrupted: { [weak self] in self?.latch.reset(); self?.cancel() })
     }
 
-    private func receiveCarbon(id: UInt32, pressed: Bool) {
-        if id == 1 && pressed && combination == .optionSpace && remoteSupport.isActive
-            && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.netease.uuremote" { return }
-        receive(id: id, pressed: pressed)
-    }
-
-    private func receive(id: UInt32, pressed: Bool) {
+    // An enabled remote monitor may miss a gesture. Deduplicate actual deliveries,
+    // rather than discarding Carbon's fallback based on monitor availability.
+    func handleShortcutEvent(id: UInt32, pressed: Bool) {
         if !pressed {
             if latch.release(id: id), id == 1 { released() }
             return

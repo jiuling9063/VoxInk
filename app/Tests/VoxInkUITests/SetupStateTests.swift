@@ -310,6 +310,50 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.setupProgress.step == .usage)
     }
 
+    @Test(arguments: SetupUsage.allCases)
+    func changingShortcutInvalidatesEarlierInputEvidence(usage: SetupUsage) async throws {
+        let paste = SetupPaste(); paste.outcome = .sent
+        let store = try await readyStore(paste)
+        store.setSetupUsage(usage)
+        reachTextStep(store, remote: usage.needsRemote)
+        try await sendTestText(store)
+        store.confirmSetupTrial(true)
+        store.advanceSetup()
+        #expect(store.setShortcutCombination(.controlOptionSpace))
+        #expect(!store.setupProgress.textConfirmed && !store.setupProgress.speechConfirmed)
+        #expect(!store.setupTrialCanConfirm && !store.canAdvanceSetup)
+        #expect(store.setupProgress.step == (usage.needsRemote ? .remote : .text))
+        #expect(store.setupBlockingHint != nil)
+        if usage.needsRemote { #expect(!store.setupProgress.clipboardSyncConfirmed) }
+    }
+
+    @Test func unchangedOrRejectedShortcutPreservesInputEvidence() async throws {
+        let paste = SetupPaste(); paste.outcome = .sent
+        let store = try await readyStore(paste)
+        reachTextStep(store, remote: true)
+        try await sendTestText(store)
+        store.confirmSetupTrial(true)
+        let current = store.shortcutCombination
+        #expect(store.setShortcutCombination(current))
+        #expect(store.setupProgress.textConfirmed)
+        store.configureShortcutRegistration { $0 == current }
+        #expect(!store.setShortcutCombination(.controlOptionSpace))
+        #expect(store.setupProgress.textConfirmed && store.canAdvanceSetup)
+        #expect(store.setupBlockingHint == nil)
+    }
+
+    @Test func changingGestureModeRequiresAnotherInputTest() async throws {
+        let paste = SetupPaste(); paste.outcome = .sent
+        let store = try await readyStore(paste)
+        reachTextStep(store, remote: false)
+        try await sendTestText(store)
+        store.confirmSetupTrial(true)
+        store.advanceSetup()
+        store.setShortcutMode(.toggle)
+        #expect(store.setupProgress.step == .text)
+        #expect(!store.setupProgress.textConfirmed && !store.canCompleteSetup)
+    }
+
     @Test func cancelledTrialAndWorkspaceRecordingDoNotCountAsInputVerification() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)

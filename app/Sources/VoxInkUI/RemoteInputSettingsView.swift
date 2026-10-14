@@ -28,6 +28,9 @@ struct RemoteInputSettingsView: View {
                         }
                         Button(L("移除此配置"), role: .destructive) { store.removeRemoteApplication(profile.bundleID) }
                             .font(.caption)
+                        if profile.bundleID == "com.netease.uuremote" {
+                            uuShortcutGuide
+                        }
                     }
                     Divider()
                 }
@@ -73,6 +76,20 @@ struct RemoteInputSettingsView: View {
             Button(L("好"), role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
     }
+    private var uuShortcutGuide: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("UU 远程：先设置本机快捷键")).font(.subheadline.bold())
+            Text(L("在运行语落的这台 Mac 上配置 UU；语落在本机录音，再把文字写入远端。"))
+            Text(L("1. 打开 UU 远程的“设置 → 键盘 → 仅控制端响应的快捷键”。"))
+            Text(L("2. 点击“添加控制端快捷键”，录入 \(store.shortcutCombination.title)，点击“创建”。已有相同组合可直接保留。"))
+            Text(L("3. 确认剪贴板可同步，再到远端输入框用 \(store.shortcutCombination.title) 连续试用 3 次，检查每次都能录音并写入。"))
+            Text(L("语落不会自动修改 UU 设置。更换语落快捷键后，请同步更新 UU 中的组合；若设置时触发录音，先退出语落，保存后再打开。"))
+                .foregroundStyle(.secondary)
+        }
+        .font(.callout).fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading).padding(12).writingSurface()
+    }
+
     private func deviceField(_ title: String, value: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)

@@ -332,6 +332,24 @@ import VoxInkCore
         case .speech: return canCompleteSetup
         }
     }
+    public var setupBlockingHint: String? {
+        if canAdvanceSetup { return nil }
+        if fixedTextTestArmed { return L("切换到目标输入框，按一次当前快捷键完成文字测试。") }
+        if !canStart { return status }
+        if setupProgress.step == .preparation || setupProgress.step == .speech {
+            if microphoneAuthorization != .authorized { return L("先允许麦克风，返回语落后会自动刷新状态。") }
+            if !pastePermissionGranted { return L("先允许文字写入，返回语落后会自动刷新状态。") }
+            if modelState != .ready { return L("等待本地模型就绪后继续；加载失败时可重新加载。") }
+            if !shortcutAvailable { return L("当前快捷键不可用，请重新选择或录入组合键。") }
+        }
+        switch setupProgress.step {
+        case .remote:
+            return remoteApplications.isEmpty ? L("先添加本机安装的远程工具。") : L("请先核对远程工具设置，并确认剪贴板可以同步。")
+        case .text, .speech:
+            return L("完成本步测试，确认目标输入框出现正确文字后继续。")
+        default: return nil
+        }
+    }
     public var canChangeShortcut: Bool { canStart && !shortcutIsHeld }
     public var shortcutInstruction: String {
         shortcutMode.instruction.replacingOccurrences(of: "⌥ Space", with: shortcutCombination.title)
@@ -585,6 +603,14 @@ import VoxInkCore
         setupProgress.invalidateTrials()
         clearSetupTrial()
         if setupProgress.step == .text || setupProgress.step == .speech { setupProgress.step = .remote }
+        saveSetupProgress()
+    }
+
+    private func invalidateShortcutSetup() {
+        if setupProgress.usage.needsRemote { invalidateRemoteSetup(); return }
+        setupProgress.invalidateTrials()
+        clearSetupTrial()
+        if setupProgress.step == .speech { setupProgress.step = .text }
         saveSetupProgress()
     }
 
@@ -1078,17 +1104,20 @@ import VoxInkCore
                 : L("\(combination.title) 不可用，请选择其他组合")
             return false
         }
+        let changed = shortcutCombination != combination
         shortcutCombination = combination
         shortcutAvailable = true
         shortcutStatus = L("\(combination.title) 已就绪")
         preferences?.set(combination.rawValue, forKey: "shortcutCombination")
+        if changed { invalidateShortcutSetup() }
         return true
     }
 
     public func setShortcutMode(_ mode: ShortcutMode) {
-        guard canChangeShortcut else { return }
+        guard canChangeShortcut, shortcutMode != mode else { return }
         shortcutMode = mode
         preferences?.set(mode.rawValue, forKey: "shortcutMode")
+        invalidateShortcutSetup()
     }
 
     public func handleShortcutPressed() {

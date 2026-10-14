@@ -6,6 +6,7 @@ struct ReadinessRow<Actions: View>: View {
     let title: String
     let detail: String
     let ready: Bool
+    var number: Int? = nil
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
@@ -28,6 +29,13 @@ struct ReadinessRow<Actions: View>: View {
                 .font(.title3).foregroundStyle(.tint)
                 .frame(width: 38, height: 38)
                 .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(alignment: .topLeading) {
+                    if let number {
+                        Text("\(number)").font(.caption2.bold()).foregroundStyle(.white)
+                            .frame(width: 18, height: 18).background(.tint, in: Circle())
+                            .offset(x: -6, y: -6)
+                    }
+                }
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
@@ -56,6 +64,17 @@ struct SetupView: View {
             ProgressView(value: Double(progress.steps.firstIndex(of: progress.step) ?? 0),
                          total: Double(progress.steps.count))
                 .accessibilityLabel(L("首次准备"))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 8) {
+                ForEach(Array(progress.steps.enumerated()), id: \.element.rawValue) { index, step in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("\(index + 1)").font(.caption.bold())
+                            .frame(width: 20, height: 20)
+                            .background(.tint.opacity(step == progress.step ? 0.18 : 0.05), in: Circle())
+                        Text(step.title).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    }.foregroundStyle(step == progress.step ? Color.primary : Color.secondary)
+                        .accessibilityAddTraits(step == progress.step ? .isSelected : [])
+                }
+            }
             Group {
                 switch progress.step {
                 case .usage: usage
@@ -70,10 +89,6 @@ struct SetupView: View {
             }
             if store.canCancel {
                 Button(L("取消")) { Task { await store.cancel() } }
-            }
-            ViewThatFits(in: .horizontal) {
-                HStack { navigation }
-                VStack(alignment: .leading, spacing: 12) { navigation }
             }
         }
         .onChange(of: progress.step) { _, _ in showingTroubleshooting = false }
@@ -96,7 +111,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(spacing: 0) {
                 ReadinessRow(icon: "mic", title: L("允许麦克风"), detail: L("\(store.microphoneAuthorization.title) · 仅在你开始录音后采集声音。"),
-                    ready: store.microphoneAuthorization == .authorized) {
+                    ready: store.microphoneAuthorization == .authorized, number: 1) {
                     if store.microphoneAuthorization == .notDetermined {
                         Button(L("允许麦克风")) { store.requestMicrophonePermission() }.disabled(!store.canStart)
                     } else if store.microphoneAuthorization != .authorized {
@@ -106,14 +121,14 @@ struct SetupView: View {
                 Divider()
                 ReadinessRow(icon: "cursorarrow.and.square.on.square.dashed", title: L("允许文字写入"),
                     detail: store.pastePermissionGranted ? L("已允许 · 识别后自动粘贴到目标输入框。") : L("需要辅助功能权限，用于把识别结果写入目标输入框。"),
-                    ready: store.pastePermissionGranted) {
+                    ready: store.pastePermissionGranted, number: 2) {
                     if !store.pastePermissionGranted {
                         Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
                     }
                 }
                 Divider()
                 ReadinessRow(icon: "internaldrive", title: L("准备本地模型"), detail: L("\(store.modelState.title) · 识别时音频不离开本机。"),
-                    ready: store.modelState == .ready) {
+                    ready: store.modelState == .ready, number: 3) {
                     if store.modelState == .loading { ProgressView().controlSize(.small) }
                     else if store.modelState == .needsDownload {
                         Button(L("下载或继续安装")) { store.installModel() }.disabled(!store.canStart)
@@ -146,11 +161,11 @@ struct SetupView: View {
                 .font(.callout)
             RemoteInputSettingsView(store: store, initiallyExpanded: true)
             Divider()
-            Text(L("连接远端后，在远程工具的设置或会话工具栏中开启“剪贴板同步”或“共享剪贴板”。如两端分别有开关，都需要检查。"))
+            Text(L("连接远端后，确认本机复制的文字能手动粘贴到远端。有“剪贴板同步”或“共享剪贴板”开关时，请在两端开启；默认同步的工具可直接验证。"))
                 .font(.callout).fixedSize(horizontal: false, vertical: true)
             Text(L("语落无法读取或代开这个开关；下一步会实际测试文字能否传过去。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Toggle(L("我已在远程工具中开启剪贴板同步"), isOn: Binding(
+            Toggle(L("我已确认本机复制的文字可以粘贴到远端"), isOn: Binding(
                 get: { progress.clipboardSyncConfirmed }, set: { store.confirmSetupClipboardSync($0) }))
                 .disabled(!store.canStart || store.remoteApplications.isEmpty)
         }.padding(18).writingSurface()
@@ -158,6 +173,20 @@ struct SetupView: View {
 
     private var trial: some View {
         VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("本次输入配置")).font(.subheadline.bold())
+                Label(progress.step == .text ? store.shortcutCombination.title : store.shortcutInstruction, systemImage: "command")
+                Label(progress.usage.title, systemImage: progress.usage.needsRemote ? "desktopcomputer" : "laptopcomputer")
+                if progress.usage.needsRemote {
+                    ForEach(store.remoteApplications) { profile in
+                        Text("\(profile.name) · \(profile.usesControl ? "Ctrl V · Windows / Linux" : "⌘ V · Mac")")
+                    }
+                    Text(L("剪贴板同步：已由你确认。UU 用户还需核对“仅控制端响应”的组合与上方一致。"))
+                        .foregroundStyle(.secondary)
+                }
+            }.font(.callout).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                .background(.tint.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
             Text(progress.usage.needsRemote
                  ? L("请在已添加的远程工具内，打开远端记事本或其他可清空的输入框。")
                  : L("请在本机文本编辑器中打开一个可清空的输入框。"))
@@ -223,13 +252,33 @@ struct SetupView: View {
         }.font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 
+}
+
+struct SetupNavigationView: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let hint = store.setupBlockingHint {
+                Text(hint).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack { navigation }
+                VStack(alignment: .leading, spacing: 10) { navigation }
+            }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial)
+            .overlay(alignment: .top) { Divider() }
+    }
+
     @ViewBuilder private var navigation: some View {
-        if progress.step != .usage {
+        if store.setupProgress.step != .usage {
             Button(L("上一步")) { store.previousSetupStep() }.disabled(!store.canStart)
         }
         Button(L("稍后设置")) { store.deferSetup() }.disabled(!store.canStart)
         Spacer(minLength: 0)
-        Button(progress.step == .speech ? L("完成引导") : L("下一步"), systemImage: "arrow.right") {
+        Button(store.setupProgress.step == .speech ? L("完成引导") : L("下一步"), systemImage: "arrow.right") {
             store.advanceSetup()
         }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canAdvanceSetup)
     }

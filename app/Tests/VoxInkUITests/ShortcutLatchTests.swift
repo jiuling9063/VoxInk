@@ -3,6 +3,46 @@ import Testing
 @testable import VoxInkUI
 
 struct ShortcutLatchTests {
+    @MainActor @Test func systemDeliveryStartsAndStopsWithoutARemoteMonitorDelivery() {
+        var starts = 0
+        var stops = 0
+        let controller = GlobalShortcutController(toggle: { starts += 1 }, released: { stops += 1 }, cancel: {})
+
+        controller.handleShortcutEvent(id: 1, pressed: true)
+        #expect(starts == 1 && stops == 0)
+        controller.handleShortcutEvent(id: 1, pressed: false)
+        #expect(starts == 1 && stops == 1)
+    }
+
+    @MainActor @Test func systemAndRemoteDeliveriesDoNotDuplicateRecordingAcrossConsecutiveGestures() {
+        var starts = 0
+        var stops = 0
+        let controller = GlobalShortcutController(toggle: { starts += 1 }, released: { stops += 1 }, cancel: {})
+
+        for gesture in 1...20 {
+            // Both event sources can report the same held shortcut.
+            controller.handleShortcutEvent(id: 1, pressed: true)
+            controller.handleShortcutEvent(id: 1, pressed: true)
+            #expect(starts == gesture && stops == gesture - 1)
+            controller.handleShortcutEvent(id: 1, pressed: false)
+            controller.handleShortcutEvent(id: 1, pressed: false)
+            #expect(starts == gesture && stops == gesture)
+        }
+    }
+
+    @MainActor @Test func cancellationDoesNotConsumeTheRecordingKeyRelease() {
+        var stops = 0
+        var cancellations = 0
+        let controller = GlobalShortcutController(toggle: {}, released: { stops += 1 }, cancel: { cancellations += 1 })
+
+        controller.handleShortcutEvent(id: 1, pressed: true)
+        controller.handleShortcutEvent(id: 2, pressed: true)
+        controller.handleShortcutEvent(id: 2, pressed: true)
+        controller.handleShortcutEvent(id: 2, pressed: false)
+        controller.handleShortcutEvent(id: 1, pressed: false)
+        #expect(cancellations == 1 && stops == 1)
+    }
+
     @Test func escapeCoversHeldAndPartiallyReleasedRecordingModifiers() {
         #expect(Set(ShortcutCombination.optionSpace.cancellationModifiers) == Set([0, UInt32(optionKey)]))
         #expect(Set(ShortcutCombination.optionShiftSpace.cancellationModifiers) ==

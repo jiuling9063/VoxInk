@@ -93,6 +93,9 @@ public struct ContentView: View {
                         }
                     }.workspacePageMargins()
                 }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if page == .input && store.isShowingSetup { SetupNavigationView(store: store) }
+                }
                 .onChange(of: store.setupProgress.step) { _, _ in
                     if store.isShowingSetup { scroll.scrollTo("setup", anchor: .top) }
                 }
