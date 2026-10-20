@@ -143,6 +143,18 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
     }
 }
 
+extension ModelServiceSettings {
+    func credentialSource(for connection: ModelConnection) -> ModelConnection? {
+        let provider = ModelProviderPreset.matching(connection)
+        guard provider != .custom else { return nil }
+        let candidates = connections.filter {
+            $0.id != connection.id && $0.purpose != connection.purpose
+                && ModelProviderPreset.matching($0) == provider
+        }
+        return candidates.first { selectedID(for: $0.purpose) == $0.id } ?? candidates.first
+    }
+}
+
 struct ModelConnectionDraft {
     var connection: ModelConnection
     private(set) var provider: ModelProviderPreset

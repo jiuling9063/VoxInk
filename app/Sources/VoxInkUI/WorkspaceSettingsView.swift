@@ -10,10 +10,10 @@ enum WorkspacePage: String {
         case .history: L("转录历史")
         case .statistics: L("统计")
         case .result: L("本次结果")
-        case .engine: L("转录引擎")
+        case .engine: L("语音与润色")
         case .shortcut: L("快捷键与输入")
         case .postprocess: L("文字与词典")
-        case .polish: L("润色模型")
+        case .polish: L("语音与润色")
         case .help: L("使用方法")
         }
     }
@@ -26,10 +26,9 @@ struct WorkspaceSettingsView: View {
 
     private var subtitle: String {
         switch page {
-        case .engine: L("选择本地模型或 API 连接，管理识别与系统权限。")
+        case .engine, .polish: L("先把语音变成文字，再按需润色。两项可分别选择本地或云端服务。")
         case .shortcut: L("选择顺手的快捷键，让文字落在需要的地方。")
         case .postprocess: L("整理文字，记住姓名与专有词的正确写法。")
-        case .polish: L("选择润色服务，始终保留识别原文。")
         case .help: L("从第一句话开始，了解语落的使用方式。")
         default: ""
         }
@@ -40,10 +39,10 @@ struct WorkspaceSettingsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 WorkspaceHeading(title: page.title, subtitle: subtitle)
                 switch page {
-                case .engine:
+                case .engine, .polish:
                     WorkspaceForm {
                         Section(L("语音识别")) { ModelSettingsContent(store: store) }
-                        Section(L("麦克风与文字写入")) { PermissionSettingsContent(store: store) }
+                        Section(L("文字润色")) { PolishSettingsContent(store: store) }
                     }
                 case .shortcut:
                     WorkspaceForm {
@@ -59,10 +58,6 @@ struct WorkspaceSettingsView: View {
                     } else {
                         Text(L("用户词典暂不可用，请重新打开语落后再试。"))
                             .font(.callout).foregroundStyle(.secondary)
-                    }
-                case .polish:
-                    WorkspaceForm {
-                        Section(L("文字润色")) { PolishSettingsContent(store: store) }
                     }
                 case .help:
                     WorkspaceHelpView(store: store, showDashboard: showDashboard)
@@ -103,15 +98,8 @@ struct PolishSettingsContent: View {
     @ObservedObject var store: AppStore
     private var installed: Bool { store.installedPolishModels.contains(store.polishDownloadTarget) }
     var body: some View {
-        Toggle(L("自动润色后写入"), isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
-            .disabled(!store.canStart || store.isInstallingPolishModel)
         ModelServicePicker(store: store, purpose: .polishing)
-        if store.modelServices.polishingID == nil { localSettings }
-        else {
-            Text(L("云端润色仅整理标点、停顿词和重复句段；内容检查未通过或请求失败时使用原文。等待上限由连接的超时设置决定。"))
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        DisclosureGroup(L("管理润色连接")) { ModelConnectionsContent(store: store, purpose: .polishing).padding(.top, 8) }
+        if store.polishingEnabled && store.modelServices.polishingID == nil { localSettings }
     }
 
     @ViewBuilder private var localSettings: some View {
@@ -228,8 +216,6 @@ struct ModelSettingsContent: View {
     var body: some View {
         ModelServicePicker(store: store, purpose: .transcription)
         if store.modelServices.transcriptionID == nil { localSettings }
-        else { Text(store.transcriptionStatus).font(.caption).foregroundStyle(.secondary) }
-        DisclosureGroup(L("管理转写连接")) { ModelConnectionsContent(store: store, purpose: .transcription).padding(.top, 8) }
     }
 
     @ViewBuilder private var localSettings: some View {

@@ -84,7 +84,7 @@ public enum CloudServiceError: Error, LocalizedError, Equatable {
         case .invalidURL: L("请填写 HTTPS 服务地址；本机 localhost 可使用 HTTP。地址不能包含密钥、查询参数或片段。")
         case .invalidConfiguration: L("请填写连接名称、模型 ID，并将超时设为 1–120 秒。")
         case .invalidParameters: L("额外参数必须是 JSON 对象，不能覆盖模型、消息、流式、工具或认证字段。")
-        case .missingConnection: L("所选连接不可用，请在模型服务中重新选择。")
+        case .missingConnection: L("所选服务不可用，请在“语音与润色”中重新选择。")
         case .keychain: L("无法访问钥匙串，请检查权限后重试。")
         case .busy: L("当前任务结束后才能修改连接。")
         case .connectionInUse: L("该连接正在使用，请先切换服务后删除或更改用途。")

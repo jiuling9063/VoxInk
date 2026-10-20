@@ -24,7 +24,9 @@ import Testing
         let window = try #require(controller.window)
         #expect(window.title == "语音工作台 — 语落 VoxInk")
         controller.navigation.page = .engine
-        #expect(window.title == "转录引擎 — 语落 VoxInk")
+        #expect(window.title == "语音与润色 — 语落 VoxInk")
+        controller.navigation.page = .polish
+        #expect(window.title == "语音与润色 — 语落 VoxInk")
         controller.navigation.page = .history
         #expect(window.title == "转录历史 — 语落 VoxInk")
         #expect(window.toolbar?.items.contains { $0.itemIdentifier.rawValue == "voxink-model" } == true)

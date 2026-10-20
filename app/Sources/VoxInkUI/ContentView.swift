@@ -44,10 +44,9 @@ public struct ContentView: View {
                         navigation(L("统计"), icon: "chart.bar", destination: .statistics)
                         Text(L("设置")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                             .padding(.horizontal, 12).padding(.top, 22)
-                        navigation(L("转录引擎"), icon: "waveform", destination: .engine)
+                        navigation(L("语音与润色"), icon: "waveform", destination: .engine)
                         navigation(L("快捷键与输入"), icon: "command", destination: .shortcut)
                         navigation(L("文字与词典"), icon: "text.badge.checkmark", destination: .postprocess)
-                        navigation(L("润色模型"), icon: "wand.and.stars", destination: .polish)
                         navigation(L("使用方法"), icon: "questionmark.circle", destination: .help)
                         if !store.setupCompleted {
                             Button { store.showSetup(); page = .input } label: {
@@ -59,10 +58,15 @@ public struct ContentView: View {
                     }.scrollIndicators(.hidden)
                     VStack(alignment: .leading, spacing: 6) {
                         Divider().padding(.bottom, 8)
-                        Label(usesAPI ? L("API 处理 · 自由选择") : L("本机处理 · 安心表达"), systemImage: usesAPI ? "network" : "lock.shield")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                        Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版"))")
-                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: usesAPI ? "network" : "lock.shield")
+                                .frame(width: 14)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(usesAPI ? L("API 处理 · 自由选择") : L("本机处理 · 安心表达"))
+                                Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版"))")
+                                    .font(.system(size: 10, design: .monospaced))
+                            }
+                        }.font(.system(size: 10)).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20).padding(.bottom, 20).padding(.top, 12)
                     }.frame(width: 192).workspaceChrome()

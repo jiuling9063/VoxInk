@@ -140,8 +140,8 @@ private struct ToolbarModelStatus: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(L("查看转录引擎与模型状态"))
+        .help(L("查看识别与润色设置"))
         .accessibilityLabel(store.transcriptionStatus)
-        .accessibilityHint(L("打开转录引擎设置"))
+        .accessibilityHint(L("打开语音与润色设置"))
     }
 }

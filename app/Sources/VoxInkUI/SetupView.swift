@@ -110,7 +110,6 @@ struct SetupView: View {
     private var preparation: some View {
         VStack(alignment: .leading, spacing: 14) {
             ModelServicePicker(store: store, purpose: .transcription)
-            DisclosureGroup(L("管理转写连接")) { ModelConnectionsContent(store: store, purpose: .transcription) }
             VStack(spacing: 0) {
                 ReadinessRow(icon: "mic", title: L("允许麦克风"), detail: L("\(store.microphoneAuthorization.title) · 仅在你开始录音后采集声音。"),
                     ready: store.microphoneAuthorization == .authorized, number: 1) {

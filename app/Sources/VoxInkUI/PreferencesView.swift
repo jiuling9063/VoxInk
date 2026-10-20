@@ -28,8 +28,8 @@ public struct PreferencesView: View {
             }
             Picker(L("设置分类"), selection: $tab) {
                 Text(L("通用")).tag(0)
-                Text(L("权限与模型")).tag(1)
-                Text(L("模型服务")).tag(3)
+                Text(L("系统权限")).tag(1)
+                Text(L("语音与润色")).tag(3)
                 if store.dictionary != nil { Text(L("用户词典")).tag(2) }
             }.pickerStyle(.segmented).labelsHidden()
             ReadinessSummary(store: store)
@@ -57,7 +57,6 @@ public struct PreferencesView: View {
                 Section(L("语言")) { LanguageSettingsContent(store: store) }
                 Section(L("语音输入")) { InputSettingsContent(store: store) }
                 Section(L("文字处理")) { TextProcessingContent(store: store) }
-                Section(L("文字润色")) { PolishSettingsContent(store: store) }
                 Section(L("隐私与帮助")) {
                     PrivacySettingsContent()
                     Button(L("查看使用引导")) { store.showSetup(); showGuide() }
@@ -66,13 +65,11 @@ public struct PreferencesView: View {
             } else if tab == 1 {
             WorkspaceForm {
                 Section(L("系统权限")) { PermissionSettingsContent(store: store) }
-                Section(L("本地模型")) { ModelSettingsContent(store: store) }
             }
             } else if tab == 3 {
                 WorkspaceForm {
-                    Section(L("语音识别")) { ModelServicePicker(store: store, purpose: .transcription) }
-                    Section(L("文字润色")) { ModelServicePicker(store: store, purpose: .polishing) }
-                    Section(L("模型连接")) { ModelConnectionsContent(store: store) }
+                    Section(L("语音识别")) { ModelSettingsContent(store: store) }
+                    Section(L("文字润色")) { PolishSettingsContent(store: store) }
                 }
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)

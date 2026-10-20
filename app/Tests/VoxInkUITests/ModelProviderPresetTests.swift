@@ -3,6 +3,19 @@ import Testing
 @testable import VoxInkUI
 
 struct ModelProviderPresetTests {
+    @Test func credentialReusePrefersSelectedProviderAccountAndExcludesCustomHosts() {
+        var settings = ModelServiceSettings()
+        let first = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        let selected = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        settings.connections = [first, selected]
+        settings.transcriptionID = selected.id
+        var target = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        #expect(settings.credentialSource(for: target)?.id == selected.id)
+        target.baseURL += "/different-account"
+        #expect(settings.credentialSource(for: target) == nil)
+        #expect(settings.credentialSource(for: ModelProviderPreset.openAI.makeConnection(for: .polishing)) == nil)
+    }
+
     @Test func audioCatalogOnlyIncludesCompatibleProviders() {
         #expect(ModelProviderPreset.available(for: .transcription) == [.siliconFlow, .openAI, .groq, .custom])
         #expect(ModelProviderPreset.available(for: .polishing).count == 11)

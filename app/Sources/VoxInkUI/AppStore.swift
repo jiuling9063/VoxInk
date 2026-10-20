@@ -14,6 +14,7 @@ import VoxInkCore
     @Published public private(set) var isPolishing = false
     @Published public private(set) var modelServices: ModelServiceSettings
     @Published public private(set) var connectionTestMessage = ""
+    @Published public private(set) var connectionTestConnectionID: UUID?
     private let modelCredentials: any ModelCredentialStorage
     private let modelTransport: any ModelHTTPTransport
     private let cloudSpeechDetector: @Sendable (URL) async throws -> Bool
@@ -346,7 +347,7 @@ import VoxInkCore
             if microphoneAuthorization != .authorized { return L("先允许麦克风，返回语落后会自动刷新状态。") }
             if !pastePermissionGranted { return L("先允许文字写入，返回语落后会自动刷新状态。") }
             if !transcriptionReady {
-                return modelServices.transcriptionID == nil ? L("等待本地模型就绪后继续；加载失败时可重新加载。") : L("所选连接不可用，请在模型服务中重新选择。")
+                return modelServices.transcriptionID == nil ? L("等待本地模型就绪后继续；加载失败时可重新加载。") : L("所选服务不可用，请在“语音与润色”中重新选择。")
             }
             if !shortcutAvailable { return L("当前快捷键不可用，请重新选择或录入组合键。") }
         }
@@ -396,7 +397,7 @@ import VoxInkCore
             do { self.modelServices = try JSONDecoder().decode(ModelServiceSettings.self, from: saved) }
             catch {
                 self.modelServices = .init()
-                self.connectionTestMessage = L("连接配置无法读取，已恢复本地模式。请重新配置模型服务。")
+                self.connectionTestMessage = L("服务配置无法读取，已恢复本地模式。请在“语音与润色”中重新设置。")
             }
         } else { self.modelServices = .init() }
         self.polishingService = polishingService
@@ -1301,6 +1302,31 @@ import VoxInkCore
 
     public var canEditModelServices: Bool { canStart && !isInstallingPolishModel && !isShuttingDown }
 
+    func saveAndSelectModelConnection(_ connection: ModelConnection, apiKey: String?,
+                                      clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) throws {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        try connection.validate()
+        var key = apiKey
+        if let sourceID {
+            // Only exact built-in provider endpoints can share credentials across purposes.
+            let provider = ModelProviderPreset.matching(connection)
+            guard !clearKey, apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
+                  provider != .custom,
+                  let source = modelServices.connections.first(where: { $0.id == sourceID }),
+                  source.purpose != connection.purpose,
+                  ModelProviderPreset.matching(source) == provider else {
+                throw CloudServiceError.invalidConfiguration
+            }
+            guard let stored = try modelCredentials.read(sourceID), !stored.isEmpty else {
+                throw CloudServiceError.keychain
+            }
+            key = stored
+        }
+        try saveModelConnection(connection, apiKey: key, clearKey: clearKey)
+        try selectModelService(connection.id, for: connection.purpose)
+        if connection.purpose == .polishing { setPolishingEnabled(true) }
+    }
+
     public func saveModelConnection(_ connection: ModelConnection, apiKey: String?, clearKey: Bool = false) throws {
         guard canEditModelServices else { throw CloudServiceError.busy }
         var connection = connection
@@ -1327,16 +1353,29 @@ import VoxInkCore
         connectionTestMessage = ""
     }
 
-    public func deleteModelConnection(_ id: UUID) throws {
+    public func deleteModelConnection(_ id: UUID, useLocalIfSelected: Bool = false) throws {
         guard canEditModelServices else { throw CloudServiceError.busy }
-        guard modelServices.transcriptionID != id, modelServices.polishingID != id else { throw CloudServiceError.connectionInUse }
+        let selectedForTranscription = modelServices.transcriptionID == id
+        let selectedForPolishing = modelServices.polishingID == id
+        guard useLocalIfSelected || (!selectedForTranscription && !selectedForPolishing) else {
+            throw CloudServiceError.connectionInUse
+        }
         var next = modelServices
+        if selectedForTranscription { next.transcriptionID = nil }
+        if selectedForPolishing { next.polishingID = nil }
         next.connections.removeAll { $0.id == id }
         let encoded = try JSONEncoder().encode(next)
         try modelCredentials.write(nil, for: id)
         preferences?.set(encoded, forKey: "modelServices.v1")
         modelServices = next
         connectionTestMessage = ""
+        if selectedForTranscription {
+            clearSetupTrial()
+            setupProgress.speechConfirmed = false
+            saveSetupProgress()
+            warmUp()
+        }
+        if selectedForPolishing { schedulePolishWarmup() }
     }
 
     public func selectModelService(_ id: UUID?, for purpose: ModelServicePurpose) throws {
@@ -1371,6 +1410,7 @@ import VoxInkCore
 
     public func testModelConnection(_ id: UUID, audioURL: URL? = nil) {
         guard canEditModelServices, let connection = modelServices.connections.first(where: { $0.id == id }) else { return }
+        connectionTestConnectionID = id
         let token = UUID(); generation = token
         phase = .loading; status = L("正在测试连接…")
         connectionTestMessage = status

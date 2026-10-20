@@ -199,6 +199,82 @@ struct CloudModelClientTests {
 }
 
 @MainActor struct ModelConnectionSettingsTests {
+    @Test func saveAndUseReusesProviderKeyWithoutChangingOtherPurpose() throws {
+        let keys = MemoryModelCredentials()
+        let store = AppStore(preferences: nil, modelCredentials: keys)
+        let speech = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        let polish = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        try store.saveAndSelectModelConnection(speech, apiKey: "fixture-shared-key")
+        try store.saveAndSelectModelConnection(polish, apiKey: "", reuseKeyFrom: speech.id)
+        #expect(store.modelServices.transcriptionID == speech.id)
+        #expect(store.modelServices.polishingID == polish.id)
+        #expect(store.polishingEnabled)
+        #expect(try keys.read(polish.id) == "fixture-shared-key")
+    }
+
+    @Test func failedSaveAndUseKeepsOriginalSelectionAndCredentials() throws {
+        let keys = MemoryModelCredentials()
+        let store = AppStore(preferences: nil, modelCredentials: keys)
+        let original = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        try store.saveAndSelectModelConnection(original, apiKey: "fixture-original")
+        store.setPolishingEnabled(false)
+        let next = ModelProviderPreset.openAI.makeConnection(for: .polishing)
+        keys.failWrites = true
+        #expect(throws: CloudServiceError.keychain) {
+            try store.saveAndSelectModelConnection(next, apiKey: "fixture-new")
+        }
+        #expect(store.modelServices.polishingID == original.id)
+        #expect(!store.polishingEnabled)
+        #expect(store.modelServices.connections == [original])
+        #expect(try keys.read(original.id) == "fixture-original")
+    }
+
+    @Test func keyReuseRejectsOtherProvidersAndChangedEndpoints() throws {
+        let keys = MemoryModelCredentials()
+        let store = AppStore(preferences: nil, modelCredentials: keys)
+        let source = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        try store.saveAndSelectModelConnection(source, apiKey: "fixture-original")
+        var changed = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        changed.baseURL = "https://api.siliconflow.cn.untrusted.example/v1"
+        for target in [changed, ModelProviderPreset.openAI.makeConnection(for: .polishing)] {
+            #expect(throws: CloudServiceError.invalidConfiguration) {
+                try store.saveAndSelectModelConnection(target, apiKey: "", reuseKeyFrom: source.id)
+            }
+            #expect(try keys.read(target.id) == nil)
+        }
+        #expect(store.modelServices.polishingID == nil)
+        #expect(store.modelServices.connections == [source])
+    }
+
+    @Test func missingSharedKeyDoesNotSaveOrActivateConnection() throws {
+        let store = AppStore(preferences: nil, modelCredentials: MemoryModelCredentials())
+        let speech = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        try store.saveModelConnection(speech, apiKey: nil)
+        let polish = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        #expect(throws: CloudServiceError.keychain) {
+            try store.saveAndSelectModelConnection(polish, apiKey: "", reuseKeyFrom: speech.id)
+        }
+        #expect(store.modelServices.polishingID == nil)
+        #expect(store.modelServices.connections == [speech])
+    }
+
+    @Test func confirmedRemovalUsesLocalAndKeychainFailurePreservesSelection() throws {
+        let keys = MemoryModelCredentials()
+        let store = AppStore(preferences: nil, modelCredentials: keys)
+        let polish = ModelProviderPreset.openAI.makeConnection(for: .polishing)
+        try store.saveAndSelectModelConnection(polish, apiKey: "fixture")
+        keys.failWrites = true
+        #expect(throws: CloudServiceError.keychain) {
+            try store.deleteModelConnection(polish.id, useLocalIfSelected: true)
+        }
+        #expect(store.modelServices.polishingID == polish.id)
+        keys.failWrites = false
+        try store.deleteModelConnection(polish.id, useLocalIfSelected: true)
+        #expect(store.modelServices.polishingID == nil)
+        #expect(store.modelServices.connections.isEmpty)
+        #expect(try keys.read(polish.id) == nil)
+    }
+
     @Test func persistsIndependentSelectionsWithoutCredentials() throws {
         let suite = "VoxInk.CloudTests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
