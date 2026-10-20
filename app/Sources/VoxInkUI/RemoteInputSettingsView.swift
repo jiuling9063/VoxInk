@@ -93,7 +93,7 @@ struct RemoteInputSettingsView: View {
     private func deviceField(_ title: String, value: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            TextField(L("完整设备名"), text: value).textFieldStyle(.roundedBorder)
+            WorkspaceTextField(title: title, text: value, prompt: L("完整设备名"))
                 .accessibilityLabel(title)
         }
     }

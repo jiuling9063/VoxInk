@@ -7,7 +7,7 @@ struct DictionaryPreferencesView: View {
     let canEdit: Bool
     @Environment(\.colorScheme) private var scheme
     @FocusState private var focusedField: EditorField?
-    private enum EditorField { case source, replacement }
+    private enum EditorField { case source, replacement, preview }
     @State private var editing = false
     @State private var editingID: UUID?
     @State private var source = ""
@@ -77,6 +77,8 @@ struct DictionaryPreferencesView: View {
             }
             Section(L("文字预览")) {
                 TextField(L("试写一句包含纠正词的话"), text: $testText, axis: .vertical).lineLimit(1...3)
+                    .focused($focusedField, equals: .preview)
+                    .modifier(WorkspaceInputSurface(focused: focusedField == .preview))
                     .onChange(of: testText) { _, text in
                         if text.count > 2000 { testText = String(text.prefix(2000)) }
                     }
@@ -124,11 +126,13 @@ struct DictionaryPreferencesView: View {
             WorkspaceHeading(title: editingID == nil ? L("添加纠正词") : L("编辑纠正词"),
                              subtitle: L("为常用词设置准确的写法。"))
             Text(L("识别词")).font(.caption).foregroundStyle(.secondary)
-            TextField(L("识别词，例如：雨落"), text: $source).textFieldStyle(.roundedBorder)
+            TextField(L("识别词，例如：雨落"), text: $source)
                 .focused($focusedField, equals: .source)
+                .modifier(WorkspaceInputSurface(focused: focusedField == .source))
             Text(L("正确写法")).font(.caption).foregroundStyle(.secondary)
-            TextField(L("正确写法，例如：语落"), text: $replacement).textFieldStyle(.roundedBorder)
+            TextField(L("正确写法，例如：语落"), text: $replacement)
                 .focused($focusedField, equals: .replacement)
+                .modifier(WorkspaceInputSurface(focused: focusedField == .replacement))
             if let candidate {
                 Text(L("保存为：\(candidate.source) → \(candidate.replacement)")).font(.callout).foregroundStyle(.secondary)
             } else if !source.isEmpty || !replacement.isEmpty {

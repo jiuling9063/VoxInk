@@ -1,2 +1,2 @@
 "CFBundleDisplayName" = "VoxInk";
-"NSMicrophoneUsageDescription" = "VoxInk는 마이크로 음성을 녹음하고 이 Mac에서 텍스트로 변환합니다. 녹음을 시작한 후에만 소리를 수집합니다.";
+"NSMicrophoneUsageDescription" = "녹음을 시작한 후에만 음성을 수집하며, 설정에 따라 이 Mac 또는 선택한 API 서비스에서 텍스트로 변환합니다.";

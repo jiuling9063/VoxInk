@@ -1,2 +1,2 @@
 "CFBundleDisplayName" = "VoxInk";
-"NSMicrophoneUsageDescription" = "VoxInkはマイクで音声を録音し、このMac内で文字に変換します。録音を開始した後だけ音声を収集します。";
+"NSMicrophoneUsageDescription" = "録音を開始すると音声を収集し、設定に応じてこの Mac または選択した API サービスで文字に変換します。";

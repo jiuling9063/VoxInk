@@ -29,6 +29,7 @@ public struct PreferencesView: View {
             Picker(L("设置分类"), selection: $tab) {
                 Text(L("通用")).tag(0)
                 Text(L("权限与模型")).tag(1)
+                Text(L("模型服务")).tag(3)
                 if store.dictionary != nil { Text(L("用户词典")).tag(2) }
             }.pickerStyle(.segmented).labelsHidden()
             ReadinessSummary(store: store)
@@ -67,6 +68,12 @@ public struct PreferencesView: View {
                 Section(L("系统权限")) { PermissionSettingsContent(store: store) }
                 Section(L("本地模型")) { ModelSettingsContent(store: store) }
             }
+            } else if tab == 3 {
+                WorkspaceForm {
+                    Section(L("语音识别")) { ModelServicePicker(store: store, purpose: .transcription) }
+                    Section(L("文字润色")) { ModelServicePicker(store: store, purpose: .polishing) }
+                    Section(L("模型连接")) { ModelConnectionsContent(store: store) }
+                }
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
             }

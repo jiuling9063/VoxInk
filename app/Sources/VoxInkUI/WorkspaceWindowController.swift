@@ -81,7 +81,7 @@ import SwiftUI
             item.view = pageLabel
             pageLabel.widthAnchor.constraint(equalToConstant: 150).isActive = true
         case .voxinkModel:
-            item.label = L("本地模型状态")
+            item.label = L("语音识别")
             item.visibilityPriority = .high
             item.view = NSHostingView(rootView: ToolbarModelStatus(store: store) { [weak self] in
                 self?.navigation.page = .engine
@@ -125,23 +125,23 @@ private struct ToolbarModelStatus: View {
     var body: some View {
         Button(action: showModel) {
             HStack(spacing: 6) {
-                if store.modelState == .loading {
+                if store.modelServices.transcriptionID == nil && store.modelState == .loading {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: store.modelState == .ready ? "circle.fill" : "exclamationmark.circle")
-                        .font(.system(size: store.modelState == .ready ? 6 : 12, weight: .medium))
+                    Image(systemName: store.transcriptionReady ? "circle.fill" : "exclamationmark.circle")
+                        .font(.system(size: store.transcriptionReady ? 6 : 12, weight: .medium))
                 }
-                Text(store.modelState == .ready ? L("本机就绪") : store.modelState.title)
+                Text(store.transcriptionStatus)
                     .font(.system(size: 12, weight: .medium)).lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(store.modelState == .ready ? VoxInkTheme(scheme: scheme).accent : (store.modelState == .failed ? Color.orange : .secondary))
+            .foregroundStyle(store.transcriptionReady ? VoxInkTheme(scheme: scheme).accent : .secondary)
             .padding(.horizontal, 8).frame(height: 28)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(L("查看转录引擎与模型状态"))
-        .accessibilityLabel(L("本地模型：\(store.modelState.title)"))
+        .accessibilityLabel(store.transcriptionStatus)
         .accessibilityHint(L("打开转录引擎设置"))
     }
 }

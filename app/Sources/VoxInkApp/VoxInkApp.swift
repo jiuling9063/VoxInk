@@ -101,7 +101,7 @@ import VoxInkCore
     @StateObject private var store = ApplicationState.store
     var body: some Scene {
         MenuBarExtra(L("语落 VoxInk"), systemImage: "waveform") {
-            Text(store.phase == .failed ? L("需要处理 · 打开语落查看") : store.modelState.title)
+            Text(store.phase == .failed ? L("需要处理 · 打开语落查看") : store.transcriptionStatus)
             Button(L("打开语落")) { delegate.showMainWindow() }
             Button(store.phase == .recording ? L("停止并识别") : L("开始录音")) {
                 delegate.showMainWindow()

@@ -109,6 +109,8 @@ struct SetupView: View {
 
     private var preparation: some View {
         VStack(alignment: .leading, spacing: 14) {
+            ModelServicePicker(store: store, purpose: .transcription)
+            DisclosureGroup(L("管理转写连接")) { ModelConnectionsContent(store: store, purpose: .transcription) }
             VStack(spacing: 0) {
                 ReadinessRow(icon: "mic", title: L("允许麦克风"), detail: L("\(store.microphoneAuthorization.title) · 仅在你开始录音后采集声音。"),
                     ready: store.microphoneAuthorization == .authorized, number: 1) {
@@ -127,9 +129,10 @@ struct SetupView: View {
                     }
                 }
                 Divider()
-                ReadinessRow(icon: "internaldrive", title: L("准备本地模型"), detail: L("\(store.modelState.title) · 识别时音频不离开本机。"),
-                    ready: store.modelState == .ready, number: 3) {
-                    if store.modelState == .loading { ProgressView().controlSize(.small) }
+                ReadinessRow(icon: "internaldrive", title: L("语音识别"), detail: store.transcriptionStatus,
+                    ready: store.transcriptionReady, number: 3) {
+                    if store.modelServices.transcriptionID != nil { EmptyView() }
+                    else if store.modelState == .loading { ProgressView().controlSize(.small) }
                     else if store.modelState == .needsDownload {
                         Button(L("下载或继续安装")) { store.installModel() }.disabled(!store.canStart)
                     }
@@ -144,8 +147,8 @@ struct SetupView: View {
                 ProgressView(progress.title, value: progress.fraction)
                     .accessibilityLabel(L("模型准备进度"))
             }
-            if store.modelState == .needsDownload {
-                Text(L("首次下载约 713 MB，之后离线使用。仅模型下载会访问网络，录音不会上传。"))
+            if store.modelServices.transcriptionID == nil && store.modelState == .needsDownload {
+                Text(L("识别在本机完成。首次下载约 713 MB，支持中断后继续。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             ShortcutSettingsControl(store: store)

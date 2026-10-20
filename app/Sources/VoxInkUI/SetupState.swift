@@ -87,10 +87,11 @@ public enum ModelState: Equatable, Sendable {
 }
 
 public enum RecoveryAction: Equatable, Sendable {
-    case microphone, reloadModel, recordAgain, chooseAudio, checkTarget, pastePermission, inspectClipboard, installModel, checkInstallation
+    case microphone, reloadModel, recordAgain, chooseAudio, checkTarget, pastePermission, inspectClipboard, installModel, checkInstallation, configureService
 
     public var guidance: String {
         switch self {
+        case .configureService: L("在转录引擎的模型服务中检查连接，或切换本地模式后重试。")
         case .microphone: L("在系统设置的「隐私与安全」中允许麦克风，然后重新录音。")
         case .reloadModel: L("重新加载本地模型后再试。已有识别文字会保留。")
         case .installModel: L("首次下载约 713 MB，完成后可离线使用。中断后可继续，校验通过才会加载。")

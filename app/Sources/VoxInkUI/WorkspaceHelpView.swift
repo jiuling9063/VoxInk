@@ -33,7 +33,7 @@ struct WorkspaceHelpView: View {
             WorkspaceForm {
                 Section(L("遇到问题")) {
                     DisclosureGroup(L("第一次使用，要准备什么？")) {
-                        Text(L("允许麦克风并下载识别模型。自动写入还需要辅助功能权限和可用的快捷键，可通过上方“首次准备”逐项完成。"))
+                        Text(L("允许麦克风，并选择本地模型或配置 API 连接。自动写入还需要辅助功能权限和可用的快捷键，可通过上方“首次准备”逐项完成。"))
                             .helpText()
                     }
                     DisclosureGroup(L("文字没有写入怎么办？")) {

@@ -7,6 +7,7 @@ APP_BUILD="${VOXINK_APP_BUILD:-/tmp/voxink-app-xcode-beta}"
 WORKER_BUILD="${VOXINK_WORKER_BUILD:-/tmp/voxink-qwen-xcode-beta}"
 APP_CONFIGURATION="${VOXINK_APP_CONFIGURATION:-debug}"
 SIGN_IDENTITY="${VOXINK_SIGN_IDENTITY:--}"
+RUNTIME_APP="${VOXINK_REUSE_RUNTIME_APP:-}"
 PROJECT_KEY="$(printf '%s' "$ROOT" | /usr/bin/shasum -a 256 | /usr/bin/cut -c1-16)"
 APP_DEST="$HOME/Library/Caches/VoxInkDevelopment/$PROJECT_KEY/VoxInk.app"
 case "${1:-}" in
@@ -17,6 +18,19 @@ case "$APP_CONFIGURATION" in
   debug|release) ;;
   *) echo "VOXINK_APP_CONFIGURATION must be debug or release." >&2; exit 64 ;;
 esac
+if [[ -n "$RUNTIME_APP" ]]; then
+  if [[ "$APP_CONFIGURATION" != debug || "$SIGN_IDENTITY" != - || "${1:-}" == --package-only ]]; then
+    echo "Runtime reuse is only available for local ad-hoc debug builds, never release packages." >&2
+    exit 64
+  fi
+  /usr/bin/codesign --verify --deep --strict "$RUNTIME_APP"
+  for runtime_file in Worker/voxink-qwen-smoke Worker/mlx.metallib PolishRuntime/voxink-runtime.json; do
+    test -f "$RUNTIME_APP/Contents/Resources/$runtime_file"
+  done
+  /usr/bin/cmp "$ROOT/benchmark/model-manifest.json" "$RUNTIME_APP/Contents/Resources/model-manifest.json"
+  /usr/bin/cmp "$ROOT/benchmark/polish-requirements.lock" "$RUNTIME_APP/Contents/Resources/PolishRuntime/requirements.lock"
+  echo "Local debug runtime source: $RUNTIME_APP"
+fi
 if [[ "$SIGN_IDENTITY" != - ]]; then
   if [[ ! "$SIGN_IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
     echo "Set VOXINK_SIGN_IDENTITY to the 40-character certificate hash from security find-identity -v -p codesigning." >&2
@@ -51,10 +65,14 @@ for pid in ${stopped_pids[@]+"${stopped_pids[@]}"}; do
 done
 fi
 /usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" -c "$APP_CONFIGURATION" --product VoxInk
-/usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" \
-  -c release --product voxink-qwen-smoke --disable-automatic-resolution
 APP_BIN="$(/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" -c "$APP_CONFIGURATION" --show-bin-path)"
-WORKER_BIN="$(/usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" -c release --show-bin-path)"
+if [[ -n "$RUNTIME_APP" ]]; then
+  WORKER_BIN="$RUNTIME_APP/Contents/Resources/Worker"
+else
+  /usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" \
+    -c release --product voxink-qwen-smoke --disable-automatic-resolution
+  WORKER_BIN="$(/usr/bin/swift build --package-path "$ROOT/benchmark/qwen-smoke" --scratch-path "$WORKER_BUILD" -c release --show-bin-path)"
+fi
 
 # Stage outside the synced workspace to avoid inherited resource-fork attributes.
 STAGE="$(mktemp -d /tmp/voxink-stage.XXXXXX)"
@@ -79,8 +97,12 @@ for resource in "$WORKER_BIN/"*.bundle; do
   /usr/bin/ditto --norsrc --noextattr "$resource" "$BUNDLE/Contents/Resources/Worker/$(basename "$resource")"
 done
 # MLX explicitly searches for a colocated mlx.metallib before bundle fallbacks.
-cp "$WORKER_BIN/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
-  "$BUNDLE/Contents/Resources/Worker/mlx.metallib"
+if [[ -n "$RUNTIME_APP" ]]; then
+  cp "$WORKER_BIN/mlx.metallib" "$BUNDLE/Contents/Resources/Worker/mlx.metallib"
+else
+  cp "$WORKER_BIN/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
+    "$BUNDLE/Contents/Resources/Worker/mlx.metallib"
+fi
 cp "$ROOT/benchmark/model-manifest.json" "$BUNDLE/Contents/Resources/"
 cp "$ROOT/app/ThirdPartyNotices.txt" "$BUNDLE/Contents/Resources/"
 for localization in "$ROOT/app/Localization/"*.lproj; do
@@ -99,19 +121,23 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>语落 VoxInk</string>
 <key>CFBundleIconFile</key><string>VoxInk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.14</string>
-<key>CFBundleVersion</key><string>16</string>
+<key>CFBundleShortVersionString</key><string>0.1.15</string>
+<key>CFBundleVersion</key><string>17</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSMicrophoneUsageDescription</key><string>语落需要麦克风录制你的语音，并仅在本机转换为文字。点击开始录音后才会采集。</string>
+<key>NSMicrophoneUsageDescription</key><string>语落在你开始录音后采集声音，并按你的设置在本机或通过所选 API 服务转写。</string>
 </dict></plist>
 PLIST
-bash "$ROOT/script/prepare_polish_build_runtime.sh"
-POLISH_BUILD_PYTHON="${VOXINK_POLISH_BUILD_RUNTIME:-$HOME/Library/Caches/VoxInkBuild/polish-python-3.12.13}/bin/python3.12"
-"$POLISH_BUILD_PYTHON" -B "$ROOT/script/bundle_polish_runtime.py" --python "$POLISH_BUILD_PYTHON" \
-  --destination "$BUNDLE/Contents/Resources/PolishRuntime" --identity "$SIGN_IDENTITY" \
-  --requirements "$ROOT/benchmark/polish-requirements.lock"
+if [[ -n "$RUNTIME_APP" ]]; then
+  /usr/bin/ditto --norsrc --noextattr "$RUNTIME_APP/Contents/Resources/PolishRuntime" "$BUNDLE/Contents/Resources/PolishRuntime"
+else
+  bash "$ROOT/script/prepare_polish_build_runtime.sh"
+  POLISH_BUILD_PYTHON="${VOXINK_POLISH_BUILD_RUNTIME:-$HOME/Library/Caches/VoxInkBuild/polish-python-3.12.13}/bin/python3.12"
+  "$POLISH_BUILD_PYTHON" -B "$ROOT/script/bundle_polish_runtime.py" --python "$POLISH_BUILD_PYTHON" \
+    --destination "$BUNDLE/Contents/Resources/PolishRuntime" --identity "$SIGN_IDENTITY" \
+    --requirements "$ROOT/benchmark/polish-requirements.lock"
+fi
 sign_options=(--force --sign "$SIGN_IDENTITY")
 if [[ "$SIGN_IDENTITY" != - ]]; then
   sign_options+=(--options runtime --timestamp)

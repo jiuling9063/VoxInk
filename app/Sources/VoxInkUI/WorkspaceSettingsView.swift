@@ -26,10 +26,10 @@ struct WorkspaceSettingsView: View {
 
     private var subtitle: String {
         switch page {
-        case .engine: L("管理本地识别模型与系统权限。")
+        case .engine: L("选择本地模型或 API 连接，管理识别与系统权限。")
         case .shortcut: L("选择顺手的快捷键，让文字落在需要的地方。")
         case .postprocess: L("整理文字，记住姓名与专有词的正确写法。")
-        case .polish: L("在本机整理表达，始终保留识别原文。")
+        case .polish: L("选择润色服务，始终保留识别原文。")
         case .help: L("从第一句话开始，了解语落的使用方式。")
         default: ""
         }
@@ -62,7 +62,7 @@ struct WorkspaceSettingsView: View {
                     }
                 case .polish:
                     WorkspaceForm {
-                        Section(L("可选本地润色")) { PolishSettingsContent(store: store) }
+                        Section(L("文字润色")) { PolishSettingsContent(store: store) }
                     }
                 case .help:
                     WorkspaceHelpView(store: store, showDashboard: showDashboard)
@@ -105,6 +105,16 @@ struct PolishSettingsContent: View {
     var body: some View {
         Toggle(L("自动润色后写入"), isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
             .disabled(!store.canStart || store.isInstallingPolishModel)
+        ModelServicePicker(store: store, purpose: .polishing)
+        if store.modelServices.polishingID == nil { localSettings }
+        else {
+            Text(L("云端润色仅整理标点、停顿词和重复句段；内容检查未通过或请求失败时使用原文。等待上限由连接的超时设置决定。"))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        DisclosureGroup(L("管理润色连接")) { ModelConnectionsContent(store: store, purpose: .polishing).padding(.top, 8) }
+    }
+
+    @ViewBuilder private var localSettings: some View {
         WorkspacePicker(L("模型选择"), selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
             if $0 == "auto" { store.setAutomaticPolishModel(true) }
             else if let model = PolishModel(rawValue: $0) { store.setPolishModel(model) }
@@ -216,6 +226,13 @@ struct PermissionSettingsContent: View {
 struct ModelSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
+        ModelServicePicker(store: store, purpose: .transcription)
+        if store.modelServices.transcriptionID == nil { localSettings }
+        else { Text(store.transcriptionStatus).font(.caption).foregroundStyle(.secondary) }
+        DisclosureGroup(L("管理转写连接")) { ModelConnectionsContent(store: store, purpose: .transcription).padding(.top, 8) }
+    }
+
+    @ViewBuilder private var localSettings: some View {
         HStack {
             Text(L("状态"))
             Spacer()
@@ -240,7 +257,7 @@ struct ModelSettingsContent: View {
 
 struct PrivacySettingsContent: View {
     var body: some View {
-        Text(L("音频仅在本机识别。完成写入、复制或取消后删除；未完成录音最多保留一条、有效期 24 小时，可随时删除。转录历史仅保留在本次启动期间，退出 App 后清除。"))
+        Text(L("本地模式在本机处理。选择 API 连接后，音频或待润色文字会发送到所选服务地址，由该服务商处理。密钥仅存钥匙串。完成写入、复制或取消后删除本机录音；未完成录音最多保留一条、有效期 24 小时。转录历史退出后清除。云端数据保留规则以服务商为准。"))
             .font(.callout).foregroundStyle(.secondary)
     }
 }

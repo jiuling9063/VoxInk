@@ -12,6 +12,11 @@ import VoxInkCore
     @Published public private(set) var polishingEnabled = false
     @Published public private(set) var polishMessage = ""
     @Published public private(set) var isPolishing = false
+    @Published public private(set) var modelServices: ModelServiceSettings
+    @Published public private(set) var connectionTestMessage = ""
+    private let modelCredentials: any ModelCredentialStorage
+    private let modelTransport: any ModelHTTPTransport
+    private let cloudSpeechDetector: @Sendable (URL) async throws -> Bool
     private let polishingService: any PolishingService
     @Published public private(set) var polishModel: PolishModel
     @Published public private(set) var installedPolishModels: Set<PolishModel> = []
@@ -79,7 +84,7 @@ import VoxInkCore
 
     private func schedulePolishWarmup() {
         guard !isShuttingDown else { return }
-        let model = polishingEnabled && !isInstallingPolishModel && pressureLevel == 0 && !polishDevice.thermalPressure
+        let model = polishingEnabled && modelServices.polishingID == nil && !isInstallingPolishModel && pressureLevel == 0 && !polishDevice.thermalPressure
             ? effectivePolishModel : nil
         if model == warmModel, polishWarmTask != nil { return }
         let previous = polishWarmTask
@@ -308,11 +313,12 @@ import VoxInkCore
     private var generation = UUID()
     private var operation: Task<Void, Never>?
     private var audioOperation: Task<Void, Never>?
+    private var connectionTestID: UUID?
     private var cancellationTask: Task<Void, Never>?
     private var meterTask: Task<Void, Never>?
     public var canStart: Bool { !isRecordingShortcut && (phase == .ready || phase == .failed) }
     public var canRecord: Bool {
-        canStart && microphoneAuthorization == .authorized && modelState == .ready
+        canStart && microphoneAuthorization == .authorized && transcriptionReady
     }
     public var canCancel: Bool { phase == .loading || phase == .recording || phase == .transcribing || phase == .pasting }
     public var canPasteAgain: Bool { canStart && lastTarget != nil && !transcript.isEmpty }
@@ -339,7 +345,9 @@ import VoxInkCore
         if setupProgress.step == .preparation || setupProgress.step == .speech {
             if microphoneAuthorization != .authorized { return L("先允许麦克风，返回语落后会自动刷新状态。") }
             if !pastePermissionGranted { return L("先允许文字写入，返回语落后会自动刷新状态。") }
-            if modelState != .ready { return L("等待本地模型就绪后继续；加载失败时可重新加载。") }
+            if !transcriptionReady {
+                return modelServices.transcriptionID == nil ? L("等待本地模型就绪后继续；加载失败时可重新加载。") : L("所选连接不可用，请在模型服务中重新选择。")
+            }
             if !shortcutAvailable { return L("当前快捷键不可用，请重新选择或录入组合键。") }
         }
         switch setupProgress.step {
@@ -364,6 +372,9 @@ import VoxInkCore
         pasteService: any PasteService = PasteCoordinator(),
         recorder: any AudioRecording = AudioCapture(),
         preferences: UserDefaults? = .standard,
+        modelCredentials: any ModelCredentialStorage = KeychainModelCredentials(),
+        modelTransport: any ModelHTTPTransport = ModelURLSessionTransport(),
+        cloudSpeechDetector: @escaping @Sendable (URL) async throws -> Bool = { try await SpeechActivityDetector.assess(url: $0).hasSpeech },
         microphoneStatus: @escaping @MainActor () -> MicrophoneAuthorization = MicrophoneAuthorization.current,
         audioPreparer: @escaping @Sendable (URL) async throws -> URL = { url in
             try await Task.detached { try AudioFilePreparation.prepare(url: url) }.value
@@ -378,6 +389,16 @@ import VoxInkCore
         }
     ) {
         self.service = service
+        self.modelCredentials = modelCredentials
+        self.modelTransport = modelTransport
+        self.cloudSpeechDetector = cloudSpeechDetector
+        if let saved = preferences?.data(forKey: "modelServices.v1") {
+            do { self.modelServices = try JSONDecoder().decode(ModelServiceSettings.self, from: saved) }
+            catch {
+                self.modelServices = .init()
+                self.connectionTestMessage = L("连接配置无法读取，已恢复本地模式。请重新配置模型服务。")
+            }
+        } else { self.modelServices = .init() }
         self.polishingService = polishingService
         self.deviceProvider = polishDeviceProvider
         let device = polishDeviceProvider()
@@ -725,6 +746,10 @@ import VoxInkCore
 
     private func prepareModel(allowDownload: Bool) {
         guard canStart else { return }
+        if modelServices.transcriptionID != nil {
+            status = transcriptionStatus
+            return
+        }
         pasteOutcome = nil; recovery = nil
         let token = UUID(); generation = token
         phase = .loading; modelState = .loading; status = L("正在校验并加载本地模型…")
@@ -808,7 +833,10 @@ import VoxInkCore
             }
             operation = task
             audioOperation = task
-        } catch { recorder.cancel(); fail(L("录音未保存成功，请重试。"), recovery: .recordAgain) }
+        } catch {
+            recorder.cancel()
+            fail(L("录音未保存成功，请重试。"), recovery: .recordAgain)
+        }
     }
 
     public func importAudio(_ url: URL) {
@@ -877,14 +905,20 @@ import VoxInkCore
         refreshPolishDevice()
         let selectedPolishModel = effectivePolishModel
         let selectedPolishPreference = polishPreference
+        let cloudTranscription = modelServices.transcriptionID != nil
+        let cloudPolishing = modelServices.polishingID != nil
         polishMessage = ""
         let dictionarySnapshot = dictionary?.rules ?? .empty
         let dictionaryUnavailable = dictionary != nil && dictionary?.isReady != true
-        phase = .transcribing; recovery = nil; status = L("正在识别 · 首次使用可能需要加载模型…")
+        phase = .transcribing; recovery = nil
+        status = cloudTranscription ? L("正在通过所选连接识别…") : L("正在识别 · 首次使用可能需要加载模型…")
         do {
-            let raw = try await service.transcribe(url: url, language: language)
-            guard generation == token else { return .discard }
-            modelState = .ready
+            let transcriber: any TranscriptionService
+            if cloudTranscription { transcriber = CloudTranscriptionService(client: try cloudClient(for: .transcription), speechDetector: cloudSpeechDetector) }
+            else { transcriber = service }
+            let raw = try await transcriber.transcribe(url: url, language: language)
+            guard generation == token, !Task.isCancelled else { return .discard }
+            if !cloudTranscription { modelState = .ready }
             let converted = LanguageTextProcessor.process(raw, language: language, output: output, dictionary: dictionarySnapshot)
             var text = converted.text
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -894,13 +928,20 @@ import VoxInkCore
             let warnings = [converted.warning, dictionaryUnavailable ? L("词典暂不可用，本次使用基础文字规则") : nil].compactMap { $0 }
             conversionWarning = warnings.isEmpty ? nil : warnings.joined(separator: "；")
             transcript = text
-            if shouldPolish, let selectedPolishModel, polishDevice.pressure < 2 {
+            if shouldPolish, cloudPolishing || (selectedPolishModel != nil && polishDevice.pressure < 2) {
                 isPolishing = true
                 status = L("正在润色 · 完成后再写入，可按 Esc 取消…")
                 do {
-                    let result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds), language: language.resolved(for: raw))
+                    let result: PolishResult
+                    if cloudPolishing {
+                        result = try await cloudClient(for: .polishing).polish(text, language: language.resolved(for: raw))
+                    } else if let selectedPolishModel {
+                        result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds), language: language.resolved(for: raw))
+                    } else { throw LocalPolishingService.Failure.unavailable }
                     guard generation == token, !Task.isCancelled else { return .discard }
-                    recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: result.generationSeconds, timedOut: false, preference: selectedPolishPreference)
+                    if !cloudPolishing, let selectedPolishModel {
+                        recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: result.generationSeconds, timedOut: false, preference: selectedPolishPreference)
+                    }
                     if result.accepted && !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         // The worker validates against the already converted input. Converting
                         // again would overwrite the dictionary's intentional proper-name script.
@@ -917,10 +958,11 @@ import VoxInkCore
                     return .discard
                 } catch {
                     guard generation == token, !Task.isCancelled else { return .discard }
-                    if error as? LocalPolishingService.Failure == .timeout {
+                    if !cloudPolishing, let selectedPolishModel, error as? LocalPolishingService.Failure == .timeout {
                         recordPolishTiming(model: selectedPolishModel, characters: text.count, seconds: nil, timedOut: true, preference: selectedPolishPreference)
                     }
-                    polishMessage = L("\((error as? LocalPolishingService.Failure)?.errorDescription ?? L("润色未完成。"))本次使用未润色文字。")
+                    let message = (error as? CloudServiceError)?.errorDescription ?? (error as? LocalPolishingService.Failure)?.errorDescription ?? L("润色未完成。")
+                    polishMessage = L("\(message)本次使用未润色文字。")
                 }
                 isPolishing = false
                 if polishDevice.pressure > 0 || polishDevice.thermalPressure { await polishingService.release() }
@@ -939,6 +981,11 @@ import VoxInkCore
                 }
             } else { phase = .ready; status = L("识别完成") }
             return .transcript
+        } catch is CancellationError {
+            return .discard
+        } catch let error as CloudServiceError {
+            guard generation == token, !Task.isCancelled else { return .discard }
+            fail(error.localizedDescription, recovery: .configureService)
         } catch let error as ModelInstallationError {
             guard generation == token else { return .discard }
             failModelInstallation(error)
@@ -958,7 +1005,7 @@ import VoxInkCore
             status = L("没有检测到清晰语音，未写入文字。可重试或删除本次录音。")
         } catch {
             guard generation == token else { return .discard }
-            modelState = .failed
+            if !cloudTranscription { modelState = .failed }
             fail(L("识别失败。可重试识别，或重新加载模型。"), recovery: .reloadModel)
         }
         return .audio
@@ -972,6 +1019,7 @@ import VoxInkCore
         clearSetupTrial()
         let preparingModel = phase == .loading && modelState == .loading
         let pendingModelOperation = preparingModel ? operation : nil
+        if connectionTestID != nil { connectionTestMessage = L("已取消 · 未发出粘贴") }
         generation = UUID()
         isPolishing = false
         polishMessage = ""
@@ -1236,6 +1284,123 @@ import VoxInkCore
         let task = Task {
             guard generation == token, !Task.isCancelled else { return }
             await deliver(text, to: target, token: token)
+        }
+        operation = task; audioOperation = task
+    }
+
+    public var transcriptionReady: Bool {
+        if modelServices.transcriptionID == nil { return modelState == .ready }
+        return (try? modelServices.connection(for: .transcription)) != nil
+    }
+
+    public var transcriptionStatus: String {
+        guard modelServices.transcriptionID != nil else { return modelState.title }
+        guard let connection = try? modelServices.connection(for: .transcription) else { return L("连接配置不可用") }
+        return L("已配置：\(connection.name)")
+    }
+
+    public var canEditModelServices: Bool { canStart && !isInstallingPolishModel && !isShuttingDown }
+
+    public func saveModelConnection(_ connection: ModelConnection, apiKey: String?, clearKey: Bool = false) throws {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        var connection = connection
+        connection.name = connection.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        connection.baseURL = connection.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        connection.model = connection.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        try connection.validate()
+        let key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard key?.contains("\r") != true, key?.contains("\n") != true else { throw CloudServiceError.invalidConfiguration }
+        var next = modelServices
+        if let index = next.connections.firstIndex(where: { $0.id == connection.id }) {
+            let previous = next.connections[index]
+            if previous.purpose != connection.purpose,
+               next.transcriptionID == connection.id || next.polishingID == connection.id { throw CloudServiceError.connectionInUse }
+            if try previous.endpointURL() != connection.endpointURL(), key?.isEmpty != false, !clearKey,
+               try modelCredentials.read(connection.id) != nil { throw CloudServiceError.addressChanged }
+            next.connections[index] = connection
+        } else { next.connections.append(connection) }
+        let encoded = try JSONEncoder().encode(next)
+        if clearKey { try modelCredentials.write(nil, for: connection.id) }
+        else if let key, !key.isEmpty { try modelCredentials.write(key, for: connection.id) }
+        preferences?.set(encoded, forKey: "modelServices.v1")
+        modelServices = next
+        connectionTestMessage = ""
+    }
+
+    public func deleteModelConnection(_ id: UUID) throws {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        guard modelServices.transcriptionID != id, modelServices.polishingID != id else { throw CloudServiceError.connectionInUse }
+        var next = modelServices
+        next.connections.removeAll { $0.id == id }
+        let encoded = try JSONEncoder().encode(next)
+        try modelCredentials.write(nil, for: id)
+        preferences?.set(encoded, forKey: "modelServices.v1")
+        modelServices = next
+        connectionTestMessage = ""
+    }
+
+    public func selectModelService(_ id: UUID?, for purpose: ModelServicePurpose) throws {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        var next = modelServices
+        if purpose == .transcription { next.transcriptionID = id }
+        else { next.polishingID = id }
+        _ = try next.connection(for: purpose)
+        let encoded = try JSONEncoder().encode(next)
+        preferences?.set(encoded, forKey: "modelServices.v1")
+        modelServices = next
+        connectionTestMessage = ""
+        if purpose == .polishing { schedulePolishWarmup() }
+        else {
+            clearSetupTrial()
+            setupProgress.speechConfirmed = false
+            saveSetupProgress()
+            if id == nil { warmUp() }
+            else { status = transcriptionStatus }
+        }
+    }
+
+    private func cloudClient(for purpose: ModelServicePurpose) throws -> CloudModelClient {
+        guard let connection = try modelServices.connection(for: purpose) else { throw CloudServiceError.missingConnection }
+        return try cloudClient(connection)
+    }
+
+    private func cloudClient(_ connection: ModelConnection) throws -> CloudModelClient {
+        try connection.validate()
+        return CloudModelClient(connection: connection, apiKey: try modelCredentials.read(connection.id), transport: modelTransport)
+    }
+
+    public func testModelConnection(_ id: UUID, audioURL: URL? = nil) {
+        guard canEditModelServices, let connection = modelServices.connections.first(where: { $0.id == id }) else { return }
+        let token = UUID(); generation = token
+        phase = .loading; status = L("正在测试连接…")
+        connectionTestMessage = status
+        connectionTestID = token
+        let task = Task {
+            defer { if connectionTestID == token { connectionTestID = nil } }
+            do {
+                let client = try cloudClient(connection)
+                let start = ContinuousClock.now
+                let result: String
+                if connection.purpose == .polishing {
+                    let response = try await client.polish("请在明天下午三点开会。", language: .mandarin)
+                    result = response.accepted ? response.text : L("接口可用，但测试润色结果未通过内容检查。")
+                } else {
+                    guard let audioURL else { throw CloudServiceError.audioUnreadable }
+                    let prepared = try await audioPreparer(audioURL)
+                    defer { audioCleaner(prepared) }
+                    try Task.checkCancellation()
+                    result = try await CloudTranscriptionService(client: client, speechDetector: cloudSpeechDetector).transcribe(url: prepared, language: speechLanguage)
+                }
+                guard generation == token, !Task.isCancelled else { return }
+                let duration = start.duration(to: .now).components
+                let seconds = Double(duration.seconds) + Double(duration.attoseconds) / 1e18
+                connectionTestMessage = String(format: L("测试完成 · %.1f 秒"), seconds) + "\n" + String(result.prefix(300))
+                phase = .ready; status = L("连接测试完成")
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                connectionTestMessage = (error as? CloudServiceError)?.errorDescription ?? L("测试未完成，请检查音频、网络和连接配置。")
+                phase = .ready; status = L("连接测试未完成")
+            }
         }
         operation = task; audioOperation = task
     }

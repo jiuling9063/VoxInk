@@ -11,6 +11,9 @@ public struct ContentView: View {
     @State private var importing = false
     @State private var showingOriginal = false
     @State private var originalHeight: CGFloat = 0
+    private var usesAPI: Bool {
+        store.modelServices.transcriptionID != nil || (store.polishingEnabled && store.modelServices.polishingID != nil)
+    }
     @StateObject private var navigation: WorkspaceNavigation
     private var page: WorkspacePage {
         get { navigation.page }
@@ -56,7 +59,7 @@ public struct ContentView: View {
                     }.scrollIndicators(.hidden)
                     VStack(alignment: .leading, spacing: 6) {
                         Divider().padding(.bottom, 8)
-                        Label(L("本机处理 · 安心表达"), systemImage: "lock.shield")
+                        Label(usesAPI ? L("API 处理 · 自由选择") : L("本机处理 · 安心表达"), systemImage: usesAPI ? "network" : "lock.shield")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         Text("VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版"))")
                             .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
@@ -79,7 +82,7 @@ public struct ContentView: View {
                         if store.isShowingSetup { SetupView(store: store).id("setup") }
                         else {
                             statusHero
-                            Label(L("音频在本机处理，文字只留在当前会话。"), systemImage: "lock.shield")
+                            Label(usesAPI ? L("音频或文字按配置发送到所选服务，数据保留规则以服务商为准。") : L("音频在本机处理，文字只留在当前会话。"), systemImage: usesAPI ? "network" : "lock.shield")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if store.isShowingSetup && store.setupProgress.step == .speech { recordingControls.padding(22).writingSurface().id("activity") }
@@ -182,9 +185,11 @@ public struct ContentView: View {
             dashboardRow(icon: "cursorarrow.and.square.on.square.dashed", title: L("文字写入"),
                          detail: store.pastePermissionGranted ? L("已允许自动写入") : L("需要辅助功能权限"),
                          ready: store.pastePermissionGranted) { store.requestPastePermission() }
-            dashboardRow(icon: "internaldrive.fill", title: L("本地模型"),
-                         detail: store.modelState.title, ready: store.modelState == .ready) {
-                if store.modelState == .needsDownload { store.installModel() } else { store.warmUp() }
+            dashboardRow(icon: "internaldrive.fill", title: L("语音识别"),
+                         detail: store.transcriptionStatus, ready: store.transcriptionReady) {
+                if store.modelServices.transcriptionID != nil { page = .engine }
+                else if store.modelState == .needsDownload { store.installModel() }
+                else { store.warmUp() }
             }
         }
         .padding(14)
@@ -262,7 +267,7 @@ public struct ContentView: View {
         case .microphone: Button(L("打开系统设置")) { store.openSystemSettings() }
         case .pastePermission: Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
         case .chooseAudio: Button(L("选择音频…")) { importing = true }.disabled(!store.canStart)
-        case .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation: EmptyView()
+        case .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation, .configureService: EmptyView()
         }
     }
 
