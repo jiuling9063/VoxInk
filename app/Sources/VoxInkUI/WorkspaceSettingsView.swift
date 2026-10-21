@@ -99,6 +99,14 @@ struct PolishSettingsContent: View {
     private var installed: Bool { store.installedPolishModels.contains(store.polishDownloadTarget) }
     var body: some View {
         ModelServicePicker(store: store, purpose: .polishing)
+        if store.polishingEnabled {
+            Picker(L("润色方式"), selection: Binding(get: { store.polishStyle }, set: { store.setPolishStyle($0) })) {
+                ForEach(PolishStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .disabled(!store.canEditModelServices)
+            Text(store.polishStyle.detail).font(.caption).foregroundStyle(.secondary)
+        }
         if store.polishingEnabled && store.modelServices.polishingID == nil { localSettings }
     }
 

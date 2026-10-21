@@ -20,3 +20,6 @@ benchmark/models/
 
 # Python benchmark helpers
 __pycache__/
+
+# Private live comparison inputs and local reports
+local-tests/

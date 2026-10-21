@@ -657,5 +657,10 @@
   "删除此连接？正在使用时会切换回本地模型。": "Delete this connection? If it is in use, processing will switch to the local model.",
   "查看识别与润色设置": "View transcription and cleanup settings",
   "模型": "Model",
-  "在“语音与润色”中检查服务设置，或切换本地模式后重试。": "Check the service in Speech & Cleanup, or switch to local mode and retry."
+  "在“语音与润色”中检查服务设置，或切换本地模式后重试。": "Check the service in Speech & Cleanup, or switch to local mode and retry.",
+  "原样整理": "Keep wording",
+  "自然润色": "Natural polish",
+  "润色方式": "Editing style",
+  "保留原句，只整理标点、停顿和少量重复。": "Keep the original wording; tidy punctuation, pauses and minor repetition.",
+  "整理口语和语序，保留原意；重要内容请核对原文。": "Smooth spoken wording and sentence order while preserving meaning. Check important details against the original."
 }

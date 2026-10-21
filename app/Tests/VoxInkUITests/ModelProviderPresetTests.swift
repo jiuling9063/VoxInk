@@ -3,6 +3,15 @@ import Testing
 @testable import VoxInkUI
 
 struct ModelProviderPresetTests {
+    @Test func siliconFlowDefaultsUseVerifiedQwenModels() throws {
+        let speech = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        let polish = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
+        #expect(speech.model == "Qwen/Qwen3-ASR-1.7B")
+        #expect(polish.model == "Qwen/Qwen3.5-122B-A10B")
+        #expect(try polish.extraBody()["enable_thinking"] as? Bool == false)
+        #expect(try polish.extraBody()["temperature"] as? Double == 0.2)
+    }
+
     @Test func credentialReusePrefersSelectedProviderAccountAndExcludesCustomHosts() {
         var settings = ModelServiceSettings()
         let first = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
@@ -84,7 +93,7 @@ struct ModelProviderPresetTests {
         draft.selectPurpose(.transcription)
         #expect(draft.provider == .siliconFlow)
         #expect(draft.connection.id == id)
-        #expect(draft.connection.model == "FunAudioLLM/SenseVoiceSmall")
+        #expect(draft.connection.model == "Qwen/Qwen3-ASR-1.7B")
         #expect(draft.connection.extraBodyJSON == "{}")
     }
 

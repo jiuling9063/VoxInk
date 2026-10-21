@@ -167,6 +167,22 @@ struct CloudModelClientTests {
         #expect(result.text == source)
     }
 
+    @Test func styleSelectsPromptAndValidationTogether() async throws {
+        let source = "我们，嗯，明天讨论这个方案，下午三点。"
+        let output = "我们明天下午三点讨论这个方案。"
+        for style in PolishStyle.allCases {
+            let transport = MockModelTransport(text: output)
+            let client = CloudModelClient(connection: connection(), apiKey: nil, transport: transport)
+            let result = try await client.polish(source, language: .mandarin, style: style)
+            #expect(result.accepted == (style == .natural))
+            #expect(result.text == (style == .natural ? output : source))
+            let body = try #require(await transport.requests.first?.httpBody)
+            let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let messages = try #require(json["messages"] as? [[String: String]])
+            #expect(messages.first?["content"] == style.prompt(language: .mandarin))
+        }
+    }
+
     @Test func totalDeadlineCancelsTransport() async {
         var config = connection(); config.timeoutSeconds = 1
         let transport = MockModelTransport(delay: .seconds(30))
@@ -199,6 +215,23 @@ struct CloudModelClientTests {
 }
 
 @MainActor struct ModelConnectionSettingsTests {
+    @Test func stylePersistsWithoutChangingProviderAndCannotChangeWhileBusy() throws {
+        let name = "VoxInk.PolishStyle." + UUID().uuidString
+        let prefs = try #require(UserDefaults(suiteName: name))
+        defer { prefs.removePersistentDomain(forName: name) }
+        let store = AppStore(preferences: prefs, modelCredentials: MemoryModelCredentials())
+        #expect(store.polishStyle == .original)
+        let services = store.modelServices
+        store.setPolishStyle(.natural)
+        #expect(store.modelServices == services)
+        #expect(AppStore(preferences: prefs).polishStyle == .natural)
+        store.configureShortcutRegistration { _ in true }
+        #expect(store.beginShortcutRecording())
+        store.setPolishStyle(.original)
+        #expect(store.polishStyle == .natural)
+        store.finishShortcutRecording()
+    }
+
     @Test func saveAndUseReusesProviderKeyWithoutChangingOtherPurpose() throws {
         let keys = MemoryModelCredentials()
         let store = AppStore(preferences: nil, modelCredentials: keys)

@@ -58,7 +58,7 @@ class SystemPromptCache:
         return tokens[len(self.tokens):], {"prompt_cache": copy.deepcopy(self.cache)}
 
 
-def polish(source, model, tokenizer, max_tokens=1024, language="zh", prompt_cache=None):
+def polish(source, model, tokenizer, max_tokens=1024, language="zh", prompt_cache=None, system_prompt=None):
     if not isinstance(source, str) or not source.strip() or len(source) > 2000:
         raise ValueError('Invalid input')
     from mlx_lm import stream_generate
@@ -68,6 +68,11 @@ def polish(source, model, tokenizer, max_tokens=1024, language="zh", prompt_cach
         raise ValueError("Unsupported language")
     cleaned = clean_disfluencies(source) if language == "zh" else source
     prompt_messages = messages(cleaned or source) if language == "zh" else multilingual_messages(source, language)
+    if system_prompt is not None:
+        if not isinstance(system_prompt, str) or len(system_prompt) > 6000:
+            raise ValueError("Invalid system prompt")
+        prompt_messages = [{"role": "system", "content": system_prompt},
+                           {"role": "user", "content": json.dumps({"source": source}, ensure_ascii=False)}]
     if prompt_cache is None:
         prompt = tokenizer.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True,
                                                enable_thinking=False)
@@ -80,7 +85,12 @@ def polish(source, model, tokenizer, max_tokens=1024, language="zh", prompt_cach
         output += response.text
         last = response
     validator = validate if language == "zh" else validate_multilingual
-    result = validator(source, output, last.finish_reason if last else None)
+    if system_prompt is None:
+        result = validator(source, output, last.finish_reason if last else None)
+    else:
+        # The Swift client applies the same style-specific guard as the cloud path.
+        complete = last is not None and last.finish_reason == "stop"
+        result = dict(accepted=complete, reason="requires_client_validation", text=output if complete else source)
     result['generationSeconds'] = time.monotonic() - started
     return result
 
@@ -103,7 +113,7 @@ def serve(model, tokenizer, load_seconds, input_stream, output_stream, prompt_ca
                 raise ValueError('Invalid token budget')
             with contextlib.redirect_stdout(sys.stderr):
                 result = polish(request['text'], model, tokenizer, limit, language=request.get('language', 'zh'),
-                                prompt_cache=prompt_cache)
+                                prompt_cache=prompt_cache, system_prompt=request.get("system_prompt"))
             emit(dict(request_id=request_id, result=result))
         except Exception:
             emit(dict(request_id=request_id, error_code='polish_failed'))

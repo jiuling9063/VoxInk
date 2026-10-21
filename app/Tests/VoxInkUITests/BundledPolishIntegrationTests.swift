@@ -1,8 +1,28 @@
 import Foundation
 import Testing
+import VoxInkCore
 @testable import VoxInkUI
 
 struct BundledPolishIntegrationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["VOXINK_TEST_STYLE_RESOURCES"] != nil))
+    func installedModelUsesBothStylesAndClientGuard() async throws {
+        let path = try #require(ProcessInfo.processInfo.environment["VOXINK_TEST_STYLE_RESOURCES"])
+        let resources = URL(fileURLWithPath: path)
+        let installed = LocalPolishingService.installedModels(resources: resources)
+        let model = try #require(installed.sorted { $0.rank < $1.rank }.first)
+        let service = LocalPolishingService(resources: resources)
+        do {
+            for style in PolishStyle.allCases {
+                let source = "我们，嗯，明天讨论这个方案，下午三点。"
+                let result = try await service.polish(source, model: model, timeout: .seconds(60), language: .mandarin, style: style)
+                #expect(!result.text.isEmpty)
+                #expect(result.accepted ? PolishTextSafety.accepts(source: source, output: result.text, language: .mandarin, style: style) : result.text == source)
+                print("Local style \(style.rawValue): accepted=\(result.accepted), seconds=\(result.generationSeconds ?? 0), text=\(result.text)")
+            }
+            await service.release()
+        } catch { await service.release(); throw error }
+    }
+
     // Explicit opt-in: this downloads the real light model into a new disposable root.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["VOXINK_TEST_BUNDLED_RESOURCES"] != nil))
     func freshUserDownloadsAndRunsWithoutRuntimeConfiguration() async throws {

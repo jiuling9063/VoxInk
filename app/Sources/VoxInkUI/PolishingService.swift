@@ -16,11 +16,15 @@ public protocol PolishingService: Sendable {
     func polish(_ text: String, model: PolishModel) async throws -> PolishResult
     func polish(_ text: String, model: PolishModel, timeout: Duration) async throws -> PolishResult
     func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult
+    func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage, style: PolishStyle) async throws -> PolishResult
     func prepare(model: PolishModel) async throws
     func release() async
 }
 
 extension PolishingService {
+    public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage, style: PolishStyle) async throws -> PolishResult {
+        try await polish(text, model: model, timeout: timeout, language: language)
+    }
     public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult {
         try await polish(text, model: model, timeout: timeout)
     }
@@ -136,6 +140,14 @@ public actor LocalPolishingService: PolishingService {
     }
 
     public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage) async throws -> PolishResult {
+        try await performPolish(text, model: model, timeout: timeout, language: language, style: nil)
+    }
+
+    public func polish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage, style: PolishStyle) async throws -> PolishResult {
+        try await performPolish(text, model: model, timeout: timeout, language: language, style: style)
+    }
+
+    private func performPolish(_ text: String, model: PolishModel, timeout: Duration, language: SpeechLanguage, style: PolishStyle?) async throws -> PolishResult {
         guard text.count <= 2000 else { throw Failure.tooLong }
         guard activeRequest == nil else { throw Failure.failed }
         try Task.checkCancellation()
@@ -156,13 +168,19 @@ public actor LocalPolishingService: PolishingService {
                 try Task.checkCancellation()
                 let remaining = ContinuousClock.now.duration(to: deadline)
                 guard remaining > .zero else { throw Failure.timeout }
-                struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int; let language: SpeechLanguage }
+                struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int; let language: SpeechLanguage; let system_prompt: String? }
                 struct Response: Decodable { let result: PolishResult }
-                let request = Request(request_id: id, text: text, max_tokens: min(4096, max(128, text.utf8.count + 64)), language: language)
+                let request = Request(request_id: id, text: text, max_tokens: min(4096, max(128, text.utf8.count + 64)), language: language, system_prompt: style?.prompt(language: language))
                 let response = try await client.exchange(requestID: id, payload: JSONEncoder().encode(request), timeout: remaining)
                 try Task.checkCancellation()
                 let result = try JSONDecoder().decode(Response.self, from: response).result
                 guard !result.text.isEmpty else { throw Failure.failed }
+                if let style {
+                    let candidate = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let accepted = result.accepted && PolishTextSafety.accepts(source: text, output: candidate, language: language, style: style)
+                    return .init(accepted: accepted, reason: accepted ? "checks_passed" : "protected_content_changed",
+                                 text: accepted ? candidate : text, generationSeconds: result.generationSeconds)
+                }
                 return result
             } onCancel: {
                 Task { await self.cancelRequest(id) }

@@ -46,6 +46,13 @@ class ResidentPolishTests(unittest.TestCase):
         self.assertEqual([call.kwargs['prompt_cache'] for call in mock.call_args_list], [cache, cache])
         self.assertEqual(mock.call_args_list[1].kwargs['language'], 'en')
 
+    def test_style_prompt_reaches_worker_without_changing_text(self):
+        incoming = io.BytesIO(json.dumps(dict(request_id='style', text='source', system_prompt='style prompt')).encode() + b'\n')
+        with patch('polish_worker.polish', return_value=dict(accepted=True, text='candidate')) as mock:
+            serve(None, None, 0, incoming, io.StringIO())
+        self.assertEqual(mock.call_args.kwargs['system_prompt'], 'style prompt')
+        self.assertEqual(mock.call_args.args[0], 'source')
+
     def test_oversized_request_is_rejected(self):
         with self.assertRaises(ValueError):
             serve(None, None, 0, io.BytesIO(b'x' * 32769), io.StringIO())

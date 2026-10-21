@@ -95,14 +95,14 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
     func model(for purpose: ModelServicePurpose) -> String {
         if purpose == .transcription {
             switch self {
-            case .siliconFlow: return "FunAudioLLM/SenseVoiceSmall"
+            case .siliconFlow: return "Qwen/Qwen3-ASR-1.7B"
             case .openAI: return "gpt-4o-mini-transcribe"
             case .groq: return "whisper-large-v3-turbo"
             default: return ""
             }
         }
         switch self {
-        case .siliconFlow: return "deepseek-ai/DeepSeek-V4-Flash"
+        case .siliconFlow: return "Qwen/Qwen3.5-122B-A10B"
         case .openAI: return "gpt-4.1-mini"
         case .deepSeek: return "deepseek-flash"
         case .dashScope: return "qwen-plus"
@@ -117,7 +117,7 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
     func parameters(for purpose: ModelServicePurpose) -> String {
         guard purpose == .polishing else { return "{}" }
         switch self {
-        case .siliconFlow: return #"{"enable_thinking":false}"#
+        case .siliconFlow: return #"{"enable_thinking":false,"temperature":0.2}"#
         case .deepSeek: return #"{"thinking":{"type":"disabled"}}"#
         case .kimi, .gemini: return #"{"reasoning_effort":"low"}"#
         default: return "{}"

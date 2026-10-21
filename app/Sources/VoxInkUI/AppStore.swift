@@ -28,6 +28,7 @@ import VoxInkCore
     private var polishInstallationTask: Task<Void, Never>?
 
     @Published public private(set) var automaticPolishModel: Bool
+    @Published public private(set) var polishStyle: PolishStyle
     @Published public private(set) var polishPreference: PolishPreference
     @Published public private(set) var polishDevice: PolishDevice
     @Published public private(set) var polishPerformanceMessage = ""
@@ -69,6 +70,12 @@ import VoxInkCore
         automaticPolishModel = enabled
         preferences?.set(enabled, forKey: "polishModelAutomatic")
         refreshPolishDevice(); schedulePolishWarmup()
+    }
+
+    public func setPolishStyle(_ style: PolishStyle) {
+        guard canEditModelServices else { return }
+        polishStyle = style
+        preferences?.set(style.rawValue, forKey: "polishStyle")
     }
 
     public func setPolishPreference(_ preference: PolishPreference) {
@@ -404,6 +411,7 @@ import VoxInkCore
         self.deviceProvider = polishDeviceProvider
         let device = polishDeviceProvider()
         self.polishDevice = device
+        self.polishStyle = preferences?.string(forKey: "polishStyle").flatMap(PolishStyle.init(rawValue:)) ?? .original
         self.polishPreference = preferences?.string(forKey: "polishPreference").flatMap(PolishPreference.init(rawValue:)) ?? .balanced
         self.automaticPolishModel = preferences?.object(forKey: "polishModelAutomatic") != nil
             ? preferences!.bool(forKey: "polishModelAutomatic") : preferences?.string(forKey: "polishModel") == nil
@@ -906,6 +914,7 @@ import VoxInkCore
         refreshPolishDevice()
         let selectedPolishModel = effectivePolishModel
         let selectedPolishPreference = polishPreference
+        let selectedPolishStyle = polishStyle
         let cloudTranscription = modelServices.transcriptionID != nil
         let cloudPolishing = modelServices.polishingID != nil
         polishMessage = ""
@@ -935,9 +944,9 @@ import VoxInkCore
                 do {
                     let result: PolishResult
                     if cloudPolishing {
-                        result = try await cloudClient(for: .polishing).polish(text, language: language.resolved(for: raw))
+                        result = try await cloudClient(for: .polishing).polish(text, language: language.resolved(for: raw), style: selectedPolishStyle)
                     } else if let selectedPolishModel {
-                        result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds), language: language.resolved(for: raw))
+                        result = try await polishingService.polish(text, model: selectedPolishModel, timeout: .seconds(selectedPolishPreference.waitSeconds), language: language.resolved(for: raw), style: selectedPolishStyle)
                     } else { throw LocalPolishingService.Failure.unavailable }
                     guard generation == token, !Task.isCancelled else { return .discard }
                     if !cloudPolishing, let selectedPolishModel {
@@ -1422,7 +1431,7 @@ import VoxInkCore
                 let start = ContinuousClock.now
                 let result: String
                 if connection.purpose == .polishing {
-                    let response = try await client.polish("请在明天下午三点开会。", language: .mandarin)
+                    let response = try await client.polish("我们，嗯，明天讨论这个方案，下午三点。", language: .mandarin, style: polishStyle)
                     result = response.accepted ? response.text : L("接口可用，但测试润色结果未通过内容检查。")
                 } else {
                     guard let audioURL else { throw CloudServiceError.audioUnreadable }
