@@ -97,10 +97,10 @@ public struct RecordingFeedbackView: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(presentation.accessibilityStatus)
         .accessibilityHint(presentation.hint)
-        .background(Color(red: 0.10, green: 0.12, blue: 0.13), in: RoundedRectangle(cornerRadius: 22))
+        .background(Color(red: 0.106, green: 0.133, blue: 0.137), in: RoundedRectangle(cornerRadius: 22))
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                .stroke(Color(red: 0.522, green: 0.808, blue: 0.780).opacity(0.3), lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.22), radius: 8, y: 4)
         .overlay {

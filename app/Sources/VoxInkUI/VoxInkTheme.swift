@@ -3,20 +3,28 @@ import SwiftUI
 struct VoxInkTheme {
     let scheme: ColorScheme
 
-    var background: Color { Color(nsColor: .windowBackgroundColor) }
+    var background: Color {
+        scheme == .dark ? Color(red: 0.125, green: 0.149, blue: 0.153)
+            : Color(red: 0.945, green: 0.957, blue: 0.953)
+    }
+    var chrome: Color {
+        scheme == .dark ? Color(red: 0.106, green: 0.133, blue: 0.137)
+            : Color(red: 0.91, green: 0.937, blue: 0.929)
+    }
     var paper: Color {
-        scheme == .dark ? Color(red: 0.20, green: 0.21, blue: 0.22) : Color(nsColor: .controlBackgroundColor)
+        scheme == .dark ? Color(red: 0.161, green: 0.192, blue: 0.196) : .white
     }
     var ink: Color { Color(nsColor: .labelColor) }
     var accent: Color {
-        scheme == .dark ? Color(red: 0.43, green: 0.78, blue: 0.77)
+        scheme == .dark ? Color(red: 0.522, green: 0.808, blue: 0.780)
             : Color(red: 0.12, green: 0.40, blue: 0.42)
     }
     var accentForeground: Color {
         scheme == .dark ? Color(red: 0.06, green: 0.18, blue: 0.19) : .white
     }
     var ceramicGradient: LinearGradient {
-        LinearGradient(colors: [paper, paper], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [accent.opacity(scheme == .dark ? 0.09 : 0.05), .clear],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
 
@@ -34,7 +42,7 @@ private struct WritingSurface: ViewModifier {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            .shadow(color: .black.opacity(scheme == .dark ? 0.08 : 0.025), radius: 8, y: 3)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.06 : 0.025), radius: 8, y: 3)
     }
 }
 
@@ -68,20 +76,12 @@ struct VoxInkButtonStyle: ButtonStyle {
     }
 }
 
-/// Material belongs to navigation chrome; reading surfaces remain solid.
+/// Solid chrome keeps navigation and reading contrast stable over other windows.
 private struct WorkspaceChrome: ViewModifier {
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
-        content.background {
-            if reduceTransparency || contrast == .increased {
-                VoxInkTheme(scheme: scheme).background
-            } else {
-                Rectangle().fill(.regularMaterial)
-            }
-        }
+        content.background(VoxInkTheme(scheme: scheme).chrome)
     }
 }
 
@@ -104,24 +104,47 @@ struct WorkspaceForm<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 18) {
             ForEach(sections: content) { section in
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 18) {
                     section.header.font(.headline).accessibilityAddTraits(.isHeader)
+                    Divider()
                     VStack(alignment: .leading, spacing: 14) {
                         ForEach(section.content) { row in
-                            if row.id != section.content.first?.id { Divider() }
                             row.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(18).writingSurface()
                     section.footer.font(.caption).foregroundStyle(.secondary)
-                }
+                }.padding(22).writingSurface()
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
             .toggleStyle(WorkspaceToggleStyle())
             .labeledContentStyle(WorkspaceLabeledContentStyle())
+    }
+}
+
+struct WorkspaceSectionHeader: View {
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    let icon: String
+    var number: String? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 17, weight: .medium))
+                .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
+                .frame(width: 36, height: 36)
+                .background(VoxInkTheme(scheme: scheme).accent.opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityHidden(true)
+            Text(title)
+            Spacer()
+            if let number {
+                Text(number).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 
@@ -150,7 +173,8 @@ private struct WorkspaceLabeledContentStyle: LabeledContentStyle {
 private struct WorkspacePageMargins: ViewModifier {
     func body(content: Content) -> some View {
         content.frame(maxWidth: 920, alignment: .leading)
-            .padding(24).frame(maxWidth: .infinity, alignment: .top)
+            .padding(.horizontal, 28).padding(.vertical, 28)
+            .frame(maxWidth: .infinity, alignment: .top)
     }
 }
 

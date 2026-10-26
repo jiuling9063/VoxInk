@@ -18,13 +18,13 @@ struct WorkspaceHelpView: View {
                         .background(VoxInkTheme(scheme: scheme).accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                 }
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 16) { steps(horizontal: true) }
-                    VStack(alignment: .leading, spacing: 20) { steps(horizontal: false) }
+                    HStack(alignment: .top, spacing: 14) { steps(horizontal: true) }
+                    VStack(alignment: .leading, spacing: 14) { steps(horizontal: false) }
                 }
                 Divider()
                 Label(L("Esc 随时取消 · 单次最长 60 秒"), systemImage: "keyboard")
                     .font(.caption).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(20).writingSurface()
+            }.frame(maxWidth: .infinity, alignment: .leading)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { actions }
@@ -32,15 +32,20 @@ struct WorkspaceHelpView: View {
             }
             WorkspaceForm {
                 Section(L("遇到问题")) {
-                    DisclosureGroup(L("第一次使用，要准备什么？")) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("第一次使用，要准备什么？")).font(.subheadline.weight(.medium))
                         Text(L("允许麦克风，并选择本地模型或配置 API 连接。自动写入还需要辅助功能权限和可用的快捷键，可通过上方“首次准备”逐项完成。"))
                             .helpText()
                     }
-                    DisclosureGroup(L("文字没有写入怎么办？")) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("文字没有写入怎么办？")).font(.subheadline.weight(.medium))
                         Text(L("打开工作台查看结果和提示。先点选目标输入框，确认没有重复文字后再重新粘贴；也可复制结果。已写入的文字需在目标应用中撤销。"))
                             .helpText()
                     }
-                    DisclosureGroup(L("可以不用快捷键吗？")) {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("可以不用快捷键吗？")).font(.subheadline.weight(.medium))
                         Text(L("可以。在工作台点击录音，或导入不超过 60 秒的音频，完成后手动复制结果。"))
                             .helpText()
                     }
@@ -77,7 +82,8 @@ struct WorkspaceHelpView: View {
                 Text("\(number). \(title)").font(.subheadline.weight(.semibold))
                 Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
-        }.frame(minWidth: horizontal ? 165 : nil, maxWidth: .infinity, alignment: .leading)
+        }.frame(minWidth: horizontal ? 150 : nil, maxWidth: .infinity, alignment: .leading)
+            .padding(18).writingSurface()
     }
 }
 

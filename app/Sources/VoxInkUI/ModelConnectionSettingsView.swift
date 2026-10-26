@@ -61,10 +61,9 @@ struct ModelServicePicker: View {
             if !enabled {
                 Text(L("直接使用识别结果，不做润色。")).font(.caption).foregroundStyle(.secondary)
             } else if let selected {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(selected.model).font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(2).textSelection(.enabled)
-                    Spacer()
+                Text(selected.model).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
                     Button(L("设置…")) { editing = selected }.disabled(!store.canEditModelServices)
                     Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
                         .disabled(!store.canEditModelServices)

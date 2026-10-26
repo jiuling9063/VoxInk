@@ -101,7 +101,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
     func showWorkspaceWindow(compact: Bool) {
         workspaceWindow?.close()
         workspaceWindow = WorkspaceWindowController(store: store, restoresFrame: false)
-        workspaceWindow?.window?.setContentSize(NSSize(width: compact ? 660 : 820, height: 600))
+        workspaceWindow?.window?.setContentSize(NSSize(width: compact ? 660 : 1000, height: 750))
         workspaceWindow?.present()
     }
 
@@ -242,7 +242,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
                 .frame(height: short ? 600 : 760)
                 .onGeometryChange(for: CGSize.self) { $0.size } action: { contentSize = $0 }
         }
-        .frame(width: compact ? 660 : 820)
+        .frame(width: compact ? 660 : 1000)
         .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: scenario) { _, value in Task { await controller.show(value) } }
         .onChange(of: dark) { _, value in NSApp.appearance = NSAppearance(named: value ? .darkAqua : .aqua) }

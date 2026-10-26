@@ -56,35 +56,38 @@ struct DictionaryPreferencesView: View {
                     Button(L("添加纠正词"), systemImage: "plus") { beginEditing(nil) }
                         .disabled(!canEdit || !controller.isReady || controller.isUpdating || controller.entries.count >= 100)
                 }
-            }
-            Section(L("已保存词条")) {
+                Divider()
                 if controller.entries.isEmpty {
                     Text(L("还没有纠正词，遇到需要固定写法的姓名或产品名时再添加。"))
                         .font(.callout).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
                 }
                 ForEach(controller.entries) { entry in
                     HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.source).font(.callout)
-                            Label(entry.replacement, systemImage: "arrow.turn.down.right")
-                                .font(.callout).foregroundStyle(.secondary)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .top, spacing: 12) {
+                                Text(entry.source).frame(minWidth: 80, maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "arrow.right").foregroundStyle(.secondary).accessibilityHidden(true)
+                                Text(entry.replacement).foregroundStyle(VoxInkTheme(scheme: scheme).accent)
+                                    .frame(minWidth: 80, maxWidth: .infinity, alignment: .leading)
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(entry.source)
+                                Label(entry.replacement, systemImage: "arrow.turn.down.right")
+                                    .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
+                            }
                         }
-                        Spacer()
                         Button(L("编辑")) { beginEditing(entry) }
                         Button(L("删除"), role: .destructive) { Task { await controller.remove(entry.id) } }
-                    }.disabled(!canEdit || controller.isUpdating)
+                    }.font(.callout).disabled(!canEdit || controller.isUpdating)
+                    if entry.id != controller.entries.last?.id { Divider() }
                 }
             }
             Section(L("文字预览")) {
-                TextField(L("试写一句包含纠正词的话"), text: $testText, axis: .vertical).lineLimit(1...3)
-                    .focused($focusedField, equals: .preview)
-                    .modifier(WorkspaceInputSurface(focused: focusedField == .preview))
-                    .onChange(of: testText) { _, text in
-                        if text.count > 2000 { testText = String(text.prefix(2000)) }
-                    }
-                Text(LanguageTextProcessor.process(String(testText.prefix(2000)), language: .automatic, output: .original, dictionary: controller.rules).text)
-                    .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                    .font(.callout).padding(.vertical, 6)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 18) { previewFields }
+                    VStack(alignment: .leading, spacing: 16) { previewFields }
+                }
                 Text(L("预览最多 2000 个字符，只展示文字，不录音、不粘贴，也不保存这句话。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -112,6 +115,26 @@ struct DictionaryPreferencesView: View {
             .alert(L("词库文件"), isPresented: Binding(get: { fileError != nil }, set: { if !$0 { fileError = nil } })) {
                 Button(L("好"), role: .cancel) { fileError = nil }
             } message: { Text(fileError ?? "") }
+    }
+
+    @ViewBuilder private var previewFields: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("识别原文")).font(.caption).foregroundStyle(.secondary)
+            TextField(L("试写一句包含纠正词的话"), text: $testText, axis: .vertical).lineLimit(3...6)
+                .frame(minHeight: 64, alignment: .topLeading)
+                .focused($focusedField, equals: .preview)
+                .modifier(WorkspaceInputSurface(focused: focusedField == .preview))
+                .onChange(of: testText) { _, text in
+                    if text.count > 2000 { testText = String(text.prefix(2000)) }
+                }
+        }.frame(minWidth: 190, maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("纠正结果")).font(.caption).foregroundStyle(.secondary)
+            Text(LanguageTextProcessor.process(String(testText.prefix(2000)), language: .automatic, output: .original, dictionary: controller.rules).text)
+                .textSelection(.enabled).font(.callout)
+                .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading).padding(12)
+                .background(VoxInkTheme(scheme: scheme).accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        }.frame(minWidth: 190, maxWidth: .infinity, alignment: .leading)
     }
 
     private func beginEditing(_ entry: UserDictionaryEntry?) {

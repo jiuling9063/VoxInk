@@ -16,7 +16,7 @@ import SwiftUI
 
     public init(store: AppStore, restoresFrame: Bool = true) {
         self.store = store
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 750),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         super.init(window: window)
@@ -27,7 +27,7 @@ import SwiftUI
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: ContentView(store: store, navigation: navigation))
         window.contentMinSize = NSSize(width: 660, height: 540)
-        window.setContentSize(NSSize(width: 760, height: 700))
+        window.setContentSize(NSSize(width: 1000, height: 750))
 
         let toolbar = NSToolbar(identifier: "voxink-workspace-toolbar")
         toolbar.delegate = self

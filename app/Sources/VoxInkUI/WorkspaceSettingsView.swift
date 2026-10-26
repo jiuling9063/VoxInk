@@ -41,8 +41,12 @@ struct WorkspaceSettingsView: View {
                 switch page {
                 case .engine, .polish:
                     WorkspaceForm {
-                        Section(L("语音识别")) { ModelSettingsContent(store: store) }
-                        Section(L("文字润色")) { PolishSettingsContent(store: store) }
+                        Section { ModelSettingsContent(store: store) } header: {
+                            WorkspaceSectionHeader(title: L("语音识别"), icon: "waveform", number: "01")
+                        }
+                        Section { PolishSettingsContent(store: store) } header: {
+                            WorkspaceSectionHeader(title: L("文字润色"), icon: "text.badge.checkmark", number: "02")
+                        }
                     }
                 case .shortcut:
                     WorkspaceForm {
@@ -74,13 +78,20 @@ struct WorkspaceSettingsView: View {
 
 struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
+    @Environment(\.colorScheme) private var scheme
     var body: some View {
+        Text(store.shortcutCombination.title)
+            .font(.system(size: 28, weight: .medium, design: .monospaced))
+            .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            .background(VoxInkTheme(scheme: scheme).accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         ShortcutSettingsControl(store: store)
         WorkspacePicker(L("操作方式"), selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
             ForEach(ShortcutMode.allCases, id: \.self) { Text($0.title).tag($0) }
         }.disabled(!store.canChangeShortcut)
         Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
         LabeledContent(L("单次录音"), value: L("最长 60 秒 · Esc 取消"))
+        Divider()
         RemoteInputSettingsView(store: store)
     }
 }
@@ -89,7 +100,7 @@ struct TextProcessingContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
         LabeledContent(L("中文输出"), value: store.chineseOutput.title)
-        Text(L("中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；结果下方可查看识别原文。"))
+        Text(L("中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；可在结果区切换查看识别原文。"))
             .font(.caption).foregroundStyle(.secondary)
     }
 }
@@ -186,17 +197,9 @@ struct PolishSettingsContent: View {
 struct PermissionSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
-        HStack {
-            Text(L("麦克风"))
-            Spacer()
-            StatusBadge(title: store.microphoneAuthorization.title,
-                        tone: store.microphoneAuthorization == .authorized ? .good : .warning)
-        }
-        HStack {
-            Text(L("文字写入"))
-            Spacer()
-            StatusBadge(title: store.pastePermissionGranted ? L("已允许") : L("尚未允许"),
-                        tone: store.pastePermissionGranted ? .good : .warning)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 24) { permissionStatus }
+            VStack(alignment: .leading, spacing: 16) { permissionStatus }
         }
         ViewThatFits(in: .horizontal) {
             HStack { permissionButtons }
@@ -207,6 +210,19 @@ struct PermissionSettingsContent: View {
                 .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
         }
         Button(L("刷新权限状态")) { store.refreshPermissions() }
+    }
+
+    @ViewBuilder private var permissionStatus: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(L("麦克风"), systemImage: "mic")
+            StatusBadge(title: store.microphoneAuthorization.title,
+                        tone: store.microphoneAuthorization == .authorized ? .good : .warning)
+        }.frame(minWidth: 130, maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 10) {
+            Label(L("文字写入"), systemImage: "cursorarrow.and.square.on.square.dashed")
+            StatusBadge(title: store.pastePermissionGranted ? L("已允许") : L("尚未允许"),
+                        tone: store.pastePermissionGranted ? .good : .warning)
+        }.frame(minWidth: 130, maxWidth: .infinity, alignment: .leading)
     }
 
     private var permissionButtons: some View {
