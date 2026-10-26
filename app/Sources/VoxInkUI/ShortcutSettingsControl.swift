@@ -8,14 +8,8 @@ struct ShortcutSettingsControl: View {
     @State private var showingRecorder = false
 
     var body: some View {
-        WorkspacePicker(L("快捷键"), selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) })) {
-            ForEach(ShortcutCombination.allCases, id: \.self) { combination in
-                Text(combination.title + (combination == .optionSpace ? L("（推荐）") : "")).tag(combination)
-            }
-            if !ShortcutCombination.allCases.contains(store.shortcutCombination) {
-                Text(store.shortcutCombination.title + L("（自定义）")).tag(store.shortcutCombination)
-            }
-        }.disabled(!store.canChangeShortcut)
+        WorkspacePicker(L("快捷键"), value: store.shortcutCombination.title, selection: Binding(get: { store.shortcutCombination }, set: { store.setShortcutCombination($0) }), options: ShortcutCombination.allCases.map { ($0.title + ($0 == .optionSpace ? L("（推荐）") : ""), $0) } +
+            (ShortcutCombination.allCases.contains(store.shortcutCombination) ? [] : [(store.shortcutCombination.title + L("（自定义）"), store.shortcutCombination)])).disabled(!store.canChangeShortcut)
         HStack(alignment: .firstTextBaseline) {
             Text(store.shortcutStatus).font(.caption).foregroundStyle(.secondary)
             Spacer(minLength: 12)

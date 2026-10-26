@@ -26,12 +26,7 @@ public struct PreferencesView: View {
                     .overlay { RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.16), lineWidth: 1) }
                     .accessibilityHidden(true)
             }
-            Picker(L("设置分类"), selection: $tab) {
-                Text(L("通用")).tag(0)
-                Text(L("系统权限")).tag(1)
-                Text(L("语音与润色")).tag(3)
-                if store.dictionary != nil { Text(L("用户词典")).tag(2) }
-            }.pickerStyle(.segmented).labelsHidden()
+            WorkspacePicker(L("设置分类"), value: [0: L("通用"), 1: L("系统权限"), 2: L("用户词典"), 3: L("语音与润色")][tab] ?? L("通用"), selection: $tab, options: [(L("通用"), 0), (L("系统权限"), 1), (L("语音与润色"), 3)] + (store.dictionary == nil ? [] : [(L("用户词典"), 2)]))
             ReadinessSummary(store: store)
             ScrollView {
             Group {
@@ -126,11 +121,6 @@ struct StatusBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(title).font(.caption.weight(.medium)).foregroundStyle(color)
-        }
-        .padding(.horizontal, 9).padding(.vertical, 5)
-        .background(color.opacity(0.1), in: Capsule())
+        Text(title).font(.caption).foregroundStyle(color)
     }
 }

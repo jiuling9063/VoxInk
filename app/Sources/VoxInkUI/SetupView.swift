@@ -97,9 +97,7 @@ struct SetupView: View {
     private var usage: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(L("你准备在哪里使用语音输入？")).font(.headline)
-            Picker(L("使用场景"), selection: Binding(get: { progress.usage }, set: { store.setSetupUsage($0) })) {
-                ForEach(SetupUsage.allCases, id: \.self) { Text($0.title).tag($0) }
-            }.pickerStyle(.radioGroup).disabled(!store.canStart)
+            WorkspacePicker(L("使用场景"), value: progress.usage.title, selection: Binding(get: { progress.usage }, set: { store.setSetupUsage($0) }), options: SetupUsage.allCases.map { ($0.title, $0) }).disabled(!store.canStart)
             Text(L("远程输入时，在本机说话并识别，再通过远程工具的剪贴板同步传递文字。"))
                 .font(.callout).foregroundStyle(.secondary)
             Text(L("随时可以稍后设置；已完成的步骤会保存，可从“首次准备”继续。"))

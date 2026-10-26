@@ -20,12 +20,9 @@ struct RemoteInputSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(store.remoteApplications) { profile in
                     VStack(alignment: .leading, spacing: 8) {
-                        WorkspacePicker(profile.name, selection: Binding(get: { profile.usesControl }, set: {
+                        WorkspacePicker(profile.name, value: profile.usesControl ? "Ctrl V · Windows / Linux" : "⌘ V · Mac", selection: Binding(get: { profile.usesControl }, set: {
                             store.setRemoteApplication(.init(bundleID: profile.bundleID, name: profile.name, usesControl: $0))
-                        })) {
-                            Text("⌘ V · Mac").tag(false)
-                            Text("Ctrl V · Windows / Linux").tag(true)
-                        }
+                        }), options: [("⌘ V · Mac", false), ("Ctrl V · Windows / Linux", true)])
                         Button(L("移除此配置"), role: .destructive) { store.removeRemoteApplication(profile.bundleID) }
                             .font(.caption)
                         if profile.bundleID == "com.netease.uuremote" {
@@ -35,9 +32,7 @@ struct RemoteInputSettingsView: View {
                     Divider()
                 }
                 Button(L("添加远程工具…"), systemImage: "plus") { choosingApplication = true }
-                WorkspacePicker(L("剪贴板同步等待"), selection: Binding(get: { store.remotePasteTiming }, set: { store.setRemotePasteTiming($0) })) {
-                    ForEach(RemotePasteTiming.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                WorkspacePicker(L("剪贴板同步等待"), value: store.remotePasteTiming.title, selection: Binding(get: { store.remotePasteTiming }, set: { store.setRemotePasteTiming($0) }), options: RemotePasteTiming.allCases.map { ($0.title, $0) })
                 Text(L("适用于已添加的远程工具。先用稳定档；出现旧文字或未写入时，检查远程工具的剪贴板与快捷键设置。"))
                     .font(.caption).foregroundStyle(.secondary)
                 DisclosureGroup(L("按设备覆盖粘贴方式")) {

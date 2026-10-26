@@ -40,7 +40,7 @@ struct DictionaryPreferencesView: View {
                     Text(L("\(controller.entries.count) / 100 条")).font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if controller.isUpdating { ProgressView().controlSize(.small) }
-                    Menu(L("词库文件")) {
+                    WorkspaceMenu(title: L("词库文件"), value: L("词库文件")) {
                         Button(L("导入 CSV…")) { choosingImport = true }
                             .disabled(!canEdit || !controller.isReady || controller.isUpdating)
                         Button(L("导出词库…")) {

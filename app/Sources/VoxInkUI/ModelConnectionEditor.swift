@@ -12,14 +12,12 @@ struct ModelConnectionEditor: View {
     @FocusState private var keyFocused: Bool
     @FocusState private var parametersFocused: Bool
     @Environment(\.dismiss) private var dismiss
-    private let needsModelEntry: Bool
 
     init(store: AppStore, connection: ModelConnection) {
         self.store = store
         let existing = store.modelServices.connections.contains { $0.id == connection.id }
         _draft = State(initialValue: ModelConnectionDraft(connection: connection, isExisting: existing))
         _reuseKey = State(initialValue: !existing && store.modelServices.credentialSource(for: connection) != nil)
-        needsModelEntry = connection.model.isEmpty || ModelProviderPreset.matching(connection) == .custom
     }
 
     private var credentialSource: ModelConnection? {
@@ -40,17 +38,13 @@ struct ModelConnectionEditor: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     keySection
-                    if needsModelEntry { modelField }
-                    else {
-                        LabeledContent(L("模型"), value: draft.connection.model)
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    modelField
                     if draft.provider == .custom { addressField }
                     advancedSection
                     Text(L("保存后立即选用。使用时会向此服务发送音频或文字，并可能产生 API 费用。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24)
-            }.frame(height: advanced ? 450 : (draft.provider == .custom ? 430 : (needsModelEntry ? 330 : 270)))
+            }.frame(height: advanced ? 450 : (draft.provider == .custom ? 430 : 330))
             Divider()
             VStack(alignment: .leading, spacing: 10) {
                 if !error.isEmpty {
@@ -113,10 +107,9 @@ struct ModelConnectionEditor: View {
     }
 
     private var modelField: some View {
-        field(L("模型")) {
-            WorkspaceTextField(title: L("模型"), text: Binding(
-                get: { draft.connection.model }, set: { draft.updateModel($0) }),
-                prompt: L("填写服务商控制台中的模型 ID"))
+        VStack(alignment: .leading, spacing: 7) {
+            WorkspaceModelField(title: L("模型"), text: Binding(
+                get: { draft.connection.model }, set: { draft.updateModel($0) }))
                 .accessibilityIdentifier("connectionModel")
             if draft.provider == .volcengine {
                 Text(L("火山方舟可填写模型 ID 或已创建的推理接入点 ID。"))
@@ -136,7 +129,6 @@ struct ModelConnectionEditor: View {
     private var advancedSection: some View {
         DisclosureGroup(L("高级设置"), isExpanded: $advanced) {
             VStack(alignment: .leading, spacing: 16) {
-                if !needsModelEntry { modelField }
                 if draft.provider != .custom { addressField }
                 field(L("连接名称")) {
                     WorkspaceTextField(title: L("连接名称"), text: $draft.connection.name, prompt: L("例如：日常润色"))

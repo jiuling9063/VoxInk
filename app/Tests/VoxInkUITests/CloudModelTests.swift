@@ -215,6 +215,43 @@ struct CloudModelClientTests {
 }
 
 @MainActor struct ModelConnectionSettingsTests {
+    @Test(arguments: [ModelServicePurpose.transcription, .polishing])
+    func inlineModelIDPersistsWithoutChangingConnectionOrCredentials(purpose: ModelServicePurpose) throws {
+        let suite = "VoxInk.InlineModel." + UUID().uuidString
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let keys = MemoryModelCredentials()
+        let store = AppStore(preferences: preferences, modelCredentials: keys)
+        var original = connection(purpose)
+        original.extraBodyJSON = purpose == .polishing ? #"{"max_tokens":512}"# : "{}"
+        try store.saveAndSelectModelConnection(original, apiKey: "fixture-preserved")
+        let before = store.modelServices
+        keys.failWrites = true
+        try store.updateModelID(original.id, model: "  provider/custom-model  ")
+        var expected = before
+        expected.connections[0].model = "provider/custom-model"
+        #expect(store.modelServices == expected)
+        #expect(try keys.read(original.id) == "fixture-preserved")
+        #expect(AppStore(preferences: preferences, modelCredentials: keys).modelServices == expected)
+    }
+
+    @Test func invalidOrBusyInlineEditsLeaveStoredModelUntouched() throws {
+        let store = AppStore(preferences: nil, modelCredentials: MemoryModelCredentials())
+        let original = connection()
+        try store.saveAndSelectModelConnection(original, apiKey: nil)
+        let before = store.modelServices
+        for invalid in ["", "   ", "provider/one\nother", "provider/one\rother"] {
+            #expect(throws: CloudServiceError.invalidConfiguration) { try store.updateModelID(original.id, model: invalid) }
+            #expect(store.modelServices == before)
+        }
+        #expect(throws: CloudServiceError.missingConnection) { try store.updateModelID(UUID(), model: "model") }
+        store.configureShortcutRegistration { _ in true }
+        #expect(store.beginShortcutRecording())
+        #expect(throws: CloudServiceError.busy) { try store.updateModelID(original.id, model: "model") }
+        #expect(store.modelServices == before)
+        store.finishShortcutRecording()
+    }
+
     @Test func stylePersistsWithoutChangingProviderAndCannotChangeWhileBusy() throws {
         let name = "VoxInk.PolishStyle." + UUID().uuidString
         let prefs = try #require(UserDefaults(suiteName: name))

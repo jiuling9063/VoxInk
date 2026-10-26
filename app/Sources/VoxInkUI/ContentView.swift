@@ -349,10 +349,7 @@ public struct ContentView: View {
                 }.frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 if !store.rawTranscript.isEmpty {
-                    Picker(L("本次结果"), selection: $showingOriginal) {
-                        Text(L("整理结果")).tag(false)
-                        Text(L("识别原文")).tag(true)
-                    }.labelsHidden().pickerStyle(.segmented).frame(maxWidth: 280)
+                    WorkspacePicker(L("本次结果"), value: showingOriginal ? L("识别原文") : L("整理结果"), selection: $showingOriginal, options: [(L("整理结果"), false), (L("识别原文"), true)])
                 }
                 if !store.polishMessage.isEmpty {
                     Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)

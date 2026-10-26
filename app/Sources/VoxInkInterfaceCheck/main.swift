@@ -16,6 +16,18 @@ private let fixtureURL = URL(fileURLWithPath: "/voxink-interface-check-memory-fi
 private let exampleText = "明天上午 10:30 讨论 VoxInk 0.1，预算 1234.50 元。网址 https://example.com/a?q=1，路径 /tmp/report.json。\n" +
     String(repeating: "这是一段用于检查换行和滚动的模拟文字，中英文 English 与数字 123 保持原样。\n", count: 12)
 
+private struct PreviewModelTransport: ModelHTTPTransport {
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        throw CloudServiceError.network
+    }
+}
+
+@MainActor private final class PreviewCredentials: ModelCredentialStorage {
+    private var values: [UUID: String] = [:]
+    func read(_ id: UUID) -> String? { values[id] }
+    func write(_ value: String?, for id: UUID) { values[id] = value }
+}
+
 private actor PreviewTranscriber: TranscriptionService {
     var held: Scenario?
     var text = exampleText
@@ -105,6 +117,21 @@ private actor PreviewDictionary: UserDictionaryStorage {
         workspaceWindow?.present()
     }
 
+    func useCloudSettingsFixture() {
+        do {
+            for purpose in ModelServicePurpose.allCases {
+                var connection = ModelConnection()
+                connection.name = "硅基流动（界面示例）"
+                connection.purpose = purpose
+                connection.baseURL = "https://models.example/v1"
+                connection.model = purpose == .transcription ? "Qwen/Qwen3-ASR-1.7B" : "Qwen/Qwen3.5-122B-A10B"
+                try store.saveModelConnection(connection, apiKey: nil)
+                try store.selectModelService(connection.id, for: purpose)
+            }
+            store.setPolishingEnabled(true)
+        } catch { self.error = error.localizedDescription }
+    }
+
     private var service: PreviewTranscriber
     private var paste: PreviewPaste
     let dictionaryStorage = PreviewDictionary()
@@ -125,6 +152,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
 
     private static func makeStore(_ service: PreviewTranscriber, _ paste: PreviewPaste, _ dictionary: PreviewDictionary) -> AppStore {
         AppStore(service: service, pasteService: paste, recorder: PreviewRecorder(), preferences: nil,
+                 modelCredentials: PreviewCredentials(), modelTransport: PreviewModelTransport(),
                  microphoneStatus: { .authorized }, audioPreparer: { $0 }, audioCleaner: { _ in },
                  audioRecovery: PreviewRecovery(), dictionary: UserDictionaryController(storage: dictionary),
                  clipboardWriter: { _ in true })
@@ -232,6 +260,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
                     Text("主界面实测：\(Int(contentSize.width)) × \(Int(contentSize.height)) 点")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("正式窗口预览") { controller.showWorkspaceWindow(compact: compact) }
+                    Button("云端设置示例") { controller.useCloudSettingsFixture() }.disabled(!controller.store.canEditModelServices)
                     Button("导出演示图") { controller.exportCurrentView() }
                 }
                 Text(controller.exportStatus).font(.caption).foregroundStyle(.secondary)

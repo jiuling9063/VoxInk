@@ -1336,6 +1336,15 @@ import VoxInkCore
         if connection.purpose == .polishing { setPolishingEnabled(true) }
     }
 
+    func updateModelID(_ id: UUID, model: String) throws {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        guard var connection = modelServices.connections.first(where: { $0.id == id }) else {
+            throw CloudServiceError.missingConnection
+        }
+        connection.model = model
+        try saveModelConnection(connection, apiKey: nil)
+    }
+
     public func saveModelConnection(_ connection: ModelConnection, apiKey: String?, clearKey: Bool = false) throws {
         guard canEditModelServices else { throw CloudServiceError.busy }
         var connection = connection

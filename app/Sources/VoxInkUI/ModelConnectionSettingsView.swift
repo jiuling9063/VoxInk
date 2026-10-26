@@ -25,19 +25,25 @@ struct ModelServicePicker: View {
             HStack {
                 Text(L("处理方式"))
                 Spacer()
-                Menu {
+                WorkspaceMenu(title: purpose == .transcription ? L("识别服务") : L("润色服务"), value: selectionTitle) {
                     if purpose == .polishing {
-                        Button(L("不润色")) { store.setPolishingEnabled(false) }
+                        serviceOption(L("不润色"), selected: !enabled) { store.setPolishingEnabled(false) }
                     }
-                    Button(L("本地模型")) { select(nil) }
+                    serviceOption(L("本地模型"), selected: enabled && store.modelServices.selectedID(for: purpose) == nil) { select(nil) }
                     if !saved.isEmpty {
                         Section(L("已配置")) {
                             ForEach(saved) { connection in
-                                Button(connection.name) {
+                                serviceOption(connection.name, selected: enabled && selected?.id == connection.id) {
                                     if (try? connection.validate()) == nil { editing = connection }
                                     else { select(connection.id) }
                                 }
                             }
+                        }
+                    }
+                    if let selected, enabled {
+                        Section {
+                            Button(L("设置…")) { editing = selected }
+                            Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
                         }
                     }
                     Section(L("服务商")) {
@@ -49,28 +55,12 @@ struct ModelServicePicker: View {
                             }
                         }
                     }
-                } label: {
-                    Text(!enabled ? L("不润色") : (selected?.name ?? (store.modelServices.selectedID(for: purpose) == nil
-                                           ? L("本地模型") : L("连接配置不可用"))))
-                        .lineLimit(1)
                 }
-                .menuStyle(.borderedButton)
-                .accessibilityLabel(purpose == .transcription ? L("识别服务") : L("润色服务"))
                 .disabled(!store.canEditModelServices)
             }
-            if !enabled {
-                Text(L("直接使用识别结果，不做润色。")).font(.caption).foregroundStyle(.secondary)
-            } else if let selected {
-                Text(selected.model).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 10) {
-                    Button(L("设置…")) { editing = selected }.disabled(!store.canEditModelServices)
-                    Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
-                        .disabled(!store.canEditModelServices)
-                        .help(L("测试会发送示例文字或所选音频，可能产生 API 费用。"))
-                }
-                Text(purpose == .transcription ? L("音频由所选服务商处理。") : L("文字由所选服务商润色，失败时保留原文。"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if enabled, let selected {
+                Divider()
+                ModelIDSettingsField(store: store, connection: selected).id(selected.id)
                 if store.connectionTestConnectionID == selected.id, !store.connectionTestMessage.isEmpty {
                     Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
                     if !store.canStart && store.canCancel {
@@ -81,6 +71,18 @@ struct ModelServicePicker: View {
             if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
         }
         .sheet(item: $editing) { ModelConnectionEditor(store: store, connection: $0) }
+    }
+
+    private var selectionTitle: String {
+        !enabled ? L("不润色") : (selected?.name ?? (store.modelServices.selectedID(for: purpose) == nil
+            ? L("本地模型") : L("连接配置不可用")))
+    }
+
+    private func serviceOption(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if selected { Label(title, systemImage: "checkmark") }
+            else { Text(title) }
+        }
     }
 
     private func select(_ id: UUID?) {
@@ -101,5 +103,39 @@ struct ModelServicePicker: View {
         panel.message = L("选择一段不超过 60 秒的音频，将发送到此连接进行转写测试。")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         store.testModelConnection(connection.id, audioURL: url)
+    }
+}
+
+private struct ModelIDSettingsField: View {
+    @ObservedObject var store: AppStore
+    let connection: ModelConnection
+    @State private var draft: String
+    @State private var error = ""
+
+    init(store: AppStore, connection: ModelConnection) {
+        self.store = store; self.connection = connection
+        _draft = State(initialValue: connection.model)
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 5) {
+            WorkspaceModelField(title: connection.purpose == .transcription ? L("识别模型 ID") : L("润色模型 ID"),
+                                text: $draft, commit: save, cancel: { draft = connection.model; error = "" })
+                .disabled(!store.canEditModelServices)
+            if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
+        }
+        .onChange(of: connection.model) { _, model in draft = model }
+    }
+
+    private func save() {
+        guard draft != connection.model else { return }
+        do {
+            try store.updateModelID(connection.id, model: draft)
+            draft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            error = ""
+        } catch {
+            draft = connection.model
+            self.error = error.localizedDescription
+        }
     }
 }

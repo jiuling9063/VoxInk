@@ -26,7 +26,7 @@ struct WorkspaceSettingsView: View {
 
     private var subtitle: String {
         switch page {
-        case .engine, .polish: L("先把语音变成文字，再按需润色。两项可分别选择本地或云端服务。")
+        case .engine, .polish: ""
         case .shortcut: L("选择顺手的快捷键，让文字落在需要的地方。")
         case .postprocess: L("整理文字，记住姓名与专有词的正确写法。")
         case .help: L("从第一句话开始，了解语落的使用方式。")
@@ -42,12 +42,14 @@ struct WorkspaceSettingsView: View {
                 case .engine, .polish:
                     WorkspaceForm {
                         Section { ModelSettingsContent(store: store) } header: {
-                            WorkspaceSectionHeader(title: L("语音识别"), icon: "waveform", number: "01")
+                            Text(L("语音识别"))
                         }
                         Section { PolishSettingsContent(store: store) } header: {
-                            WorkspaceSectionHeader(title: L("文字润色"), icon: "text.badge.checkmark", number: "02")
+                            Text(L("文字润色"))
                         }
                     }
+                    Text(L("云端处理会将音频或文字发送到所选服务。"))
+                        .font(.caption).foregroundStyle(.secondary)
                 case .shortcut:
                     WorkspaceForm {
                         Section(L("语音输入")) { InputSettingsContent(store: store) }
@@ -78,17 +80,9 @@ struct WorkspaceSettingsView: View {
 
 struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
-    @Environment(\.colorScheme) private var scheme
     var body: some View {
-        Text(store.shortcutCombination.title)
-            .font(.system(size: 28, weight: .medium, design: .monospaced))
-            .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
-            .padding(.horizontal, 18).padding(.vertical, 12)
-            .background(VoxInkTheme(scheme: scheme).accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         ShortcutSettingsControl(store: store)
-        WorkspacePicker(L("操作方式"), selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) })) {
-            ForEach(ShortcutMode.allCases, id: \.self) { Text($0.title).tag($0) }
-        }.disabled(!store.canChangeShortcut)
+        WorkspacePicker(L("操作方式"), value: store.shortcutMode.title, selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) }), options: ShortcutMode.allCases.map { ($0.title, $0) }).disabled(!store.canChangeShortcut)
         Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
         LabeledContent(L("单次录音"), value: L("最长 60 秒 · Esc 取消"))
         Divider()
@@ -111,29 +105,19 @@ struct PolishSettingsContent: View {
     var body: some View {
         ModelServicePicker(store: store, purpose: .polishing)
         if store.polishingEnabled {
-            Picker(L("润色方式"), selection: Binding(get: { store.polishStyle }, set: { store.setPolishStyle($0) })) {
-                ForEach(PolishStyle.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
+            WorkspacePicker(L("润色方式"), value: store.polishStyle.title, selection: Binding(get: { store.polishStyle }, set: { store.setPolishStyle($0) }), options: PolishStyle.allCases.map { ($0.title, $0) })
             .disabled(!store.canEditModelServices)
-            Text(store.polishStyle.detail).font(.caption).foregroundStyle(.secondary)
+
         }
         if store.polishingEnabled && store.modelServices.polishingID == nil { localSettings }
     }
 
     @ViewBuilder private var localSettings: some View {
-        WorkspacePicker(L("模型选择"), selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
+        WorkspacePicker(L("模型选择"), value: store.automaticPolishModel ? L("自动（推荐）") : store.polishModel.title, selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
             if $0 == "auto" { store.setAutomaticPolishModel(true) }
             else if let model = PolishModel(rawValue: $0) { store.setPolishModel(model) }
-        })) {
-            Text(L("自动（推荐）")).tag("auto")
-            ForEach(PolishModel.allCases, id: \.self) { model in
-                Text(model.title).tag(model.rawValue)
-            }
-        }.disabled(!store.canStart || store.isInstallingPolishModel)
-        WorkspacePicker(L("使用偏好"), selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) })) {
-            ForEach(PolishPreference.allCases, id: \.self) { Text($0.title).tag($0) }
-        }.disabled(!store.canStart || store.isInstallingPolishModel)
+        }), options: [(L("自动（推荐）"), "auto")] + PolishModel.allCases.map { ($0.title, $0.rawValue) }).disabled(!store.canStart || store.isInstallingPolishModel)
+        WorkspacePicker(L("使用偏好"), value: store.polishPreference.title, selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) }), options: PolishPreference.allCases.map { ($0.title, $0) }).disabled(!store.canStart || store.isInstallingPolishModel)
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {

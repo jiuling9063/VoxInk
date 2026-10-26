@@ -666,5 +666,9 @@
   "整理结果": "Edited result",
   "纠正结果": "Corrected text",
   "识别原文": "Original transcript",
-  "中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；可在结果区切换查看识别原文。": "Chinese text follows the selected script; other languages stay unchanged. Numbers, URLs, paths and code are preserved. Switch tabs in the result area to view the original transcript."
+  "中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；可在结果区切换查看识别原文。": "Chinese text follows the selected script; other languages stay unchanged. Numbers, URLs, paths and code are preserved. Use the result selector to view the original transcript.",
+  "云端处理会将音频或文字发送到所选服务。": "Cloud processing sends audio or text to the selected service.",
+  "可输入自定义 ID": "Enter a custom ID",
+  "润色模型 ID": "Polishing model ID",
+  "识别模型 ID": "Transcription model ID"
 }

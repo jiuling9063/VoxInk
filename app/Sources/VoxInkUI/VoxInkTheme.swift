@@ -93,8 +93,10 @@ struct WorkspaceHeading: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.system(size: 26, weight: .semibold)).tracking(-0.5)
                 .accessibilityAddTraits(.isHeader)
-            Text(subtitle).font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if !subtitle.isEmpty {
+                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -106,17 +108,17 @@ struct WorkspaceForm<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(sections: content) { section in
-                VStack(alignment: .leading, spacing: 18) {
-                    section.header.font(.headline).accessibilityAddTraits(.isHeader)
-                    Divider()
+                VStack(alignment: .leading, spacing: 9) {
+                    section.header.font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 3).accessibilityAddTraits(.isHeader)
                     VStack(alignment: .leading, spacing: 14) {
                         ForEach(section.content) { row in
                             row.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(18).writingSurface()
                     section.footer.font(.caption).foregroundStyle(.secondary)
-                }.padding(22).writingSurface()
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
             .toggleStyle(WorkspaceToggleStyle())
@@ -186,13 +188,14 @@ extension View {
 }
 
 /// Keep short settings choices compact; wrap the label only when space is scarce.
-struct WorkspacePicker<Selection: Hashable, Options: View>: View {
+struct WorkspacePicker<Selection: Hashable>: View {
     let title: String
+    let value: String
     @Binding var selection: Selection
-    @ViewBuilder let options: Options
+    let options: [(String, Selection)]
 
-    init(_ title: String, selection: Binding<Selection>, @ViewBuilder content: () -> Options) {
-        self.title = title; self._selection = selection; self.options = content()
+    init(_ title: String, value: String, selection: Binding<Selection>, options: [(String, Selection)]) {
+        self.title = title; self.value = value; self._selection = selection; self.options = options
     }
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -205,7 +208,14 @@ struct WorkspacePicker<Selection: Hashable, Options: View>: View {
         }
     }
     private var choice: some View {
-        Picker(title, selection: $selection) { options }
-            .labelsHidden().pickerStyle(.menu).fixedSize()
+        WorkspaceMenu(title: title, value: value) {
+            ForEach(options.indices, id: \.self) { index in
+                Button { selection = options[index].1 } label: {
+                    if selection == options[index].1 {
+                        Label(options[index].0, systemImage: "checkmark")
+                    } else { Text(options[index].0) }
+                }
+            }
+        }
     }
 }
