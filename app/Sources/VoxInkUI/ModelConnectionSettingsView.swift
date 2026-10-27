@@ -125,6 +125,7 @@ private struct ModelIDSettingsField: View {
             if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
         }
         .onChange(of: connection.model) { _, model in draft = model }
+        .onDisappear(perform: save)
     }
 
     private func save() {
