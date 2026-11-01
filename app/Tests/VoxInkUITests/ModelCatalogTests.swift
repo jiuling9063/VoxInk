@@ -8,9 +8,10 @@ private actor CatalogTransport: ModelHTTPTransport {
     let body: String
     let status: Int
     let delay: Duration
+    let pages: [String]?
 
-    init(body: String = #"{"data":[{"id":"provider/model"}]}"#, status: Int = 200, delay: Duration = .zero) {
-        self.body = body; self.status = status; self.delay = delay
+    init(body: String = #"{"data":[{"id":"provider/model"}]}"#, status: Int = 200, delay: Duration = .zero, pages: [String]? = nil) {
+        self.body = body; self.status = status; self.delay = delay; self.pages = pages
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -18,7 +19,8 @@ private actor CatalogTransport: ModelHTTPTransport {
         do { try await Task.sleep(for: delay) }
         catch { cancelled = true; throw error }
         let url = try #require(request.url)
-        return (Data(body.utf8), try #require(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)))
+        let response = pages.map { $0[min(requests.count - 1, $0.count - 1)] } ?? body
+        return (Data(response.utf8), try #require(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)))
     }
 }
 
@@ -31,6 +33,116 @@ private actor CatalogTransport: ModelHTTPTransport {
 }
 
 struct ModelCatalogTests {
+    @Test(arguments: ModelProviderPreset.allCases)
+    func everyProviderCanFetchUsingItsConfiguredAddress(provider: ModelProviderPreset) async throws {
+        var connection = provider.makeConnection(for: .polishing)
+        if provider == .custom { connection.baseURL = "https://custom.example/company/v2" }
+        let transport = CatalogTransport()
+        let result = try await CloudModelClient(connection: connection, apiKey: "fixture", transport: transport).fetchModels()
+        #expect(result.models + result.unclassified == ["provider/model"])
+        let request = try #require(await transport.requests.first)
+        #expect(request.url?.host == URL(string: connection.baseURL)?.host)
+        #expect(request.url?.path.hasSuffix("/models") == true)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture")
+    }
+
+    @Test(arguments: ["https://custom.example/prefix/v2", "https://custom.example/prefix/v2/",
+                      "https://custom.example/prefix/v2/chat/completions", "https://custom.example/prefix/v2/chat/completions/"])
+    func normalizesBaseAndCompleteChatEndpoints(address: String) throws {
+        var connection = ModelConnection(); connection.baseURL = address
+        #expect(try ModelCatalog.url(for: connection).absoluteString == "https://custom.example/prefix/v2/models")
+    }
+
+    @Test func completeTranscriptionURLAndAnonymousLocalServer() async throws {
+        var connection = ModelConnection(); connection.purpose = .transcription
+        connection.baseURL = "http://127.0.0.1:9876/custom/v1/audio/transcriptions"
+        let transport = CatalogTransport()
+        let result = try await CloudModelClient(connection: connection, apiKey: nil, transport: transport).fetchModels()
+        #expect(result.unclassified == ["provider/model"])
+        let request = try #require(await transport.requests.first)
+        #expect(request.url?.absoluteString == "http://127.0.0.1:9876/custom/v1/models")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test func officialMetadataFiltersWithoutDroppingUnknownIDs() throws {
+        let body = #"{"data":[{"id":"private-chat","input_modalities":["text","image"],"output_modalities":["text"]},{"id":"speech","sub_type":"speech-to-text"},{"id":"pictures","architecture":{"input_modalities":["text"],"output_modalities":["image"]}},{"id":"vectors","type":"embedding"},{"id":"rank","type":"reranker"},{"id":"voice","capabilities":["TTS"]},{"id":"disabled","type":"chat","active":false},{"id":"opaque-deployment"}]}"#
+        let chat = try ModelCatalog.decode(Data(body.utf8), purpose: .polishing, serverFiltered: false).result
+        #expect(chat.models == ["private-chat"])
+        #expect(chat.unclassified == ["opaque-deployment"])
+        let speech = try ModelCatalog.decode(Data(body.utf8), purpose: .transcription, serverFiltered: false).result
+        #expect(speech.models == ["speech"])
+        #expect(speech.unclassified == ["opaque-deployment"])
+    }
+
+    @Test func commonSpecializedIDsDoNotCrowdThePolishingList() throws {
+        let ids = ["gpt-4.1-mini", "whisper-1", "gpt-4o-mini-transcribe", "Qwen/Qwen3-ASR-1.7B",
+                   "FunAudioLLM/SenseVoiceSmall", "text-embedding-3-small", "tts-1", "dall-e-3", "bge-m3", "reranker-v1"]
+        let data = try JSONSerialization.data(withJSONObject: ["data": ids.map { ["id": $0] }])
+        let chat = try ModelCatalog.decode(data, purpose: .polishing, serverFiltered: false).result
+        #expect(chat.models.isEmpty)
+        #expect(chat.unclassified == ["gpt-4.1-mini"])
+        let speech = try ModelCatalog.decode(data, purpose: .transcription, serverFiltered: false).result
+        #expect(Set(speech.models) == Set(ids[1...4]))
+    }
+
+    @Test func dashScopeAdapterUsesNativePathAndFollowsAllPages() async throws {
+        let transport = CatalogTransport(pages: [
+            #"{"output":{"total":2,"models":[{"model":"one","capabilities":["TG"]}]}}"#,
+            #"{"output":{"total":2,"models":[{"model":"two","inference_metadata":{"request_modality":["Text"],"response_modality":["Text"]}}]}}"#])
+        let connection = ModelProviderPreset.dashScope.makeConnection(for: .polishing)
+        let result = try await CloudModelClient(connection: connection, apiKey: "fixture", transport: transport).fetchModels()
+        #expect(result.models == ["one", "two"])
+        let requests = await transport.requests
+        #expect(requests.count == 2)
+        for (index, request) in requests.enumerated() {
+            let url = try #require(request.url)
+            #expect(url.host == "dashscope.aliyuncs.com")
+            #expect(url.path == "/api/v1/models")
+            let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+            #expect(query.filter { $0.name == "page_no" }.map(\.value) == [String(index + 1)])
+            #expect(query.contains(.init(name: "capabilities", value: "TG")))
+        }
+    }
+
+    @Test func cursorPaginationNeverForwardsKeysToReturnedURLs() async throws {
+        let transport = CatalogTransport(pages: [
+            #"{"data":[{"id":"first","type":"chat"}],"has_more":true,"last_id":"first","next":"https://other.example/steal"}"#,
+            #"{"data":[{"id":"second","type":"chat"}],"has_more":false}"#])
+        var connection = ModelConnection(); connection.baseURL = "https://custom.example/v1"
+        let result = try await CloudModelClient(connection: connection, apiKey: "fixture", transport: transport).fetchModels()
+        #expect(result.models == ["first", "second"])
+        let requests = await transport.requests
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.url?.host == "custom.example" })
+        #expect(requests.last?.url?.query == "after=first")
+    }
+
+    @Test(arguments: [#"{"data":[{"id":"same"}],"has_more":true}"#,
+                      #"{"output":{"total":3,"models":[{"model":"same"}]}}"#])
+    func repeatedPagesFailInsteadOfReturningAPartialCatalog(body: String) async {
+        let transport = CatalogTransport(body: body)
+        await #expect(throws: ModelCatalogError.incomplete) {
+            try await CloudModelClient(connection: ModelProviderPreset.deepSeek.makeConnection(for: .polishing),
+                                       apiKey: "fixture", transport: transport).fetchModels()
+        }
+        #expect(await transport.requests.count == 2)
+    }
+
+    @Test(arguments: [404, 405, 501])
+    func unavailableCatalogHasAnExplicitError(status: Int) async {
+        await #expect(throws: ModelCatalogError.unsupported) {
+            try await CloudModelClient(connection: ModelProviderPreset.volcengine.makeConnection(for: .polishing),
+                                       apiKey: "fixture", transport: CatalogTransport(status: status)).fetchModels()
+        }
+    }
+
+    @Test func boundsTheWholeFetchByTheConfiguredTimeout() async {
+        var connection = ModelProviderPreset.deepSeek.makeConnection(for: .polishing); connection.timeoutSeconds = 1
+        await #expect(throws: CloudServiceError.timeout) {
+            try await CloudModelClient(connection: connection, apiKey: "fixture", transport: CatalogTransport(delay: .seconds(10))).fetchModels()
+        }
+    }
+
     @Test(arguments: ModelServicePurpose.allCases)
     func filtersAtTheOfficialEndpointBeforeDisplaying(purpose: ModelServicePurpose) async throws {
         let transport = CatalogTransport()
@@ -38,7 +150,7 @@ struct ModelCatalogTests {
         // Fetching must work before a name, model or optional generation parameters are filled in.
         connection.name = ""; connection.model = ""; connection.extraBodyJSON = "unfinished"
         let result = try await CloudModelClient(connection: connection, apiKey: "fixture", transport: transport).fetchModels()
-        #expect(result == ["provider/model"])
+        #expect(result.models == ["provider/model"])
         let request = try #require(await transport.requests.first)
         #expect(request.httpMethod == "GET")
         #expect(request.httpBody == nil)
@@ -52,24 +164,22 @@ struct ModelCatalogTests {
         let transport = CatalogTransport(body: #"{"data":[{"id":"z/model"},{"id":"a/model"},{"id":"a/model"},{"id":""},{"id":"  "},{"id":" padded"},{"id":"bad\nmodel"},{"id":"bad\u0000model"}]}"#)
         let result = try await CloudModelClient(connection: ModelProviderPreset.siliconFlow.makeConnection(for: .polishing),
                                                apiKey: "fixture", transport: transport).fetchModels()
-        #expect(result == ["a/model", "z/model"])
+        #expect(result.models == ["a/model", "z/model"])
     }
 
-    @Test(arguments: ["https://api.siliconflow.cn.evil.example/v1", "http://api.siliconflow.cn/v1",
-                      "https://api.siliconflow.cn/v2", "https://api.siliconflow.cn/v1?key=x",
-                      "https://api.openai.com/v1", "https://api.siliconflow.cn:8443/v1"])
-    func unsupportedEndpointsNeverReceiveCredentials(address: String) async {
+    @Test(arguments: ["http://api.siliconflow.cn/v1", "https://example.com/v1?key=x",
+                      "https://user@example.com/v1", "file:///tmp/api"])
+    func unsafeEndpointsNeverReceiveCredentials(address: String) async {
         var connection = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
         connection.baseURL = address
         let transport = CatalogTransport()
-        #expect(!ModelCatalog.supports(connection))
-        await #expect(throws: CloudServiceError.invalidConfiguration) {
+        await #expect(throws: CloudServiceError.invalidURL) {
             try await CloudModelClient(connection: connection, apiKey: "fixture", transport: transport).fetchModels()
         }
         #expect(await transport.requests.isEmpty)
     }
 
-    @Test(arguments: ["", "   ", "one\nother", "one\rother"])
+    @Test(arguments: ["one\nother", "one\rother"])
     func missingOrInvalidKeyDoesNotSend(key: String) async {
         let transport = CatalogTransport()
         await #expect(throws: CloudServiceError.authentication) {
@@ -122,7 +232,7 @@ struct ModelCatalogTests {
         let connection = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)
         try store.saveAndSelectModelConnection(connection, apiKey: "saved-fixture")
         let before = store.modelServices, writes = keys.writes
-        if status == 200 { #expect(try await store.fetchModels(for: connection) == ["provider/model"]) }
+        if status == 200 { #expect(try await store.fetchModels(for: connection).models == ["provider/model"]) }
         else { await #expect(throws: CloudServiceError.authentication) { try await store.fetchModels(for: connection) } }
         #expect(store.modelServices == before)
         #expect(keys.writes == writes)
@@ -172,5 +282,25 @@ struct ModelCatalogTests {
         await #expect(throws: CloudServiceError.invalidConfiguration) { try await store.fetchModels(for: draft, clearKey: true) }
         #expect(keys.reads.isEmpty)
         #expect(await transport.requests.isEmpty)
+    }
+
+    @MainActor @Test func customKeysStayAtTheirSavedAddressUnlessANewKeyIsProvided() async throws {
+        let keys = CatalogCredentials(), transport = CatalogTransport()
+        let store = AppStore(preferences: nil, modelCredentials: keys, modelTransport: transport)
+        var first = ModelConnection(); first.name = "Custom"; first.model = "private-model"
+        first.baseURL = "https://one.example/v1"
+        try store.saveModelConnection(first, apiKey: "first-fixture")
+        _ = try await store.fetchModels(for: first)
+        var changed = first; changed.baseURL = "https://two.example/v1"
+        await #expect(throws: CloudServiceError.addressChanged) { try await store.fetchModels(for: changed) }
+        var second = first; second.id = UUID(); second.purpose = .transcription
+        second.baseURL = "https://three.example/v1"
+        try store.saveModelConnection(second, apiKey: "third-fixture")
+        await #expect(throws: CloudServiceError.invalidConfiguration) { try await store.fetchModels(for: first, reuseKeyFrom: second.id) }
+        #expect(keys.reads == [first.id])
+        _ = try await store.fetchModels(for: changed, apiKey: "new-fixture")
+        let requests = await transport.requests
+        #expect(requests.map { $0.url?.host } == ["one.example", "two.example"])
+        #expect(requests.map { $0.value(forHTTPHeaderField: "Authorization") } == ["Bearer first-fixture", "Bearer new-fixture"])
     }
 }

@@ -18,13 +18,21 @@ private let exampleText = "明天上午 10:30 讨论 VoxInk 0.1，预算 1234.50
 
 private struct PreviewModelTransport: ModelHTTPTransport {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        guard let url = request.url, url.path == "/v1/models" else { throw CloudServiceError.network }
+        guard let url = request.url, url.path.hasSuffix("/models") else { throw CloudServiceError.network }
         try await Task.sleep(for: .milliseconds(400))
+        if url.host == "ark.cn-beijing.volces.com" {
+            return (Data(), HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        }
         let speech = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
             .contains { $0.name == "sub_type" && $0.value == "speech-to-text" } == true
         let ids = speech ? ["Qwen/Qwen3-ASR-1.7B", "FunAudioLLM/SenseVoiceSmall"]
             : ["Qwen/Qwen3.5-122B-A10B", "deepseek-ai/DeepSeek-V3", "Qwen/Qwen3-8B"]
-        let data = try JSONSerialization.data(withJSONObject: ["data": ids.map { ["id": $0] }])
+        var models: [[String: Any]] = ids.map { ["id": $0, "sub_type": speech ? "speech-to-text" : "chat"] }
+        if !speech {
+            models += [["id": "team/private-model"], ["id": "image-only", "sub_type": "text-to-image"],
+                       ["id": "text-embedding", "sub_type": "embedding"]]
+        }
+        let data = try JSONSerialization.data(withJSONObject: ["data": models])
         return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }
@@ -134,6 +142,13 @@ private actor PreviewDictionary: UserDictionaryStorage {
                 connection.model = purpose == .transcription ? "Qwen/Qwen3-ASR-1.7B" : "Qwen/Qwen3.5-122B-A10B"
                 try store.saveModelConnection(connection, apiKey: "interface-fixture-not-a-real-key")
                 try store.selectModelService(connection.id, for: purpose)
+            }
+            for (name, baseURL) in [("自定义服务（界面示例）", "https://models.example/company/v2"),
+                                    ("火山方舟（界面示例）", "https://ark.cn-beijing.volces.com/api/v3")] {
+                var connection = ModelConnection()
+                connection.name = name; connection.baseURL = baseURL; connection.model = "private-model"
+                try store.saveModelConnection(connection, apiKey: "interface-fixture-not-a-real-key")
+                try store.selectModelService(connection.id, for: .polishing)
             }
             store.setPolishingEnabled(true)
         } catch { self.error = error.localizedDescription }

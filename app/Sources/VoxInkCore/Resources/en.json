@@ -677,5 +677,10 @@
   "没有匹配的模型": "No matching models",
   "未找到适用模型，可直接输入模型 ID。": "No compatible models found. You can enter a model ID directly.",
   "已选用": "Selected",
-  "重试": "Retry"
+  "重试": "Retry",
+  "此接口未提供兼容的模型列表。可查看服务商文档，或直接输入模型 ID。": "This endpoint does not provide a compatible model list. Check the provider documentation or enter a model ID directly.",
+  "模型列表未能完整获取，请重试或直接输入模型 ID。": "The model list could not be fully retrieved. Retry or enter a model ID directly.",
+  "用途未标注（{0}）": "Unclassified ({0})",
+  "查看服务商文档": "Provider documentation",
+  "此接口不支持直接列出模型。火山方舟的模型管理接口需要独立的 Access Key，可在官方文档中查看模型 ID。": "This endpoint cannot list models directly. Volcengine model management requires a separate Access Key. Find model IDs in the official documentation."
 }

@@ -1347,12 +1347,13 @@ import VoxInkCore
     }
 
     func fetchModels(for connection: ModelConnection, apiKey: String? = nil,
-                     clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) async throws -> [String] {
+                     clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) async throws -> ModelCatalogResult {
         guard canEditModelServices else { throw CloudServiceError.busy }
-        guard ModelCatalog.supports(connection), !clearKey else { throw CloudServiceError.invalidConfiguration }
+        guard !clearKey else { throw CloudServiceError.invalidConfiguration }
+        _ = try ModelCatalog.url(for: connection)
         var key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let sourceID {
-            guard key?.isEmpty != false,
+            guard key?.isEmpty != false, ModelProviderPreset.matching(connection) != .custom,
                   let source = modelServices.connections.first(where: { $0.id == sourceID }),
                   source.purpose != connection.purpose,
                   ModelProviderPreset.matching(source) == ModelProviderPreset.matching(connection) else {

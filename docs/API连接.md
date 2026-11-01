@@ -1,6 +1,6 @@
-# API 连接（0.1.20）
+# API 连接（0.1.21）
 
-本页对应 0.1.20 的「语音与润色」界面。旧版用户升级后会保留已有服务与密钥。
+本页对应 0.1.21 的「语音与润色」界面。旧版用户升级后会保留已有服务与密钥。
 
 语音识别和文字润色可以独立选择本地模型或 API 连接。默认仍为本地识别、关闭润色；升级不会自动上传音频或文字。
 
@@ -39,15 +39,16 @@
 
 ## 获取模型
 
-硅基流动官方接口的模型 ID 旁提供“获取模型”，设置页与连接编辑窗口使用相同入口。填写或复用密钥后，点击即可获取并搜索模型；获取列表不发送音频或待润色文字。
+所有平台（包括自定义接口）的模型 ID 旁均提供“获取模型”，设置页与连接编辑窗口使用相同入口。点击后，按当前连接地址和密钥请求模型列表；无需认证的本机服务可以不填密钥。获取列表不发送音频或待润色文字。
 
-- 转写使用官方 `sub_type=speech-to-text` 筛选，润色使用 `sub_type=chat` 筛选；不按模型名称猜测用途，不混入语音合成、向量、重排或图像、视频生成模型。
+- 通用接口请求同一地址前缀下的 `models`。硅基流动使用 `sub_type=speech-to-text/chat`，百炼使用原生模型目录的 `ASR/TG` 分类，OpenRouter 润色使用文本输入/输出筛选；支持分页的目录会继续获取后续页。
+- 优先按官方能力、输入/输出类型区分转写和润色，过滤明确不相关的语音合成、向量、重排、图像和视频生成模型。未提供类型时，仅对明确的专用模型名称作辅助排除；无法确认用途的 ID 保留在“用途未标注”中，可搜索、展开和选择，不以预设模型白名单限制自定义部署。
 - 获取列表本身不更换模型。设置页明确选择后保存；编辑窗口明确选择后更新草稿，点击“保存并使用”才保存。
 - 失败、取消或关闭列表保留当前配置，可随时手动输入 ID。切换模型时，仅清除与旧模型绑定的默认参数；用户自行设置的参数保留。
 - 获取使用当前连接已保存、刚输入或明确复用的密钥。改为其他服务地址时，不携带旧地址的已保存密钥。
-- 当前仅支持内置硅基流动官方接口。返回的列表依据服务商分类，不代表每个模型的额度、调用权限、质量和生成参数已实测兼容。
+- 服务端不提供兼容目录、认证不足或返回格式不兼容时，会显示错误并保留手动输入；内置平台提供官方文档入口。火山方舟的模型管理 API 使用独立 Access Key，目前不会拿普通推理 API Key 调用管理接口。通用获取入口不代表每家服务端都提供兼容目录，也不代表返回模型的额度、调用权限、质量及推理协议均已实测兼容。
 
-接口依据：[硅基流动 List Models](https://api-docs.siliconflow.cn/docs/api/models-get)。
+接口依据：[硅基流动 List Models](https://api-docs.siliconflow.cn/docs/api/models-get)、[百炼模型列表](https://help.aliyun.com/zh/model-studio/list-models)、[OpenRouter Models](https://openrouter.ai/docs/api/api-reference/models/get-models)、[火山方舟 ListFoundationModels](https://docs.volcengine.com/docs/ark/list-foundation-models-api?lang=zh)。
 
 ## 硅基流动与润色方式
 
@@ -67,7 +68,7 @@
 
 语落支持 HTTPS；本机 `localhost`、`127.0.0.1`、`::1` 可使用 HTTP。远程自建服务请提供 HTTPS。接口重定向不会被自动跟随，请填写最终地址。
 
-润色连接可以填写额外 JSON 请求参数，以适应不同服务商。是否关闭思考、输出上限及参数名称应查服务商文档；不要填写密钥。不能覆盖模型、消息、流式、工具或认证字段。所有服务商均支持手动输入模型 ID。硅基流动官方接口额外支持获取模型列表，其他接口暂不提供此功能。
+润色连接可以填写额外 JSON 请求参数，以适应不同服务商。是否关闭思考、输出上限及参数名称应查服务商文档；不要填写密钥。不能覆盖模型、消息、流式、工具或认证字段。所有服务商均支持手动输入模型 ID，并提供“获取模型”入口；列表可用性取决于服务端接口和认证权限。
 
 协议参考：[Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)、[Audio Transcriptions](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)。
 
