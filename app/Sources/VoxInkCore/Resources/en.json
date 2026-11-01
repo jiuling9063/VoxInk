@@ -670,5 +670,12 @@
   "云端处理会将音频或文字发送到所选服务。": "Cloud processing sends audio or text to the selected service.",
   "可输入自定义 ID": "Enter a custom ID",
   "润色模型 ID": "Polishing model ID",
-  "识别模型 ID": "Transcription model ID"
+  "识别模型 ID": "Transcription model ID",
+  "获取模型": "Fetch models",
+  "正在获取模型…": "Fetching models…",
+  "搜索模型": "Search models",
+  "没有匹配的模型": "No matching models",
+  "未找到适用模型，可直接输入模型 ID。": "No compatible models found. You can enter a model ID directly.",
+  "已选用": "Selected",
+  "重试": "Retry"
 }

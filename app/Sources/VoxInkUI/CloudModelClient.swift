@@ -50,7 +50,7 @@ struct CloudModelClient: Sendable {
         return request
     }
 
-    private func send(_ request: URLRequest) async throws -> Data {
+    func send(_ request: URLRequest) async throws -> Data {
         try Task.checkCancellation()
         do {
             // Enforce a total deadline, including providers that keep a slow response alive.

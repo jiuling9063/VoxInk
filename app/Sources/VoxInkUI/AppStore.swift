@@ -1338,11 +1338,33 @@ import VoxInkCore
 
     func updateModelID(_ id: UUID, model: String) throws {
         guard canEditModelServices else { throw CloudServiceError.busy }
-        guard var connection = modelServices.connections.first(where: { $0.id == id }) else {
+        guard let connection = modelServices.connections.first(where: { $0.id == id }) else {
             throw CloudServiceError.missingConnection
         }
-        connection.model = model
-        try saveModelConnection(connection, apiKey: nil)
+        var draft = ModelConnectionDraft(connection: connection, isExisting: true)
+        draft.updateModel(model.trimmingCharacters(in: .whitespacesAndNewlines))
+        try saveModelConnection(draft.connection, apiKey: nil)
+    }
+
+    func fetchModels(for connection: ModelConnection, apiKey: String? = nil,
+                     clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) async throws -> [String] {
+        guard canEditModelServices else { throw CloudServiceError.busy }
+        guard ModelCatalog.supports(connection), !clearKey else { throw CloudServiceError.invalidConfiguration }
+        var key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let sourceID {
+            guard key?.isEmpty != false,
+                  let source = modelServices.connections.first(where: { $0.id == sourceID }),
+                  source.purpose != connection.purpose,
+                  ModelProviderPreset.matching(source) == ModelProviderPreset.matching(connection) else {
+                throw CloudServiceError.invalidConfiguration
+            }
+            key = try modelCredentials.read(sourceID)
+        } else if key?.isEmpty != false,
+                  let saved = modelServices.connections.first(where: { $0.id == connection.id }) {
+            guard try saved.endpointURL() == connection.endpointURL() else { throw CloudServiceError.addressChanged }
+            key = try modelCredentials.read(saved.id)
+        }
+        return try await CloudModelClient(connection: connection, apiKey: key, transport: modelTransport).fetchModels()
     }
 
     public func saveModelConnection(_ connection: ModelConnection, apiKey: String?, clearKey: Bool = false) throws {

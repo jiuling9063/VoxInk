@@ -47,11 +47,18 @@ private struct WorkspaceChoiceSurface: ViewModifier {
     }
 }
 
-struct WorkspaceModelField: View {
+struct WorkspaceModelField<Accessory: View>: View {
     let title: String
     @Binding var text: String
     var commit: () -> Void = {}
     var cancel: () -> Void = {}
+    let accessory: Accessory
+
+    init(title: String, text: Binding<String>, commit: @escaping () -> Void = {},
+         cancel: @escaping () -> Void = {}, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
+        self.title = title; _text = text; self.commit = commit; self.cancel = cancel
+        self.accessory = accessory()
+    }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -68,15 +75,16 @@ struct WorkspaceModelField: View {
     }
 
     private var field: some View {
-        WorkspaceModelInput(title: title, text: $text, commit: commit, cancel: cancel)
+        WorkspaceModelInput(title: title, text: $text, commit: commit, cancel: cancel, accessory: accessory)
     }
 }
 
-private struct WorkspaceModelInput: View {
+private struct WorkspaceModelInput<Accessory: View>: View {
     let title: String
     @Binding var text: String
     let commit: () -> Void
     let cancel: () -> Void
+    let accessory: Accessory
     @State private var hovering = false
     @FocusState private var focused: Bool
 
@@ -95,8 +103,10 @@ private struct WorkspaceModelInput: View {
                 .onExitCommand { cancel(); focused = false }
                 .accessibilityLabel(title).accessibilityHint(L("可输入自定义 ID"))
                 .help(text)
-            Text(L("可输入自定义 ID")).font(.caption).foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
+            HStack(spacing: 12) {
+                Text(L("可输入自定义 ID")).foregroundStyle(.secondary)
+                accessory
+            }.font(.caption).padding(.horizontal, 8)
         }
     }
 }

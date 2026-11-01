@@ -109,7 +109,15 @@ struct ModelConnectionEditor: View {
     private var modelField: some View {
         VStack(alignment: .leading, spacing: 7) {
             WorkspaceModelField(title: L("模型"), text: Binding(
-                get: { draft.connection.model }, set: { draft.updateModel($0) }))
+                get: { draft.connection.model }, set: { draft.updateModel($0) }), accessory: {
+                ModelCatalogButton(connection: draft.connection, apiKey: draft.apiKey, clearKey: draft.clearKey,
+                                   sourceID: usesSavedKey ? credentialSource?.id : nil, load: {
+                    try await store.fetchModels(for: draft.connection, apiKey: usesSavedKey ? nil : draft.apiKey,
+                                                clearKey: draft.clearKey,
+                                                reuseKeyFrom: usesSavedKey ? credentialSource?.id : nil)
+                }) { draft.updateModel($0) }
+            })
+                .disabled(!store.canEditModelServices)
                 .accessibilityIdentifier("connectionModel")
             if draft.provider == .volcengine {
                 Text(L("火山方舟可填写模型 ID 或已创建的推理接入点 ID。"))

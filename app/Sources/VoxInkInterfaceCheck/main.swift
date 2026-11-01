@@ -18,7 +18,14 @@ private let exampleText = "明天上午 10:30 讨论 VoxInk 0.1，预算 1234.50
 
 private struct PreviewModelTransport: ModelHTTPTransport {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        throw CloudServiceError.network
+        guard let url = request.url, url.path == "/v1/models" else { throw CloudServiceError.network }
+        try await Task.sleep(for: .milliseconds(400))
+        let speech = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .contains { $0.name == "sub_type" && $0.value == "speech-to-text" } == true
+        let ids = speech ? ["Qwen/Qwen3-ASR-1.7B", "FunAudioLLM/SenseVoiceSmall"]
+            : ["Qwen/Qwen3.5-122B-A10B", "deepseek-ai/DeepSeek-V3", "Qwen/Qwen3-8B"]
+        let data = try JSONSerialization.data(withJSONObject: ["data": ids.map { ["id": $0] }])
+        return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }
 
@@ -123,9 +130,9 @@ private actor PreviewDictionary: UserDictionaryStorage {
                 var connection = ModelConnection()
                 connection.name = "硅基流动（界面示例）"
                 connection.purpose = purpose
-                connection.baseURL = "https://models.example/v1"
+                connection.baseURL = "https://api.siliconflow.cn/v1"
                 connection.model = purpose == .transcription ? "Qwen/Qwen3-ASR-1.7B" : "Qwen/Qwen3.5-122B-A10B"
-                try store.saveModelConnection(connection, apiKey: nil)
+                try store.saveModelConnection(connection, apiKey: "interface-fixture-not-a-real-key")
                 try store.selectModelService(connection.id, for: purpose)
             }
             store.setPolishingEnabled(true)

@@ -120,7 +120,12 @@ private struct ModelIDSettingsField: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 5) {
             WorkspaceModelField(title: connection.purpose == .transcription ? L("识别模型 ID") : L("润色模型 ID"),
-                                text: $draft, commit: save, cancel: { draft = connection.model; error = "" })
+                                text: $draft, commit: save, cancel: { draft = connection.model; error = "" }, accessory: {
+                ModelCatalogButton(connection: connection, load: { try await store.fetchModels(for: connection) }) {
+                    draft = $0
+                    save()
+                }
+            })
                 .disabled(!store.canEditModelServices)
             if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
         }
