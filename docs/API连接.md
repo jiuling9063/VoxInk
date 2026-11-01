@@ -46,7 +46,7 @@
 - 获取列表本身不更换模型。设置页明确选择后保存；编辑窗口明确选择后更新草稿，点击“保存并使用”才保存。
 - 失败、取消或关闭列表保留当前配置，可随时手动输入 ID。切换模型时，仅清除与旧模型绑定的默认参数；用户自行设置的参数保留。
 - 获取使用当前连接已保存、刚输入或明确复用的密钥。改为其他服务地址时，不携带旧地址的已保存密钥。
-- 服务端不提供兼容目录、认证不足或返回格式不兼容时，会显示错误并保留手动输入；内置平台提供官方文档入口。火山方舟的模型管理 API 使用独立 Access Key，目前不会拿普通推理 API Key 调用管理接口。通用获取入口不代表每家服务端都提供兼容目录，也不代表返回模型的额度、调用权限、质量及推理协议均已实测兼容。
+- 服务端不提供兼容目录、认证不足或返回格式不兼容时，会显示错误并保留手动输入；内置平台提供官方文档入口。火山方舟普通 `/models` 已使用现有 API Key 实测获取成功；其另行提供的管理 API 使用独立 Access Key，本应用不会把推理密钥转发至管理接口。通用获取入口不代表每家服务端都提供兼容目录，也不代表返回模型的额度、调用权限、质量及推理协议均已实测兼容。
 
 接口依据：[硅基流动 List Models](https://api-docs.siliconflow.cn/docs/api/models-get)、[百炼模型列表](https://help.aliyun.com/zh/model-studio/list-models)、[OpenRouter Models](https://openrouter.ai/docs/api/api-reference/models/get-models)、[火山方舟 ListFoundationModels](https://docs.volcengine.com/docs/ark/list-foundation-models-api?lang=zh)。
 
