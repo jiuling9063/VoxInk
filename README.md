@@ -19,11 +19,15 @@
 
 ## 60 秒了解语落
 
-https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
+[![观看语落新版宣传片：语落成文，自然相连](docs/images/voxink-intro/06-video-cover.png)](docs/media/voxink-product-promo.mp4)
 
-中文 · 60 秒 · 1080p
+[观看宣传片](docs/media/voxink-product-promo.mp4) · [下载 4K 高质量版](https://github.com/jiuling9063/VoxInk/releases/download/v0.1.21/voxink-v4-4k.mp4)
 
-从本机 Mac 开口，到远程 Windows / Mac 输入框落字，了解语落的核心使用场景。视频中的远程操作为流程示意，具体配置和兼容性以[安装与使用](docs/安装与使用.md#远程工具)为准。
+中文 · 60 秒 · 2026 年 11 月更新
+
+从本机 Mac 开口，到远程 Windows / Mac 输入框落字。本次宣传片展示 API 平台与模型自由选择、获取模型与自定义 ID，以及让语句更自然通顺的文字润色。
+
+API 实际延时取决于模型与网络环境；润色结果因模型而异。远程操作为流程示意，需远程客户端支持并启用剪贴板同步，具体配置和兼容性以[安装与使用](docs/安装与使用.md#远程工具)为准。
 
 ## 为远程输入而设计
 
