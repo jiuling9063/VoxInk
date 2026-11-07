@@ -2,13 +2,12 @@ import SwiftUI
 import VoxInkCore
 
 enum WorkspacePage: String {
-    case input, history, statistics, result, engine, shortcut, postprocess, polish, help
+    case input, history, result, engine, shortcut, postprocess, polish, help
 
     var title: String {
         switch self {
         case .input: L("语音工作台")
         case .history: L("转录历史")
-        case .statistics: L("统计")
         case .result: L("本次结果")
         case .engine: L("识别与润色")
         case .shortcut: L("输入与远程")
@@ -68,7 +67,7 @@ struct WorkspaceSettingsView: View {
                     }
                 case .help:
                     WorkspaceHelpView(store: store, showDashboard: showDashboard)
-                case .input, .history, .statistics, .result:
+                case .input, .history, .result:
                     EmptyView()
                 }
             }

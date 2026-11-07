@@ -53,6 +53,8 @@ struct ModelServicePicker: View {
             }
             if enabled, let selected {
                 Divider()
+                Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
+                    .disabled(!store.canEditModelServices)
                 ModelIDSettingsField(store: store, connection: selected).id(selected.id)
                 if store.connectionTestConnectionID == selected.id, !store.connectionTestMessage.isEmpty {
                     Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
@@ -104,13 +106,17 @@ struct ModelServicePicker: View {
 
     private func test(_ connection: ModelConnection) {
         if purpose == .polishing { store.testModelConnection(connection.id); return }
+        guard let url = Self.chooseTestAudio() else { return }
+        store.testModelConnection(connection.id, audioURL: url)
+    }
+
+    static func chooseTestAudio() -> URL? {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = L("选择一段不超过 60 秒的音频，将发送到此连接进行转写测试。")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        store.testModelConnection(connection.id, audioURL: url)
+        return panel.runModal() == .OK ? panel.url : nil
     }
 }
 

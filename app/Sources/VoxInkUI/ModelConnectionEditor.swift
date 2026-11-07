@@ -47,11 +47,20 @@ struct ModelConnectionEditor: View {
             }.frame(height: advanced ? 450 : (draft.provider == .custom ? 430 : 330))
             Divider()
             VStack(alignment: .leading, spacing: 10) {
+                if store.connectionTestConnectionID == draft.connection.id {
+                    Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
+                }
                 if !error.isEmpty {
                     Text(error).font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
+                    Button(draft.connection.purpose == .transcription ? L("选音频测试") : L("测试连接")) {
+                        let audio = draft.connection.purpose == .transcription ? ModelServicePicker.chooseTestAudio() : nil
+                        guard audio != nil || draft.connection.purpose == .polishing else { return }
+                        store.testModelConnection(draft.connection, audioURL: audio, apiKey: usesSavedKey ? nil : draft.apiKey,
+                                                  clearKey: draft.clearKey, reuseKeyFrom: usesSavedKey ? credentialSource?.id : nil)
+                    }.disabled(!canSave || !store.canEditModelServices)
                     Spacer()
                     Button(L("取消")) { dismiss() }.keyboardShortcut(.cancelAction)
                     Button(L("保存并使用")) { save() }

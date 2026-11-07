@@ -3,6 +3,14 @@ import Testing
 @testable import VoxInkUI
 
 @MainActor struct WorkspaceWindowTests {
+    @Test func oldStatisticsRouteOpensHistorySegment() {
+        let navigation = WorkspaceNavigation()
+        navigation.open("statistics")
+        #expect(navigation.page == .history && navigation.statistics)
+        navigation.open("history")
+        #expect(!navigation.statistics)
+    }
+
     @Test func nativeWindowControlsAndToolbarRemainAvailable() throws {
         _ = NSApplication.shared
         let controller = WorkspaceWindowController(store: AppStore(preferences: nil), restoresFrame: false)

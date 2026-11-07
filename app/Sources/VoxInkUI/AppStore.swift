@@ -1364,8 +1364,13 @@ import VoxInkCore
     func fetchModels(for connection: ModelConnection, apiKey: String? = nil,
                      clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) async throws -> ModelCatalogResult {
         guard canEditModelServices else { throw CloudServiceError.busy }
-        guard !clearKey else { throw CloudServiceError.invalidConfiguration }
         _ = try ModelCatalog.url(for: connection)
+        return try await draftClient(connection, apiKey: apiKey, clearKey: clearKey, sourceID: sourceID).fetchModels()
+    }
+
+    private func draftClient(_ connection: ModelConnection, apiKey: String?, clearKey: Bool,
+                             sourceID: UUID?) throws -> CloudModelClient {
+        guard !clearKey else { throw CloudServiceError.invalidConfiguration }
         var key = apiKey?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let sourceID {
             guard key?.isEmpty != false, ModelProviderPreset.matching(connection) != .custom,
@@ -1380,7 +1385,7 @@ import VoxInkCore
             guard try saved.endpointURL() == connection.endpointURL() else { throw CloudServiceError.addressChanged }
             key = try modelCredentials.read(saved.id)
         }
-        return try await CloudModelClient(connection: connection, apiKey: key, transport: modelTransport).fetchModels()
+        return CloudModelClient(connection: connection, apiKey: key, transport: modelTransport)
     }
 
     public func saveModelConnection(_ connection: ModelConnection, apiKey: String?, clearKey: Bool = false) throws {
@@ -1466,7 +1471,13 @@ import VoxInkCore
 
     public func testModelConnection(_ id: UUID, audioURL: URL? = nil) {
         guard canEditModelServices, let connection = modelServices.connections.first(where: { $0.id == id }) else { return }
-        connectionTestConnectionID = id
+        testModelConnection(connection, audioURL: audioURL)
+    }
+
+    func testModelConnection(_ connection: ModelConnection, audioURL: URL?, apiKey: String? = nil,
+                             clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) {
+        guard canEditModelServices else { return }
+        connectionTestConnectionID = connection.id
         let token = UUID(); generation = token
         phase = .loading; status = L("正在测试连接…")
         connectionTestMessage = status
@@ -1474,7 +1485,8 @@ import VoxInkCore
         let task = Task {
             defer { if connectionTestID == token { connectionTestID = nil } }
             do {
-                let client = try cloudClient(connection)
+                try connection.validate()
+                let client = try draftClient(connection, apiKey: apiKey, clearKey: clearKey, sourceID: sourceID)
                 let start = ContinuousClock.now
                 let result: String
                 if connection.purpose == .polishing {

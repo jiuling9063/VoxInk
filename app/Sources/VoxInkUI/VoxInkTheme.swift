@@ -1,4 +1,14 @@
 import SwiftUI
+import VoxInkCore
+
+extension Font {
+    static func transcriptBody(size: CGFloat) -> Font {
+        switch Localization.language {
+        case .japanese, .korean: .system(size: size)
+        default: .custom("Songti SC", size: size, relativeTo: .body)
+        }
+    }
+}
 
 struct VoxInkTheme {
     let scheme: ColorScheme
@@ -187,12 +197,16 @@ private struct WorkspaceToggleStyle: ToggleStyle {
 
 private struct WorkspaceLabeledContentStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            configuration.label
-                .frame(width: VoxInkTheme.labelColumn, alignment: .leading)
-            configuration.content.foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                configuration.label.frame(width: VoxInkTheme.labelColumn, alignment: .leading)
+                configuration.content.foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                configuration.label
+                configuration.content.foregroundStyle(.secondary)
+            }
         }
     }
 }

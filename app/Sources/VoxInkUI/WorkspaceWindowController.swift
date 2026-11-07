@@ -4,6 +4,16 @@ import Combine
 import SwiftUI
 
 @MainActor final class WorkspaceNavigation: ObservableObject {
+    @Published var statistics = false
+
+    func open(_ route: String) {
+        if route == "statistics" || route == "history" {
+            statistics = route == "statistics"
+            page = .history
+        } else if let destination = WorkspacePage(rawValue: route) {
+            page = destination
+        }
+    }
     @Published var page: WorkspacePage = .input
 }
 
@@ -47,6 +57,16 @@ import SwiftUI
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("Use init(store:restoresFrame:)") }
+
+    public override func encodeRestorableState(with coder: NSCoder) {
+        super.encodeRestorableState(with: coder)
+        coder.encode(navigation.page == .history && navigation.statistics ? "statistics" : navigation.page.rawValue, forKey: "page")
+    }
+
+    public override func restoreState(with coder: NSCoder) {
+        super.restoreState(with: coder)
+        if let route = coder.decodeObject(of: NSString.self, forKey: "page") as String? { navigation.open(route) }
+    }
 
     public func present() {
         window?.deminiaturize(nil)

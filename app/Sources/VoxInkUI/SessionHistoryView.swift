@@ -11,7 +11,7 @@ struct SessionHistoryView: View {
     @Environment(\.colorScheme) private var scheme
     private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject var store: AppStore
-    let statistics: Bool
+    @Binding var statistics: Bool
     @State private var copyStatus = ""
     @State private var copiedID: UUID?
 
@@ -20,6 +20,10 @@ struct SessionHistoryView: View {
             WorkspaceHeading(title: statistics ? L("使用统计") : L("转录历史"),
                              subtitle: statistics ? L("查看本次使用的识别次数与文字量。") : L("说过的话，随时拾起。"))
                 .padding(.bottom, 4)
+            Picker(L("历史"), selection: $statistics) {
+                Text(L("记录")).tag(false)
+                Text(L("统计")).tag(true)
+            }.pickerStyle(.segmented).frame(maxWidth: 260)
             if statistics {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 16) { metrics }
@@ -86,7 +90,7 @@ struct SessionHistoryView: View {
 
     private func historyText(_ entry: SessionTranscript) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.text).font(.system(size: 14)).lineSpacing(6).textSelection(.enabled)
+            Text(entry.text).font(.transcriptBody(size: 14)).lineSpacing(6).textSelection(.enabled)
             if copiedID == entry.id { Text(copyStatus).font(.caption).foregroundStyle(.secondary) }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }

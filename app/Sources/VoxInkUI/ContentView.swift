@@ -7,6 +7,7 @@ public struct ContentView: View {
     @Environment(\.colorScheme) private var scheme
     private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
+    @State private var preview: SessionTranscript?
     @State private var importing = false
     @State private var showingOriginal = false
     @StateObject private var navigation: WorkspaceNavigation
@@ -34,7 +35,7 @@ public struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         sidebarSection(L("工作空间"), top: 0)
                         navigation(L("工作台"), icon: "rectangle.grid.2x2", destination: .input)
-                        navigation(L("历史"), icon: "clock", destination: .history, alsoSelectedOn: [.statistics])
+                        navigation(L("历史"), icon: "clock", destination: .history)
                         sidebarSection(L("设置"), top: 22)
                         navigation(L("识别与润色"), icon: "waveform", destination: .engine, alsoSelectedOn: [.polish])
                         navigation(L("输入与远程"), icon: "command", destination: .shortcut)
@@ -47,11 +48,11 @@ public struct ContentView: View {
                 switch page {
                 case .engine, .shortcut, .postprocess, .polish, .help:
                     WorkspaceSettingsView(store: store, page: page) { page = .input }.id(page)
-                case .input, .history, .statistics, .result:
+                case .input, .history, .result:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        if page == .history || page == .statistics {
-                            SessionHistoryView(store: store, statistics: page == .statistics)
+                        if page == .history {
+                            SessionHistoryView(store: store, statistics: $navigation.statistics)
                         } else if page == .result {
                             WorkspaceHeading(title: L("本次结果"), subtitle: "")
                             result.padding(22).writingSurface()
@@ -91,6 +92,11 @@ public struct ContentView: View {
                 }
             }
         }
+        .onOpenURL { url in
+            guard url.scheme?.lowercased() == "voxink" else { return }
+            navigation.open(url.pathComponents.last(where: { $0 != "/" }) ?? url.host ?? "")
+        }
+        .onChange(of: store.sessionHistory.first?.id) { preview = nil }
         .tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
         .background(theme.background)
@@ -274,7 +280,7 @@ public struct ContentView: View {
 
     private var result: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let warning = store.conversionWarning {
+            if preview == nil, let warning = store.conversionWarning {
                 Label(warning, systemImage: "exclamationmark.triangle")
                     .font(.callout).foregroundStyle(theme.caution)
                     .fixedSize(horizontal: false, vertical: true)
@@ -283,7 +289,7 @@ public struct ContentView: View {
                 HStack(spacing: 10) { resultTitle; Spacer(minLength: 8); resultControls }
                 VStack(alignment: .leading, spacing: 10) { resultTitle; HStack(spacing: 10) { resultControls } }
             }
-            if store.transcript.isEmpty {
+            if preview == nil && store.transcript.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "text.alignleft").foregroundStyle(.tertiary).accessibilityHidden(true)
                     Text(L("按 \(store.shortcutCombination.title) 说一句话，文字会出现在这里。"))
@@ -293,17 +299,17 @@ public struct ContentView: View {
                 .font(.callout)
                 .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             } else {
-                if !store.polishMessage.isEmpty {
+                if preview == nil && !store.polishMessage.isEmpty {
                     Text(store.polishMessage).font(.caption).foregroundStyle(.secondary)
                 }
-                Text(showingOriginal ? store.rawTranscript : store.transcript)
-                    .font(.custom("Songti SC", size: 17, relativeTo: .body)).lineSpacing(8).textSelection(.enabled)
+                Text(preview?.text ?? (showingOriginal ? store.rawTranscript : store.transcript))
+                    .font(.transcriptBody(size: 17)).lineSpacing(8).textSelection(.enabled)
                     .foregroundStyle(theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading).padding(.vertical, 6)
-                if showingOriginal && store.rawTranscript == store.transcript {
+                if preview == nil && showingOriginal && store.rawTranscript == store.transcript {
                     Text(L("本次原文无需调整。")).font(.caption).foregroundStyle(.secondary)
                 }
-                if store.canPasteAgain {
+                if preview == nil && store.canPasteAgain {
                     Text(L("重新粘贴到 \(store.repasteTargetName ?? L("原目标应用"))，请先确认没有重复文字。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -314,7 +320,7 @@ public struct ContentView: View {
     private var resultTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(L("识别结果")).font(.headline)
-            if let entry = store.sessionHistory.first, !store.transcript.isEmpty {
+            if let entry = preview ?? store.sessionHistory.first, preview != nil || !store.transcript.isEmpty {
                 Text(entry.date.formatted(date: .omitted, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -322,7 +328,7 @@ public struct ContentView: View {
     }
 
     @ViewBuilder private var resultControls: some View {
-        if !store.rawTranscript.isEmpty && !store.transcript.isEmpty {
+        if preview == nil && !store.rawTranscript.isEmpty && !store.transcript.isEmpty {
             Picker(L("本次结果"), selection: $showingOriginal) {
                 Text(L("整理结果")).tag(false)
                 Text(L("原文")).tag(true)
@@ -330,19 +336,21 @@ public struct ContentView: View {
             .pickerStyle(.segmented).labelsHidden().fixedSize()
             .accessibilityLabel(L("本次结果"))
         }
-        if store.canPasteAgain {
+        if preview == nil && store.canPasteAgain {
             Button(L("重新粘贴")) { store.pasteAgain() }
                 .help(L("上次写入目标：\(store.repasteTargetName ?? L("原目标应用"))"))
         }
-        Button(L("复制"), systemImage: "doc.on.doc") { store.copyResult() }
+        Button(L("复制"), systemImage: "doc.on.doc") {
+            if let preview { _ = store.copyHistory(preview) } else { store.copyResult() }
+        }
             .buttonStyle(VoxInkButtonStyle(prominent: true))
-            .disabled(store.transcript.isEmpty || !store.canStart)
+            .disabled((preview == nil && store.transcript.isEmpty) || !store.canStart)
             .help(L("复制结果"))
     }
 
     /// The last few results below the card, so the workbench doubles as a short history.
     @ViewBuilder private var recentHistory: some View {
-        let recent = Array(store.sessionHistory.dropFirst(store.transcript.isEmpty ? 0 : 1).prefix(3))
+        let recent = Array(store.sessionHistory.prefix(3))
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
@@ -358,9 +366,11 @@ public struct ContentView: View {
                         Text(entry.date.formatted(date: .omitted, time: .shortened))
                             .font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.accent)
                             .frame(minWidth: 52, alignment: .leading)
-                        Text(entry.text).lineLimit(1).truncationMode(.tail)
+                        Button { preview = entry; showingOriginal = false } label: {
+                            Text(entry.text).lineLimit(1).truncationMode(.tail)
                             .foregroundStyle(theme.ink.opacity(0.8))
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        }.buttonStyle(.plain)
                         Button { _ = store.copyHistory(entry) } label: { Image(systemName: "doc.on.doc") }
                             .buttonStyle(.plain).foregroundStyle(.secondary)
                             .help(L("复制")).accessibilityLabel(L("复制"))
