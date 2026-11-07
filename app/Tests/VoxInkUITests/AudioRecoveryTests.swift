@@ -213,7 +213,7 @@ private actor RecoveryStorageStub: AudioRecoveryStorage {
         store.retryRetainedAudio()
         try await wait { store.canStart }
         #expect(!store.status.contains("重试识别完成"))
-        #expect(store.modelState == .notLoaded)
+        #expect(store.modelState == .ready)
         #expect(store.retainedAudio == record)
         #expect(paste.calls == 0)
         service.failure = nil

@@ -92,7 +92,7 @@ private actor SetupTranscriber: TranscriptionService {
         store.refreshPermissions()
         #expect(store.canRecord)
         await store.cancel()
-        #expect(!store.canRecord)
+        #expect(store.canRecord)
     }
 
     @Test func guideCannotCompleteUntilAllRequirementsAreReady() async throws {
@@ -170,13 +170,13 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.phase == .failed)
     }
 
-    @Test func cancellingWorkerClearsReadyState() async {
+    @Test func cancellingIdleSessionPreservesReadyState() async {
         let store = AppStore(service: SetupTranscriber(), preferences: nil)
         store.warmUp()
         for _ in 0..<1_000 where !store.canStart { await Task.yield() }
         #expect(store.modelState == .ready)
         await store.cancel()
-        #expect(store.modelState == .notLoaded)
+        #expect(store.modelState == .ready)
     }
     @Test(arguments: SetupUsage.allCases)
     func guideRequiresSeparateHumanConfirmationOfTextAndSpeech(usage: SetupUsage) async throws {

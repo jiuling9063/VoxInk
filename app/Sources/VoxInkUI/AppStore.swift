@@ -320,6 +320,7 @@ import VoxInkCore
     private let recorder: any AudioRecording
     private let audioPreparer: @Sendable (URL) async throws -> URL
     private let audioCleaner: @Sendable (URL) -> Void
+    private var localRecognition: UUID?
     private var generation = UUID()
     private var operation: Task<Void, Never>?
     private var audioOperation: Task<Void, Never>?
@@ -557,9 +558,7 @@ import VoxInkCore
         phase = .transcribing; status = L("正在重试识别…")
         let task = Task {
             defer { if retryingAudioID == record.id { retryingAudioID = nil } }
-            await service.cancel()
             guard generation == token, !Task.isCancelled else { return }
-            modelState = .notLoaded
             let retention = await recognize(record.url, token: token)
             guard generation == token else { return }
             if retention == .transcript, phase == .ready {
@@ -581,7 +580,8 @@ import VoxInkCore
         if canCancel || phase == .cancelling {
             let keepPrevious = retryingAudioID == nil && phase != .transcribing && phase != .recording && phase != .pasting
             await cancel(preserveRetainedAudio: keepPrevious)
-        } else { await service.cancel() }
+        }
+        await service.cancel()
         await polishingService.release()
         await polishWarmTask?.value
         polishWarmTask = nil
@@ -934,7 +934,12 @@ import VoxInkCore
             let transcriber: any TranscriptionService
             if cloudTranscription { transcriber = CloudTranscriptionService(client: try cloudClient(for: .transcription), speechDetector: cloudSpeechDetector) }
             else { transcriber = service }
-            let raw = try await transcriber.transcribe(url: url, language: language)
+            let raw: String
+            do {
+                if !cloudTranscription { localRecognition = token }
+                defer { if localRecognition == token { localRecognition = nil } }
+                raw = try await transcriber.transcribe(url: url, language: language)
+            }
             guard generation == token, !Task.isCancelled else { return .discard }
             if !cloudTranscription { modelState = .ready }
             let converted = LanguageTextProcessor.process(raw, language: language, output: output, dictionary: dictionarySnapshot)
@@ -1040,6 +1045,7 @@ import VoxInkCore
         }
         clearSetupTrial()
         let preparingModel = phase == .loading && modelState == .loading
+        let interruptWorker = preparingModel || localRecognition != nil
         let pendingModelOperation = preparingModel ? operation : nil
         if connectionTestID != nil { connectionTestMessage = L("已取消 · 未发出粘贴") }
         generation = UUID()
@@ -1054,14 +1060,14 @@ import VoxInkCore
         recorder.cancel(); level = 0
         phase = .cancelling; recovery = nil; status = L("正在取消…")
         let task = Task { [service] in
-            await service.cancel()
+            if interruptWorker { await service.cancel() }
             await pendingModelOperation?.value
             await pendingAudioOperation?.value
         }
         cancellationTask = task
         await task.value
         if !preserveRetainedAudio, let record = retainedAudio { await discardAudio(record.id) }
-        modelState = .notLoaded
+        if interruptWorker { modelState = .notLoaded }
         modelInstallationProgress = nil
         cancellationTask = nil
         activeTarget = nil

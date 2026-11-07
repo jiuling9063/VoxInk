@@ -43,6 +43,7 @@ private actor HoldTranscriber: TranscriptionService {
 
 @MainActor private final class ControlledHoldTranscriber: TranscriptionService {
     enum Failure: Error { case inference }
+    var shutdownCount = 0
     var shouldFail = false
     var failure: any Error = Failure.inference
     var blocked = false
@@ -55,6 +56,7 @@ private actor HoldTranscriber: TranscriptionService {
         return text
     }
     func cancel() async {
+        shutdownCount += 1
         // A worker may finish after cancellation; its late result must never be pasted.
         pending?.resume(returning: "取消后迟到的结果。")
         pending = nil
@@ -162,6 +164,18 @@ private actor HoldTranscriber: TranscriptionService {
         service.shouldFail = false
         try await recordAndRelease(store)
         #expect(paste.texts.count == 1)
+    }
+
+    @Test func cancellingRecordingKeepsResidentModelReady() async throws {
+        let service = ControlledHoldTranscriber()
+        let store = AppStore(service: service, pasteService: HoldPaste(), recorder: HoldRecorder(), preferences: nil)
+        store.warmUp()
+        try await waitUntil { store.modelState == .ready }
+        store.handleShortcutPressed()
+        try await waitUntil { store.phase == .recording }
+        await store.cancel()
+        #expect(store.modelState == .ready)
+        #expect(service.shutdownCount == 0)
     }
 
     @Test func busyKeysAndLateCancelledInferenceCannotLeakIntoNextSession() async throws {
