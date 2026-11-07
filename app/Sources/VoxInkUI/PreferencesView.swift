@@ -26,7 +26,7 @@ public struct PreferencesView: View {
                     .overlay { RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.16), lineWidth: 1) }
                     .accessibilityHidden(true)
             }
-            WorkspacePicker(L("设置分类"), value: [0: L("通用"), 1: L("系统权限"), 2: L("用户词典"), 3: L("语音与润色")][tab] ?? L("通用"), selection: $tab, options: [(L("通用"), 0), (L("系统权限"), 1), (L("语音与润色"), 3)] + (store.dictionary == nil ? [] : [(L("用户词典"), 2)]))
+            WorkspacePicker(L("设置分类"), value: [0: L("通用"), 1: L("系统权限"), 2: L("用户词典"), 3: L("识别与润色")][tab] ?? L("通用"), selection: $tab, options: [(L("通用"), 0), (L("系统权限"), 1), (L("识别与润色"), 3)] + (store.dictionary == nil ? [] : [(L("用户词典"), 2)]))
             ReadinessSummary(store: store)
             ScrollView {
             Group {
@@ -111,11 +111,12 @@ struct StatusBadge: View {
     enum Tone { case good, warning, quiet }
     let title: String
     let tone: Tone
+    @Environment(\.colorScheme) private var scheme
 
     private var color: Color {
         switch tone {
-        case .good: .green
-        case .warning: .orange
+        case .good: VoxInkTheme(scheme: scheme).accent
+        case .warning: VoxInkTheme(scheme: scheme).caution
         case .quiet: .secondary
         }
     }

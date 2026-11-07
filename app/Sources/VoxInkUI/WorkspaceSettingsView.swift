@@ -10,10 +10,10 @@ enum WorkspacePage: String {
         case .history: L("转录历史")
         case .statistics: L("统计")
         case .result: L("本次结果")
-        case .engine: L("语音与润色")
-        case .shortcut: L("快捷键与输入")
+        case .engine: L("识别与润色")
+        case .shortcut: L("输入与远程")
         case .postprocess: L("文字与词典")
-        case .polish: L("语音与润色")
+        case .polish: L("识别与润色")
         case .help: L("使用方法")
         }
     }
@@ -42,10 +42,11 @@ struct WorkspaceSettingsView: View {
                 case .engine, .polish:
                     WorkspaceForm {
                         Section { ModelSettingsContent(store: store) } header: {
-                            Text(L("语音识别"))
+                            SettingsSectionTitle(title: L("语音识别"), summary: transcriptionSummary,
+                                                 attention: !store.transcriptionReady)
                         }
                         Section { PolishSettingsContent(store: store) } header: {
-                            Text(L("文字润色"))
+                            SettingsSectionTitle(title: L("文字润色"), summary: polishSummary, attention: false)
                         }
                     }
                     Text(L("云端处理会将音频或文字发送到所选服务。"))
@@ -71,10 +72,44 @@ struct WorkspaceSettingsView: View {
                     EmptyView()
                 }
             }
-            .workspacePageMargins()
+            .workspacePageMargins(maxWidth: VoxInkTheme.settingsWidth)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear { store.refreshPermissions() }
+    }
+
+    private var transcriptionSummary: String {
+        if let connection = try? store.modelServices.connection(for: .transcription),
+           store.modelServices.transcriptionID != nil { return connection.name }
+        if store.modelServices.transcriptionID != nil { return L("连接配置不可用") }
+        return store.modelState == .ready ? L("本地就绪") : store.modelState.title
+    }
+
+    private var polishSummary: String {
+        guard store.polishingEnabled else { return L("关闭") }
+        if store.modelServices.polishingID != nil,
+           let connection = try? store.modelServices.connection(for: .polishing) { return connection.name }
+        return L("本地模型")
+    }
+}
+
+/// Section header with a one-glance status, e.g. "语音识别 · 本地就绪".
+struct SettingsSectionTitle: View {
+    let title: String
+    let summary: String
+    let attention: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if !summary.isEmpty {
+                Text("·").foregroundStyle(.tertiary)
+                Text(summary).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(attention ? VoxInkTheme(scheme: scheme).caution : .secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -227,9 +262,7 @@ struct ModelSettingsContent: View {
     }
 
     @ViewBuilder private var localSettings: some View {
-        HStack {
-            Text(L("状态"))
-            Spacer()
+        WorkspaceRow(L("状态")) {
             StatusBadge(title: store.modelState.title,
                         tone: store.modelState == .ready ? .good : (store.modelState == .failed ? .warning : .quiet))
         }

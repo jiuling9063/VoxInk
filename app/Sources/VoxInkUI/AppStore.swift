@@ -222,6 +222,8 @@ import VoxInkCore
     @Published public private(set) var conversionWarning: String?
     @Published public private(set) var elapsed: TimeInterval = 0
     @Published public private(set) var level: Float = 0
+    /// Set when the 60-second limit ends a recording: the result is kept in 语落 and not written.
+    @Published public private(set) var recordingLimitReached = false
     @Published public private(set) var shortcutTargetName: String?
     @Published public private(set) var shortcutStatus = L("快捷键尚未注册")
     @Published public private(set) var fixedTextTestArmed = false
@@ -354,7 +356,7 @@ import VoxInkCore
             if microphoneAuthorization != .authorized { return L("先允许麦克风，返回语落后会自动刷新状态。") }
             if !pastePermissionGranted { return L("先允许文字写入，返回语落后会自动刷新状态。") }
             if !transcriptionReady {
-                return modelServices.transcriptionID == nil ? L("等待本地模型就绪后继续；加载失败时可重新加载。") : L("所选服务不可用，请在“语音与润色”中重新选择。")
+                return modelServices.transcriptionID == nil ? L("等待本地模型就绪后继续；加载失败时可重新加载。") : L("所选服务不可用，请在“识别与润色”中重新选择。")
             }
             if !shortcutAvailable { return L("当前快捷键不可用，请重新选择或录入组合键。") }
         }
@@ -404,7 +406,7 @@ import VoxInkCore
             do { self.modelServices = try JSONDecoder().decode(ModelServiceSettings.self, from: saved) }
             catch {
                 self.modelServices = .init()
-                self.connectionTestMessage = L("服务配置无法读取，已恢复本地模式。请在“语音与润色”中重新设置。")
+                self.connectionTestMessage = L("服务配置无法读取，已恢复本地模式。请在“识别与润色”中重新设置。")
             }
         } else { self.modelServices = .init() }
         self.polishingService = polishingService
@@ -811,7 +813,7 @@ import VoxInkCore
             guard allowed else { fail(L("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。"), recovery: .microphone); return }
             do {
                 try recorder.start()
-                elapsed = 0; level = 0
+                elapsed = 0; level = 0; recordingLimitReached = false
                 refreshPolishDevice(); schedulePolishWarmup()
                 phase = .recording
                 status = holdRecording ? L("正在录音 · 松开快捷键后识别并写入")
@@ -820,7 +822,12 @@ import VoxInkCore
                     while !Task.isCancelled, generation == token, phase == .recording {
                         let sample = recorder.sample()
                         elapsed = sample.elapsed; level = sample.level
-                        if elapsed >= 60 || !recorder.isRecording { finishRecording(); return }
+                        if elapsed >= 60 {
+                            // The user may still be talking; writing a cut-off sentence would be worse than keeping it.
+                            recordingLimitReached = true
+                            finishRecording(); return
+                        }
+                        if !recorder.isRecording { finishRecording(); return }
                         try? await Task.sleep(for: .milliseconds(100))
                     }
                 }
@@ -852,6 +859,7 @@ import VoxInkCore
         guard canStart else { return }
         clearSetupTrial()
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil; pasteOutcome = nil; recovery = nil
+        recordingLimitReached = false
         let token = UUID(); generation = token
         phase = .loading; status = L("正在准备音频…")
         let task = Task {
@@ -982,7 +990,11 @@ import VoxInkCore
                 polishMessage = L("当前没有适合且可用的润色模型，本次使用未润色文字。")
             }
             sessionHistory.insert(SessionTranscript(text: text, date: Date()), at: 0)
-            if let target = activeTarget {
+            if recordingLimitReached, let target = activeTarget {
+                // Keep the target so "重新粘贴" works once the user has checked the text.
+                lastTarget = target; activeTarget = nil
+                phase = .ready; status = L("已到 60 秒，结果未写入。确认后可复制或重新粘贴。")
+            } else if let target = activeTarget {
                 lastTarget = target
                 await deliver(text, to: target, token: token)
                 switch pasteOutcome {
@@ -1073,6 +1085,8 @@ import VoxInkCore
 
     public func copyResult() {
         guard canStart, !transcript.isEmpty else { return }
+        // The status change re-renders the HUD; it must not repeat the 60-second notice.
+        recordingLimitReached = false
         guard clipboardWriter(transcript) else { status = L("复制失败，请重试"); return }
         status = L("已复制")
         guard let id = transcriptAudioID else { return }
@@ -1230,7 +1244,7 @@ import VoxInkCore
     public func scheduleFixedTextTest(after delay: Duration = .seconds(3)) {
         guard canStart else { return }
         let token = UUID(); generation = token
-        fixedTextTestArmed = false; pasteOutcome = nil; recovery = nil
+        fixedTextTestArmed = false; pasteOutcome = nil; recovery = nil; recordingLimitReached = false
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil
         phase = .loading; status = L("请切换到输入框，3 秒后写入固定测试文字…")
         operation = Task {
@@ -1289,6 +1303,7 @@ import VoxInkCore
         clearSetupTrial()
         let token = UUID(); generation = token
         activeTarget = target; shortcutTargetName = target.name; pasteOutcome = nil; recovery = nil
+        recordingLimitReached = false
         phase = .pasting; status = L("正在准备写入 \(target.name)…")
         let text = transcript
         let task = Task {

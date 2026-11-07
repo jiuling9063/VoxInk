@@ -25,6 +25,29 @@ import Testing
         }
         #expect(RecordingFeedbackPresentation(phase: .ready, status: "", target: "").dismissAfter == .zero)
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "").dismissAfter == .seconds(8))
+        #expect(RecordingFeedbackPresentation(phase: .ready, status: "", target: "", limitReached: true).dismissAfter == .seconds(5))
+    }
+
+    @Test func countdownAppearsOnlyInTheLastTenSeconds() {
+        #expect(RecordingFeedbackPresentation(phase: .recording, status: "", target: "", elapsed: 49.9).countdown == nil)
+        #expect(RecordingFeedbackPresentation(phase: .recording, status: "", target: "", elapsed: 50).countdown == 10)
+        #expect(RecordingFeedbackPresentation(phase: .recording, status: "", target: "", elapsed: 59.5).countdown == 1)
+        #expect(RecordingFeedbackPresentation(phase: .recording, status: "", target: "", elapsed: 80).countdown == 1)
+        #expect(RecordingFeedbackPresentation(phase: .transcribing, status: "", target: "", elapsed: 55).countdown == nil)
+        let countdown = NSHostingView(rootView: RecordingFeedbackView(presentation:
+            .init(phase: .recording, status: "", target: "", elapsed: 55)).frame(width: 180))
+        #expect(countdown.fittingSize.height == 44)
+        #expect(countdown.fittingSize.width == 180)
+    }
+
+    @Test func failureNamesTheReasonInOneLine() {
+        let switched = RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .checkTarget)
+        #expect(switched.failureReason == "目标已切换")
+        #expect(switched.hint == "目标已切换")
+        #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "").failureReason == "打开语落查看详情")
+        let limit = NSHostingView(rootView: RecordingFeedbackView(presentation:
+            .init(phase: .ready, status: "", target: "", limitReached: true)).frame(width: 180))
+        #expect(limit.fittingSize.height == 44)
     }
 
     @Test func invalidMeterValuesCannotBreakFeedbackRendering() {

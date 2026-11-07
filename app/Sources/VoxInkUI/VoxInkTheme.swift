@@ -22,9 +22,33 @@ struct VoxInkTheme {
     var accentForeground: Color {
         scheme == .dark ? Color(red: 0.06, green: 0.18, blue: 0.19) : .white
     }
+    /// Resting fill for clickable choices, so they read as controls without hovering.
+    var fieldFill: Color { ink.opacity(scheme == .dark ? 0.07 : 0.045) }
+    /// Recessed surface used inside cards, e.g. the input pipeline.
+    var sunken: Color {
+        scheme == .dark ? Color(red: 0.118, green: 0.141, blue: 0.145)
+            : Color(red: 0.957, green: 0.965, blue: 0.961)
+    }
+    /// Attention colour; readiness uses `accent`, failures use system red.
+    var caution: Color {
+        scheme == .dark ? Color(red: 0.902, green: 0.690, blue: 0.333)
+            : Color(red: 0.788, green: 0.541, blue: 0.106)
+    }
     var ceramicGradient: LinearGradient {
         LinearGradient(colors: [accent.opacity(scheme == .dark ? 0.09 : 0.05), .clear],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    /// Settings rows keep the label in a fixed column so values sit next to it.
+    static let labelColumn: CGFloat = 180
+    static let settingsWidth: CGFloat = 720
+    static let workbenchWidth: CGFloat = 920
+
+    enum Radius {
+        static let control: CGFloat = 7
+        static let card: CGFloat = 14
+        static let panel: CGFloat = 22
+        static let icon: CGFloat = 10
     }
 }
 
@@ -35,9 +59,9 @@ private struct WritingSurface: ViewModifier {
     func body(content: Content) -> some View {
         let theme = VoxInkTheme(scheme: scheme)
         content
-            .background(theme.paper, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(theme.paper, in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.card, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: VoxInkTheme.Radius.card, style: .continuous)
                     .strokeBorder(theme.ink.opacity(contrast == .increased ? 0.55 : 0.08), lineWidth: 1)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -91,7 +115,7 @@ struct WorkspaceHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 26, weight: .semibold)).tracking(-0.5)
+            Text(title).font(.system(size: 24, weight: .semibold)).tracking(-0.4)
                 .accessibilityAddTraits(.isHeader)
             if !subtitle.isEmpty {
                 Text(subtitle).font(.callout).foregroundStyle(.secondary)
@@ -138,7 +162,7 @@ struct WorkspaceSectionHeader: View {
                 .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
                 .frame(width: 36, height: 36)
                 .background(VoxInkTheme(scheme: scheme).accent.opacity(0.1),
-                            in: RoundedRectangle(cornerRadius: 10))
+                            in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.icon))
                 .accessibilityHidden(true)
             Text(title)
             Spacer()
@@ -163,25 +187,55 @@ private struct WorkspaceToggleStyle: ToggleStyle {
 
 private struct WorkspaceLabeledContentStyle: LabeledContentStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             configuration.label
-            Spacer(minLength: 0)
+                .frame(width: VoxInkTheme.labelColumn, alignment: .leading)
             configuration.content.foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A settings row: fixed label column, value right after it; stacks when the window is narrow.
+struct WorkspaceRow<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(title).frame(width: VoxInkTheme.labelColumn, alignment: .leading)
+                content
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                content
+            }
         }
     }
 }
 
 private struct WorkspacePageMargins: ViewModifier {
+    var maxWidth: CGFloat
+
     func body(content: Content) -> some View {
-        content.frame(maxWidth: 920, alignment: .leading)
+        content.frame(maxWidth: maxWidth, alignment: .leading)
             .padding(.horizontal, 28).padding(.vertical, 28)
             .frame(maxWidth: .infinity, alignment: .top)
     }
 }
 
 extension View {
-    func workspacePageMargins() -> some View { modifier(WorkspacePageMargins()) }
+    func workspacePageMargins(maxWidth: CGFloat = VoxInkTheme.workbenchWidth) -> some View {
+        modifier(WorkspacePageMargins(maxWidth: maxWidth))
+    }
     func writingSurface() -> some View { modifier(WritingSurface()) }
     func ceramicSurface() -> some View { modifier(WritingSurface()) }
     func workspaceChrome() -> some View { modifier(WorkspaceChrome()) }
@@ -198,14 +252,7 @@ struct WorkspacePicker<Selection: Hashable>: View {
         self.title = title; self.value = value; self._selection = selection; self.options = options
     }
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 16) {
-                Text(title).fixedSize()
-                Spacer(minLength: 12)
-                choice
-            }
-            VStack(alignment: .leading, spacing: 8) { Text(title); choice }
-        }
+        WorkspaceRow(title) { choice }
     }
     private var choice: some View {
         WorkspaceMenu(title: title, value: value) {

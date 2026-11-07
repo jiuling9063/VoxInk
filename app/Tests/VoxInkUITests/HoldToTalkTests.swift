@@ -106,14 +106,19 @@ private actor HoldTranscriber: TranscriptionService {
         store.handleShortcutPressed()
         try await waitUntil { store.canStart }
         #expect(recorder.stops == 1)
-        #expect(paste.texts.count == 1)
+        // Hitting the limit keeps the (possibly cut-off) result in 语落 instead of writing it.
+        #expect(paste.texts.isEmpty)
+        #expect(store.recordingLimitReached)
+        #expect(!store.transcript.isEmpty)
+        #expect(store.canPasteAgain)
         store.handleShortcutPressed()
         store.handleShortcutReleased(); store.handleShortcutReleased()
         #expect(recorder.starts == 1)
-        #expect(paste.texts.count == 1)
+        #expect(paste.texts.isEmpty)
         recorder.duration = 1
         try await recordAndRelease(store)
-        #expect(paste.texts.count == 2)
+        #expect(!store.recordingLimitReached)
+        #expect(paste.texts.count == 1)
     }
 
     @Test func microphonePermissionFailureCanRecoverOnNextHold() async throws {

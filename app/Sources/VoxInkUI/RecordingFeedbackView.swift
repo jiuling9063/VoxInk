@@ -9,10 +9,15 @@ public struct RecordingFeedbackPresentation {
     public let level: Float
     public let cancellationAvailable: Bool
     public let isPolishing: Bool
+    /// The 60-second limit stopped this recording; the result stays in 语落 instead of being written.
+    public let limitReached: Bool
+    public let recovery: RecoveryAction?
 
     public init(phase: AppStore.Phase, status: String, target: String, elapsed: TimeInterval = 0,
-                level: Float = 0, cancellationAvailable: Bool = false, isPolishing: Bool = false) {
+                level: Float = 0, cancellationAvailable: Bool = false, isPolishing: Bool = false,
+                limitReached: Bool = false, recovery: RecoveryAction? = nil) {
         self.isPolishing = isPolishing
+        self.limitReached = limitReached; self.recovery = recovery
         self.phase = phase; self.status = status; self.target = target
         self.elapsed = elapsed; self.level = level; self.cancellationAvailable = cancellationAvailable
     }
@@ -20,7 +25,8 @@ public struct RecordingFeedbackPresentation {
     @MainActor init(store: AppStore) {
         self.init(phase: store.phase, status: store.status, target: store.shortcutTargetName ?? L("语落"),
                   elapsed: store.elapsed, level: store.level,
-                  cancellationAvailable: store.cancellationShortcutAvailable, isPolishing: store.isPolishing)
+                  cancellationAvailable: store.cancellationShortcutAvailable, isPolishing: store.isPolishing,
+                  limitReached: store.recordingLimitReached, recovery: store.recovery)
     }
 
     var phaseTitle: String {
@@ -40,7 +46,31 @@ public struct RecordingFeedbackPresentation {
     }
     var panelHeight: CGFloat { phase == .failed ? 60 : 44 }
     var busy: Bool { phase != .ready && phase != .failed }
-    var dismissAfter: Duration? { busy ? nil : .seconds(phase == .failed ? 8 : 0) }
+    var dismissAfter: Duration? {
+        if busy { return nil }
+        if phase == .failed { return .seconds(8) }
+        return showsLimitNotice ? .seconds(5) : .zero
+    }
+    /// After the limit the HUD stays long enough to say the text was kept, not written.
+    var showsLimitNotice: Bool { phase == .ready && limitReached }
+    /// Seconds left, shown only in the last 10 seconds of a recording.
+    var countdown: Int? {
+        guard phase == .recording, safeElapsed >= 50 else { return nil }
+        return max(1, 60 - safeElapsed)
+    }
+    /// One short line under "未写入" saying why, instead of a generic "see details".
+    var failureReason: String {
+        switch recovery {
+        case .checkTarget: L("目标已切换")
+        case .pastePermission: L("需要辅助功能权限")
+        case .microphone: L("需要麦克风权限")
+        case .installModel, .reloadModel, .checkInstallation: L("模型未就绪")
+        case .configureService: L("服务暂不可用")
+        case .inspectClipboard: L("请检查剪贴板")
+        case .recordAgain, .chooseAudio: L("请重新录音")
+        case nil: L("打开语落查看详情")
+        }
+    }
     var hint: String {
         switch phase {
         case .loading, .recording, .transcribing:
@@ -48,7 +78,7 @@ public struct RecordingFeedbackPresentation {
         case .pasting:
             cancellationAvailable ? L("Esc 停止后续操作 · 已写入文字不会撤回") : L("打开语落可停止后续操作 · 已写入文字不会撤回")
         case .cancelling: L("正在结束处理，请稍候")
-        case .failed: L("打开语落查看处理方法")
+        case .failed: failureReason
         case .ready: ""
         }
     }
@@ -64,6 +94,8 @@ public struct RecordingFeedbackPresentation {
 }
 
 public struct RecordingFeedbackView: View {
+    /// Amber that stays legible on the HUD's dark surface in both appearances.
+    static let caution = Color(red: 0.902, green: 0.690, blue: 0.333)
     private let presentation: RecordingFeedbackPresentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     public init(presentation: RecordingFeedbackPresentation) { self.presentation = presentation }
@@ -71,9 +103,23 @@ public struct RecordingFeedbackView: View {
     public var body: some View {
         ZStack {
             if presentation.phase == .recording {
-                OutwardPulse(level: presentation.safeLevel, reduceMotion: reduceMotion)
-                    .accessibilityLabel(L("麦克风音量"))
-                    .accessibilityValue("\(Int(presentation.safeLevel * 100))%")
+                HStack(spacing: 6) {
+                    OutwardPulse(level: presentation.safeLevel, reduceMotion: reduceMotion,
+                                 width: presentation.countdown == nil ? 156 : 128)
+                        .accessibilityLabel(L("麦克风音量"))
+                        .accessibilityValue("\(Int(presentation.safeLevel * 100))%")
+                    if let left = presentation.countdown {
+                        Text(verbatim: "\(left)")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded)).monospacedDigit()
+                            .foregroundStyle(Self.caution)
+                            .frame(minWidth: 20)
+                            .accessibilityLabel(L("剩余 \(left) 秒"))
+                    }
+                }
+            } else if presentation.showsLimitNotice {
+                Text(L("已到 60 秒 · 未写入"))
+                    .font(.caption.weight(.semibold)).foregroundStyle(Self.caution)
+                    .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 12)
             } else if presentation.busy {
                 HStack(spacing: 10) {
                     ProcessingDots(reduceMotion: reduceMotion).accessibilityLabel(L("正在处理"))
@@ -81,10 +127,11 @@ public struct RecordingFeedbackView: View {
                 }
             } else if presentation.phase == .failed {
                 VStack(spacing: 5) {
-                    Label(L("未完成"), systemImage: presentation.symbol)
-                        .font(.caption.weight(.semibold)).foregroundStyle(.orange)
-                    Text(L("打开语落查看详情"))
+                    Label(L("未写入"), systemImage: presentation.symbol)
+                        .font(.caption.weight(.semibold)).foregroundStyle(Self.caution)
+                    Text(presentation.failureReason)
                         .font(.system(size: 11)).foregroundStyle(Color.white)
+                        .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 12)
                 }
             } else {
                 Image(systemName: presentation.symbol)
@@ -100,7 +147,9 @@ public struct RecordingFeedbackView: View {
         .background(Color(red: 0.106, green: 0.133, blue: 0.137), in: RoundedRectangle(cornerRadius: 22))
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .stroke(Color(red: 0.522, green: 0.808, blue: 0.780).opacity(0.3), lineWidth: 1)
+                .stroke(presentation.countdown != nil ? Self.caution.opacity(0.85)
+                        : Color(red: 0.522, green: 0.808, blue: 0.780).opacity(0.3),
+                        lineWidth: presentation.countdown != nil ? 1.5 : 1)
         }
         .shadow(color: Color.black.opacity(0.22), radius: 8, y: 4)
         .overlay {
@@ -115,6 +164,7 @@ public struct RecordingFeedbackView: View {
 private struct OutwardPulse: View {
     let level: Double
     let reduceMotion: Bool
+    var width: CGFloat = 156
     @State private var started = Date()
     @State private var smoothedLevel = 0.0
 
@@ -142,7 +192,7 @@ private struct OutwardPulse: View {
                 smoothedLevel += (level - smoothedLevel) * (1 - exp(-delta * 7))
             }
         }
-        .frame(width: 156, height: 36)
+        .frame(width: width, height: 36)
         .onAppear { smoothedLevel = level }
     }
 }

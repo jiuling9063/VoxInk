@@ -40,8 +40,12 @@ struct SessionHistoryView: View {
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity, minHeight: 270).writingSurface()
             } else {
-                HStack {
+                // Statistics live here as a one-line summary instead of a separate page.
+                HStack(spacing: 6) {
                     Text(L("\(store.sessionHistory.count) 条转录")).font(.caption.weight(.medium))
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(verbatim: "\(store.sessionHistory.reduce(0) { $0 + $1.text.count }.formatted()) \(L("字符"))")
+                        .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                 }
                 LazyVStack(spacing: 0) {

@@ -12,7 +12,6 @@ import SwiftUI
     private let store: AppStore
     let navigation = WorkspaceNavigation()
     private var selectionObservation: AnyCancellable?
-    private let pageLabel = NSTextField(labelWithString: WorkspacePage.input.title)
 
     public init(store: AppStore, restoresFrame: Bool = true) {
         self.store = store
@@ -42,7 +41,6 @@ import SwiftUI
             window.center()
         }
         selectionObservation = navigation.$page.sink { [weak self] page in
-            self?.pageLabel.stringValue = page.title
             self?.window?.title = L("\(page.title) — 语落 VoxInk")
         }
     }
@@ -58,7 +56,7 @@ import SwiftUI
     }
 
     public func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.voxinkBrand, .voxinkPage, .flexibleSpace, .voxinkModel]
+        [.voxinkBrand, .flexibleSpace, .voxinkModel]
     }
 
     public func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -73,31 +71,24 @@ import SwiftUI
             item.label = L("语落 VoxInk")
             item.view = NSHostingView(rootView: ToolbarBrand())
             item.view?.widthAnchor.constraint(equalToConstant: 102).isActive = true
-        case .voxinkPage:
-            item.label = L("当前页面")
-            pageLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-            pageLabel.textColor = .labelColor
-            pageLabel.setAccessibilityLabel(L("当前页面"))
-            item.view = pageLabel
-            pageLabel.widthAnchor.constraint(equalToConstant: 150).isActive = true
         case .voxinkModel:
             item.label = L("语音识别")
             item.visibilityPriority = .high
-            item.view = NSHostingView(rootView: ToolbarModelStatus(store: store) { [weak self] in
-                self?.navigation.page = .engine
+            item.view = NSHostingView(rootView: ToolbarModelStatus(store: store) { [weak self, store] in
+                // Go where the first problem is; when everything is ready the workbench shows the pipeline.
+                self?.navigation.page = store.transcriptionReady ? .input : .engine
             })
-            item.view?.widthAnchor.constraint(equalToConstant: 142).isActive = true
+            item.view?.widthAnchor.constraint(equalToConstant: 150).isActive = true
         default:
             return nil
         }
-        item.view?.heightAnchor.constraint(equalToConstant: identifier == .voxinkPage ? 18 : 28).isActive = true
+        item.view?.heightAnchor.constraint(equalToConstant: 28).isActive = true
         return item
     }
 }
 
 private extension NSToolbarItem.Identifier {
     static let voxinkBrand = Self("voxink-brand")
-    static let voxinkPage = Self("voxink-page")
     static let voxinkModel = Self("voxink-model")
 }
 
@@ -117,31 +108,61 @@ private struct ToolbarBrand: View {
     }
 }
 
+/// A short readiness chip; the full status lives in the tooltip and the workbench pipeline.
 private struct ToolbarModelStatus: View {
     @ObservedObject var store: AppStore
     let showModel: () -> Void
     @Environment(\.colorScheme) private var scheme
 
+    private var loading: Bool { store.modelServices.transcriptionID == nil && store.modelState == .loading }
+    private var issues: Int { store.readinessIssueCount }
+
+    private var title: String {
+        if loading { return L("正在加载") }
+        if issues > 0 { return L("需处理 \(issues) 项") }
+        return store.modelServices.transcriptionID == nil ? L("本地 · 就绪") : L("API · 就绪")
+    }
+
     var body: some View {
+        let theme = VoxInkTheme(scheme: scheme)
+        let tint: Color = loading ? .secondary : (issues > 0 ? theme.caution : theme.accent)
         Button(action: showModel) {
             HStack(spacing: 6) {
-                if store.modelServices.transcriptionID == nil && store.modelState == .loading {
+                if loading {
                     ProgressView().controlSize(.mini)
                 } else {
-                    Image(systemName: store.transcriptionReady ? "circle.fill" : "exclamationmark.circle")
-                        .font(.system(size: store.transcriptionReady ? 6 : 12, weight: .medium))
+                    Circle().fill(tint).frame(width: 6, height: 6)
                 }
-                Text(store.transcriptionStatus)
-                    .font(.system(size: 12, weight: .medium)).lineLimit(1)
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
             }
-            .foregroundStyle(store.transcriptionReady ? VoxInkTheme(scheme: scheme).accent : .secondary)
-            .padding(.horizontal, 8).frame(height: 28)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10).frame(height: 24)
+            .background(tint.opacity(0.12), in: Capsule())
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(L("查看识别与润色设置"))
-        .accessibilityLabel(store.transcriptionStatus)
-        .accessibilityHint(L("打开语音与润色设置"))
+        .help(store.readinessSummary)
+        .accessibilityLabel(store.readinessSummary)
+        .accessibilityHint(L("查看识别与润色设置"))
+    }
+}
+
+extension AppStore {
+    /// Items the user has to act on before dictation works end to end.
+    var readinessIssueCount: Int {
+        var count = 0
+        if microphoneAuthorization != .authorized { count += 1 }
+        if !transcriptionReady && !(modelServices.transcriptionID == nil && modelState == .loading) { count += 1 }
+        if !pastePermissionGranted { count += 1 }
+        return count
+    }
+
+    /// Full, single-line readiness status for tooltips and VoiceOver.
+    var readinessSummary: String {
+        var parts = [transcriptionStatus]
+        if microphoneAuthorization != .authorized { parts.append(L("需要麦克风权限")) }
+        if !pastePermissionGranted { parts.append(L("需要辅助功能权限")) }
+        return parts.joined(separator: " · ")
     }
 }
