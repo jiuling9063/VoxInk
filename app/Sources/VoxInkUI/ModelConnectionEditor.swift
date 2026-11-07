@@ -11,6 +11,7 @@ struct ModelConnectionEditor: View {
     @State private var confirmingDeletion = false
     @FocusState private var keyFocused: Bool
     @FocusState private var parametersFocused: Bool
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
 
     init(store: AppStore, connection: ModelConnection) {
@@ -40,6 +41,10 @@ struct ModelConnectionEditor: View {
                     keySection
                     modelField
                     if draft.provider == .custom { addressField }
+                    if (try? draft.connection.endpointURL())?.scheme == "http" {
+                        Label(L("未加密连接，仅在可信的局域网中使用。"), systemImage: "exclamationmark.triangle")
+                            .font(.callout).foregroundStyle(VoxInkTheme(scheme: scheme).caution)
+                    }
                     advancedSection
                     Text(L("保存后立即选用。使用时会向此服务发送音频或文字，并可能产生 API 费用。"))
                         .font(.caption).foregroundStyle(.secondary)

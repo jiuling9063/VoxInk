@@ -51,17 +51,14 @@ struct ResidentPolishingTests {
         await service.release()
     }
 
-    @Test func requestDeadlineAlsoBoundsAnExistingPrewarm() async throws {
+    @Test func loadingDoesNotConsumeInferenceDeadline() async throws {
         let (root, service) = try fixture(loadSeconds: 1)
         defer { try? FileManager.default.removeItem(at: root) }
         let warm = Task { try await service.prepare(model: .light) }
         try await Task.sleep(for: .milliseconds(20))
-        let start = ContinuousClock.now
-        await #expect(throws: LocalPolishingService.Failure.timeout) {
-            try await service.polish("测试", model: .light, timeout: .milliseconds(80))
-        }
-        #expect(start.duration(to: .now) < .seconds(1))
-        _ = try? await warm.value
+        let result = try await service.polish("测试", model: .light, timeout: .milliseconds(80))
+        #expect(result.accepted)
+        try await warm.value
         await service.release()
     }
 

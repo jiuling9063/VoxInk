@@ -11,6 +11,16 @@ public enum ModelLocations {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/VoxInk/Models/\(ModelPackage.revision)", isDirectory: true)
     }
+    public static func hasInstalledModel() -> Bool {
+        guard let manifest = Bundle.main.resourceURL?.appendingPathComponent("model-manifest.json"),
+              let package = try? ModelPackage(manifestURL: manifest) else { return false }
+        let directory = modelDirectory(in: cacheRoot)
+        return package.files.allSatisfy { file in
+            let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(file.path).path)
+            return attributes?[.type] as? FileAttributeType == .typeRegular && (attributes?[.size] as? NSNumber)?.int64Value == file.sizeBytes
+        }
+    }
+
     public static var legacyCacheRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/VoxInkBenchmark", isDirectory: true)
     }

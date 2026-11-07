@@ -151,8 +151,23 @@ struct CloudModelClientTests {
         #expect(!expected.localizedDescription.contains("private-provider-body"))
     }
 
-    @Test func malformedOrTruncatedResponsesAreNotAccepted() async {
-        for transport in [MockModelTransport(malformed: true), MockModelTransport(finish: "length")] {
+    @Test func localNetworkHTTPBoundaries() {
+        for host in ["10.0.0.1", "172.16.0.0", "172.31.255.255", "192.168.4.3", "169.254.1.2", "mac.local"] {
+            #expect(ModelConnection.allowsHTTP(host))
+        }
+        for host in ["172.15.255.255", "172.32.0.0", "192.169.0.1", "010.0.0.1", "10.0.0.256", "mac.local.example"] {
+            #expect(!ModelConnection.allowsHTTP(host))
+        }
+    }
+
+    @Test func truncatedResponseCarriesWarningAndStillRunsSafetyChecks() async throws {
+        let client = CloudModelClient(connection: connection(), apiKey: nil, transport: MockModelTransport(finish: "length"))
+        let result = try await client.polish("明天开会", language: .mandarin)
+        #expect(result.reason == "length")
+    }
+
+    @Test func malformedOrUnsupportedResponseIsRejected() async {
+        for transport in [MockModelTransport(malformed: true), MockModelTransport(finish: "content_filter")] {
             await #expect(throws: CloudServiceError.invalidResponse) {
                 try await CloudModelClient(connection: connection(), apiKey: nil, transport: transport).polish("明天开会", language: .mandarin)
             }
@@ -463,6 +478,33 @@ struct CloudModelClientTests {
         #expect(store.transcript == "明天开会")
         #expect(store.phase == .ready)
         #expect(store.polishMessage.contains("限流"))
+        await store.shutdown()
+    }
+
+    @Test func explicitLocalRetryUsesSavedAudioWithoutChangingCloudSelection() async throws {
+        let url = try signalFixture()
+        let path = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
+        defer { free(path) }
+        let directory = URL(fileURLWithPath: String(cString: path)).appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory); try? FileManager.default.removeItem(at: url) }
+        let local = LocalFixtureTranscriber(), transport = MockModelTransport(status: 401)
+        let store = AppStore(service: local, preferences: nil, modelCredentials: MemoryModelCredentials(),
+                             modelTransport: transport, cloudSpeechDetector: { _ in true }, audioCleaner: { _ in },
+                             audioRecovery: AudioRecoveryStore(root: directory))
+        store.warmUp()
+        while !store.canStart { await Task.yield() }
+        let config = connection(.transcription)
+        try store.saveModelConnection(config, apiKey: nil)
+        try store.selectModelService(config.id, for: .transcription)
+        await store.transcribePrepared(url)
+        try #require(store.retainedAudio != nil)
+        #expect(store.localRetryAvailable)
+        #expect(await local.calls == 0)
+        store.retryRetainedAudio(useLocal: true)
+        while !store.canStart { await Task.yield() }
+        #expect(store.modelServices.transcriptionID == config.id)
+        #expect(await local.calls == 1)
+        #expect(await transport.requests.count == 1)
         await store.shutdown()
     }
 

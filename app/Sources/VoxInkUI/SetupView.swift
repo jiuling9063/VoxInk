@@ -86,7 +86,9 @@ struct SetupView: View {
             Divider()
             row(L("识别"), store.modelServices.transcriptionID == nil && !store.transcriptionReady
                 ? L("本地 Qwen3-ASR · 约 713 MB，可断点续传") : store.transcriptionStatus, ready: store.transcriptionReady) {
-                if let install = store.modelInstallationProgress { ProgressView(install.title, value: install.fraction) }
+                if let install = store.modelInstallationProgress {
+                    ProgressView(store.setupDownloadSummary ?? install.title, value: install.fraction)
+                }
                 Button(L("改用在线服务…")) { providers = true }.buttonStyle(.link)
                     .popover(isPresented: $providers) { ModelServicePicker(store: store, purpose: .transcription).padding(16).frame(width: 400) }
             }
@@ -112,8 +114,10 @@ struct SetupView: View {
 
     private var trial: some View {
         VStack(alignment: .leading, spacing: 12) {
-            let recognition = store.modelInstallationProgress?.title ?? L("识别")
-            Text(([L("麦克风"), recognition, L("文字写入")] + (progress.usage.needsRemote ? [store.remoteApplications.first?.name ?? L("远程工具")] : [])).joined(separator: " → ")).font(.caption).foregroundStyle(theme.accent)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { channelNodes }
+                VStack(alignment: .leading, spacing: 5) { channelNodes }
+            }
             if store.transcriptionReady {
                 Text(progress.usage.needsRemote ? L("切到远端的记事本，说“明天下午开会”。") : L("切到任意输入框，说“明天下午开会”。")).font(.title3)
                 ViewThatFits(in: .horizontal) {
@@ -121,7 +125,7 @@ struct SetupView: View {
                     VStack(alignment: .leading) { keyInstruction }
                 }
             } else {
-                Text(store.modelInstallationProgress?.title ?? store.transcriptionStatus)
+                Text(store.setupDownloadSummary ?? store.transcriptionStatus)
                 fixedTest
             }
             if store.setupTrialCanConfirm {
@@ -146,6 +150,21 @@ struct SetupView: View {
                 Text(L("手动成功、自动失败：检查文字写入权限、粘贴方式和输入框焦点。"))
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16).writingSurface()
+    }
+
+    @ViewBuilder private var channelNodes: some View {
+        channel(L("麦克风"), store.microphoneAuthorization == .authorized)
+        channel(store.setupDownloadSummary ?? L("识别"), store.transcriptionReady)
+        channel(L("文字写入"), store.pastePermissionGranted)
+        if progress.usage.needsRemote {
+            channel(store.remoteApplications.first?.name ?? L("远程工具"), progress.clipboardSyncConfirmed)
+        }
+    }
+
+    private func channel(_ title: String, _ ready: Bool) -> some View {
+        Label(title, systemImage: ready ? "checkmark.circle" : "circle")
+            .font(.caption).foregroundStyle(ready ? theme.accent : theme.caution)
+            .accessibilityValue(ready ? L("已就绪") : L("待处理"))
     }
 
     @ViewBuilder private var keyInstruction: some View {

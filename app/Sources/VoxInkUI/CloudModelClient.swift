@@ -15,6 +15,7 @@ private final class NoModelRedirects: NSObject, URLSessionTaskDelegate, Sendable
 }
 
 public struct ModelURLSessionTransport: ModelHTTPTransport {
+    static let responseLimit = 2_000_000
     public init() {}
     public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let configuration = URLSessionConfiguration.ephemeral
@@ -24,8 +25,14 @@ public struct ModelURLSessionTransport: ModelHTTPTransport {
         configuration.timeoutIntervalForResource = request.timeoutInterval
         let session = URLSession(configuration: configuration, delegate: NoModelRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        let (data, response) = try await session.data(for: request)
+        let (bytes, response) = try await session.bytes(for: request)
         guard let response = response as? HTTPURLResponse else { throw CloudServiceError.invalidResponse }
+        guard response.expectedContentLength <= Self.responseLimit else { throw CloudServiceError.invalidResponse }
+        var data = Data()
+        for try await byte in bytes {
+            guard data.count < Self.responseLimit else { throw CloudServiceError.invalidResponse }
+            data.append(byte)
+        }
         return (data, response)
     }
 }
@@ -64,7 +71,7 @@ struct CloudModelClient: Sendable {
                     case 429: throw CloudServiceError.rateLimited
                     default: throw CloudServiceError.http(response.statusCode)
                     }
-                    guard data.count <= 2_000_000 else { throw CloudServiceError.invalidResponse }
+                    guard data.count <= ModelURLSessionTransport.responseLimit else { throw CloudServiceError.invalidResponse }
                     return data
                 }
                 group.addTask {
@@ -133,12 +140,12 @@ struct CloudModelClient: Sendable {
             let choices: [Choice]
         }
         guard let response = try? JSONDecoder().decode(Response.self, from: data),
-              let choice = response.choices.first, choice.finish_reason == "stop",
+              let choice = response.choices.first, ["stop", "length"].contains(choice.finish_reason ?? ""),
               let output = choice.message.content else { throw CloudServiceError.invalidResponse }
         let candidate = output.trimmingCharacters(in: .whitespacesAndNewlines)
         let accepted = PolishTextSafety.accepts(source: text, output: candidate, language: language, style: style)
         let duration = started.duration(to: .now).components
-        return .init(accepted: accepted, reason: accepted ? "checks_passed" : "protected_content_changed",
+        return .init(accepted: accepted, reason: choice.finish_reason == "length" ? "length" : (accepted ? "checks_passed" : "protected_content_changed"),
                      text: accepted ? candidate : text,
                      generationSeconds: Double(duration.seconds) + Double(duration.attoseconds) / 1e18)
     }

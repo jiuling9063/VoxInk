@@ -93,6 +93,8 @@ struct RemoteOptionSpaceFilter {
 @MainActor final class RemoteOptionSpaceMonitor: RemoteShortcutMonitoring {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
+    private var activationObserver: NSObjectProtocol?
+    private var uuIsFrontmost = false
     private var buffered: [CGEvent] = []
     private var filter = RemoteOptionSpaceFilter()
     private let pressed: () -> Void
@@ -108,9 +110,7 @@ struct RemoteOptionSpaceFilter {
     func start() -> Bool {
         if let tap { return CGEvent.tapIsEnabled(tap: tap) }
         guard AXIsProcessTrusted() else { return false }
-        let types: [CGEventType] = [.flagsChanged, .keyDown, .keyUp, .leftMouseDown, .leftMouseUp,
-            .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .mouseMoved,
-            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]
+        let types: [CGEventType] = [.flagsChanged, .keyDown, .keyUp]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
             options: .defaultTap, eventsOfInterest: mask, callback: { proxy, type, event, context in
@@ -124,6 +124,13 @@ struct RemoteOptionSpaceFilter {
         guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
             CFMachPortInvalidate(tap); return false
         }
+        let workspace = NSWorkspace.shared
+        uuIsFrontmost = workspace.frontmostApplication?.bundleIdentifier == "com.netease.uuremote"
+        activationObserver = workspace.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                MainActor.assumeIsolated { self?.uuIsFrontmost = app?.bundleIdentifier == "com.netease.uuremote" }
+            }
         self.tap = tap; self.source = source
         filter = RemoteOptionSpaceFilter(optionDown: CGEventSource.flagsState(.combinedSessionState).contains(.maskAlternate))
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
@@ -132,6 +139,8 @@ struct RemoteOptionSpaceFilter {
     }
 
     func stop() {
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+        activationObserver = nil
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
         source = nil; tap = nil; buffered.removeAll(); filter = RemoteOptionSpaceFilter()
@@ -149,7 +158,7 @@ struct RemoteOptionSpaceFilter {
         }
         let decision = filter.receive(type: type, key: event.getIntegerValueField(.keyboardEventKeycode),
             flags: event.flags, repeating: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
-            inUU: NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.netease.uuremote")
+            inUU: uuIsFrontmost)
         if decision.flush {
             for pending in buffered { pending.tapPostEvent(proxy) }
             buffered.removeAll()

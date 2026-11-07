@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "VoxInk";
 "NSMicrophoneUsageDescription" = "録音を開始すると音声を収集し、設定に応じてこの Mac または選択した API サービスで文字に変換します。";
+"NSLocalNetworkUsageDescription" = "選択したローカルネットワーク上の認識・推敲サービスに接続します。";

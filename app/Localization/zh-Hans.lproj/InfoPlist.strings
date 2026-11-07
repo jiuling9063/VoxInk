@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "语落 VoxInk";
 "NSMicrophoneUsageDescription" = "语落在你开始录音后采集声音，并按你的设置在本机或通过所选 API 服务转写。";
+"NSLocalNetworkUsageDescription" = "语落会连接你选择的局域网识别或润色服务。";

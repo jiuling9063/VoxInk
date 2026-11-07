@@ -126,6 +126,18 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>VoxInk Workspace</string><key>CFBundleURLSchemes</key><array><string>voxink</string></array></dict></array>
+<key>NSLocalNetworkUsageDescription</key><string>语落会连接你选择的局域网识别或润色服务。</string>
+<key>NSAppTransportSecurity</key><dict>
+<key>NSAllowsLocalNetworking</key><true/>
+<key>NSExceptionDomains</key><dict>
+<key>127.0.0.1</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>::1</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>10.0.0.0/8</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>172.16.0.0/12</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>192.168.0.0/16</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+<key>169.254.0.0/16</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+</dict></dict>
 <key>NSMicrophoneUsageDescription</key><string>语落在你开始录音后采集声音，并按你的设置在本机或通过所选 API 服务转写。</string>
 </dict></plist>
 PLIST

@@ -49,6 +49,7 @@ public actor ResidentWorkerClient {
     public private(set) var lastExitStatus: Int32?
     private var process: Process?
     private var inputPipe: Pipe?
+    private var diagnosticPipe: Pipe?
     private var outputPipe: Pipe?
     private var input: FileHandle?
     private var output: FileHandle?
@@ -66,7 +67,7 @@ public actor ResidentWorkerClient {
     public init() {}
 
     public func start(executable: URL, arguments: [String], environment: [String: String]? = nil,
-                      standardError: FileHandle = .nullDevice,
+                      standardError: FileHandle? = nil,
                       readyTimeout: Duration = .seconds(120)) async throws -> WorkerReady {
         guard process == nil, cleanup == nil else { throw ResidentWorkerError.busy }
         lastExitStatus = nil
@@ -80,7 +81,18 @@ public actor ResidentWorkerClient {
         outputPipe = stdout
         child.standardInput = stdin
         child.standardOutput = stdout
-        child.standardError = standardError
+        if let standardError {
+            child.standardError = standardError
+        } else {
+            let pipe = Pipe()
+            diagnosticPipe = pipe
+            child.standardError = pipe
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if data.isEmpty { handle.readabilityHandler = nil }
+                else { WorkerDiagnostics.shared.record(stderr: data) }
+            }
+        }
         let token = UUID()
         generation = token
         process = child
@@ -111,6 +123,7 @@ public actor ResidentWorkerClient {
             await stop(error: error, graceful: false)
             throw error
         }
+        if diagnosticPipe != nil { WorkerDiagnostics.shared.append(.started) }
         let operation = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -266,6 +279,11 @@ public actor ResidentWorkerClient {
         output = nil
         inputPipe = nil
         outputPipe = nil
+        if let diagnosticPipe {
+            diagnosticPipe.fileHandleForReading.readabilityHandler = nil
+            WorkerDiagnostics.shared.append(.stopped)
+            self.diagnosticPipe = nil
+        }
         let child = process
         process = nil
         let task = Task.detached {

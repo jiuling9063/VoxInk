@@ -119,7 +119,7 @@ protocol PasteEnvironment: AnyObject {
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool
     func focusedFieldSafety() -> FocusedFieldSafety
     func pasteboardSnapshot() throws -> PasteboardSnapshot
-    func writePlainText(_ text: String) throws -> Int
+    func writePlainText(_ text: String, transient: Bool) throws -> Int
     func currentPasteboardChangeCount() -> Int
     func restorePasteboard(_ snapshot: PasteboardSnapshot, expectedChangeCount: Int) -> PasteboardRestoreResult
     func areCommandModifiersReleased() -> Bool
@@ -286,12 +286,14 @@ public final class PasteCoordinator {
             return .failed(L("无法完整读取剪贴板"))
         }
 
+        let isRemote = (legacyRemoteEnabled && target.bundleID == "com.netease.uuremote") || target.remoteUsesControl != nil
+            || remoteApplications.contains(where: { $0.bundleID == target.bundleID })
         let ownedChangeCount: Int
         do {
             guard environment.currentPasteboardChangeCount() == snapshot.changeCount else {
                 return .failed(L("剪贴板已被其他操作修改"))
             }
-            ownedChangeCount = try environment.writePlainText(text)
+            ownedChangeCount = try environment.writePlainText(text, transient: !isRemote)
         } catch {
             guard let mutation = error as? PasteboardMutationError else {
                 return .failed(L("无法写入剪贴板"))
@@ -306,8 +308,6 @@ public final class PasteCoordinator {
 
         // Remote clients synchronize the clipboard asynchronously; restoring it too soon can
         // make the remote computer paste the previous contents instead.
-        let isRemote = (legacyRemoteEnabled && target.bundleID == "com.netease.uuremote") || target.remoteUsesControl != nil
-            || remoteApplications.contains(where: { $0.bundleID == target.bundleID })
         // Local pasteboard writes are synchronous. Yield for cancellation without
         // adding a timer; only remote clipboard synchronization needs a delay.
         await environment.delay(for: isRemote ? remoteTiming.delay : .zero)
@@ -503,10 +503,17 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         return PasteboardSnapshot(items: items, changeCount: before)
     }
 
-    func writePlainText(_ text: String) throws -> Int {
+    func writePlainText(_ text: String, transient: Bool) throws -> Int {
+        let item = NSPasteboardItem()
+        if transient {
+            guard item.setString(text, forType: .string),
+                  item.setData(Data(), forType: .init("org.nspasteboard.TransientType")) else {
+                throw ClipboardError.unreadableType
+            }
+        }
         let ownedChangeCount = pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string),
-              pasteboard.changeCount == ownedChangeCount else {
+        let written = transient ? pasteboard.writeObjects([item]) : pasteboard.setString(text, forType: .string)
+        guard written, pasteboard.changeCount == ownedChangeCount else {
             throw PasteboardMutationError(ownedChangeCount: ownedChangeCount)
         }
         return ownedChangeCount

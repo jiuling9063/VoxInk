@@ -32,6 +32,13 @@ import VoxInkCore
         mainWindow?.present()
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.last, url.scheme?.lowercased() == "voxink" else { return }
+        connect(ApplicationState.store)
+        showMainWindow()
+        mainWindow?.openRoute(url.pathComponents.last(where: { $0 != "/" }) ?? url.host ?? "")
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showMainWindow()
         return true

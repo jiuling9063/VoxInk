@@ -75,9 +75,10 @@ public final class AudioCapture {
             guard let queue else { throw AudioCaptureError.recordingFailed }
             if let deviceUID {
                 let string = deviceUID as CFString
-                var uid = Unmanaged.passUnretained(string).toOpaque()
-                defer { withExtendedLifetime(string) {} }
-                try check(AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice, &uid, UInt32(MemoryLayout<CFString>.size)))
+                try withExtendedLifetime(string) {
+                    var uid = Unmanaged.passUnretained(string).toOpaque()
+                    try check(AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice, &uid, UInt32(MemoryLayout.size(ofValue: uid))))
+                }
             }
             var metering: UInt32 = 1
             try check(AudioQueueSetProperty(queue, kAudioQueueProperty_EnableLevelMetering, &metering, 4))

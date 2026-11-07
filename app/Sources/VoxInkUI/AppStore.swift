@@ -16,6 +16,62 @@ import VoxInkCore
     @Published public private(set) var modelServices: ModelServiceSettings
     @Published public private(set) var connectionTestMessage = ""
     @Published public private(set) var connectionTestConnectionID: UUID?
+    @Published private(set) var checksForUpdates = true
+    @Published private(set) var availableVersion: String?
+
+    func setChecksForUpdates(_ enabled: Bool) {
+        checksForUpdates = enabled
+        preferences?.set(enabled, forKey: "checksForUpdates")
+        if !enabled { availableVersion = nil }
+    }
+
+    func checkForUpdate(current: String, now: Date = Date(), transport: any ModelHTTPTransport = ModelURLSessionTransport()) async {
+        guard checksForUpdates, let preferences else { return }
+        if let cached = preferences.string(forKey: "latestRelease"), Self.newerVersion(cached, than: current) {
+            availableVersion = cached
+        }
+        if let last = preferences.object(forKey: "lastReleaseCheck") as? Date, now.timeIntervalSince(last) < 86_400 { return }
+        preferences.set(now, forKey: "lastReleaseCheck")
+        guard let url = URL(string: "https://api.github.com/repos/jiuling9063/VoxInk/releases/latest") else { return }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        struct Release: Decodable { let tag_name: String }
+        guard let (data, response) = try? await transport.send(request), response.statusCode == 200,
+              let release = try? JSONDecoder().decode(Release.self, from: data), checksForUpdates else { return }
+        let version = release.tag_name.hasPrefix("v") ? String(release.tag_name.dropFirst()) : release.tag_name
+        guard Self.versionParts(version) != nil else { return }
+        preferences.set(version, forKey: "latestRelease")
+        availableVersion = Self.newerVersion(version, than: current) ? version : nil
+    }
+
+    private static func versionParts(_ value: String) -> [Int]? {
+        let parts = value.components(separatedBy: ".")
+        let numbers = parts.compactMap(Int.init)
+        guard (1...3).contains(parts.count), numbers.map(String.init) == parts, numbers.allSatisfy({ $0 >= 0 }) else { return nil }
+        return numbers + Array(repeating: 0, count: 3 - numbers.count)
+    }
+
+    static func newerVersion(_ candidate: String, than current: String) -> Bool {
+        guard let latest = versionParts(candidate), let installed = versionParts(current) else { return false }
+        return installed.lexicographicallyPrecedes(latest)
+    }
+
+    func diagnosticSummary() -> String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
+        let settings = [
+            "VoxInk \(version)", ProcessInfo.processInfo.operatingSystemVersionString,
+            "interface=\(interfaceLanguage.rawValue) speech=\(speechLanguage.rawValue) output=\(chineseOutput.rawValue)",
+            "recognition=\(modelServices.transcriptionID == nil ? "local" : "api") modelState=\(modelState.title)",
+            "polish=\(polishingEnabled) apiPolish=\(modelServices.polishingID != nil) automaticModel=\(automaticPolishModel)",
+            "polishModel=\(polishModel.rawValue) style=\(polishStyle.rawValue) preference=\(polishPreference.rawValue)",
+            "shortcut=\(shortcutCombination.title) gesture=\(shortcutMode.rawValue) microphone=\(microphoneAuthorization.title)",
+            "device=\(selectedDeviceUID == nil ? "default" : "selected") accessibility=\(pastePermissionGranted)",
+            "remoteProfiles=\(remoteApplications.count) wait=\(remotePasteTiming.rawValue) uuControl=\(uuWindowsPaste)",
+            "setupCompleted=\(setupCompleted) checkUpdates=\(checksForUpdates)"
+        ]
+        return settings.joined(separator: "\n") + "\n\nworker.log\n" + WorkerDiagnostics.shared.export()
+    }
+
     private let modelCredentials: any ModelCredentialStorage
     private let modelTransport: any ModelHTTPTransport
     private let cloudSpeechDetector: @Sendable (URL) async throws -> Bool
@@ -296,8 +352,13 @@ import VoxInkCore
     @Published var setupHandoffVisible = false
     private var setupDownload: Task<Void, Never>?
     var transcriptionPreparing: Bool { modelState == .loading || modelInstallationProgress != nil }
+    var setupDownloadSummary: String? {
+        guard let progress = modelInstallationProgress else { return nil }
+        return "\(progress.title) \(progress.fraction.formatted(.percent.precision(.fractionLength(0))))"
+    }
+
     var setupResumeSummary: String {
-        if let progress = modelInstallationProgress { return progress.title }
+        if let summary = setupDownloadSummary { return summary }
         if setupProgress.step == .trial && transcriptionReady { return L("模型已就绪 · 试一句") }
         return setupProgress.step.title
     }
@@ -321,7 +382,7 @@ import VoxInkCore
         modelState = .loading
         recovery = nil
         phase = .ready
-        setupDownload = Task {
+        setupDownload = Task { [self] in
             defer { setupDownload = nil; modelInstallationProgress = nil }
             do {
                 try await service.prepare(allowDownload: true) { [weak self] progress in
@@ -382,8 +443,11 @@ import VoxInkCore
     }
 
     private func refreshInputDevices() {
-        let devices = InputDeviceMonitor.devices
         let current = AVCaptureDevice.default(for: .audio).map { InputDevice(id: $0.uniqueID, name: $0.localizedName) }
+        reconcileInputDevices(InputDeviceMonitor.devices, default: current)
+    }
+
+    func reconcileInputDevices(_ devices: [InputDevice], default current: InputDevice?) {
         let missing = selectedDeviceUID.map { uid in !devices.contains { $0.id == uid } } ?? false
         if missing || current?.id != defaultInput?.id { interruptRecording() }
         inputDevices = devices
@@ -506,6 +570,7 @@ import VoxInkCore
         self.speechLanguage = preferences?.string(forKey: "speechLanguage").flatMap(SpeechLanguage.init(rawValue:)) ?? .automatic
         self.chineseOutput = preferences?.string(forKey: "chineseOutput").flatMap(ChineseOutput.init(rawValue:)) ?? .simplified
         self.preferences = preferences
+        self.checksForUpdates = preferences?.object(forKey: "checksForUpdates") as? Bool ?? true
         self.polishingEnabled = preferences?.bool(forKey: "automaticPolishingEnabled") ?? false
         self.microphoneStatus = microphoneStatus
         self.setupCompleted = preferences?.bool(forKey: "setupCompleted") ?? false
@@ -544,6 +609,9 @@ import VoxInkCore
     }
 
     public func prepareForUse() {
+        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+            Task { await checkForUpdate(current: version) }
+        }
         selectedDeviceUID = preferences?.string(forKey: "microphoneUID")
         refreshInputDevices()
         (recorder as? AudioCapture)?.deviceUID = selectedDeviceUID
@@ -630,7 +698,10 @@ import VoxInkCore
         operation = task; audioOperation = task
     }
 
-    public func retryRetainedAudio() {
+    @Published private(set) var localRetryAvailable = false
+
+    public func retryRetainedAudio(useLocal: Bool = false) {
+        guard !useLocal || localRetryAvailable else { return }
         guard canRetryAudio, let record = retainedAudio else { return }
         let token = UUID(); generation = token
         let target = retainedTarget
@@ -640,7 +711,7 @@ import VoxInkCore
         let task = Task {
             defer { if retryingAudioID == record.id { retryingAudioID = nil } }
             guard generation == token, !Task.isCancelled else { return }
-            let retention = await recognize(record.url, token: token)
+            let retention = await recognize(record.url, token: token, useLocal: useLocal)
             guard generation == token else { return }
             if retention == .transcript, phase == .ready {
                 transcriptAudioID = record.id; lastTarget = target
@@ -709,7 +780,7 @@ import VoxInkCore
     public func confirmSetupClipboardSync(_ confirmed: Bool) {
         guard canStart else { return }
         setupProgress.clipboardSyncConfirmed = confirmed
-        if !confirmed { setupProgress.invalidateTrials(); clearSetupTrial() }
+        if !confirmed { setupProgress.invalidateTrials(); clearSetupTrial() } else { setupNotice = nil }
         saveSetupProgress()
     }
 
@@ -719,7 +790,7 @@ import VoxInkCore
         setupProgress.invalidateTrials()
         clearSetupTrial()
         if setupProgress.step == .trial { setupProgress.step = .remote }
-        setupNotice = L("远程设置已更改，请重新确认")
+        if setupProgress.step == .remote { setupNotice = L("远程设置已更改，请重新确认") }
         saveSetupProgress()
     }
 
@@ -935,6 +1006,7 @@ import VoxInkCore
         meterTask?.cancel(); meterTask = nil
         holdRecording = false
         clearSetupTrial()
+        localRetryAvailable = false
         activeTarget = nil
         lastTarget = nil
         let token = generation
@@ -1048,7 +1120,7 @@ import VoxInkCore
     private enum RecognitionRetention { case discard, audio, transcript }
 
     // Keep unrecognized audio separate from the previous transcript.
-    private func recognize(_ url: URL, token: UUID) async -> RecognitionRetention {
+    private func recognize(_ url: URL, token: UUID, useLocal: Bool = false) async -> RecognitionRetention {
         let language = speechLanguage
         let output = chineseOutput
         let shouldPolish = polishingEnabled
@@ -1056,7 +1128,8 @@ import VoxInkCore
         let selectedPolishModel = effectivePolishModel
         let selectedPolishPreference = polishPreference
         let selectedPolishStyle = polishStyle
-        let cloudTranscription = modelServices.transcriptionID != nil
+        localRetryAvailable = false
+        let cloudTranscription = !useLocal && modelServices.transcriptionID != nil
         let cloudPolishing = modelServices.polishingID != nil
         polishMessage = ""
         let dictionarySnapshot = dictionary?.rules ?? .empty
@@ -1106,6 +1179,7 @@ import VoxInkCore
                     } else {
                         polishMessage = L("润色结果未通过检查，本次使用未润色文字。")
                     }
+                    if result.reason == "length" { polishMessage += " · " + L("结果可能被截断") }
                 } catch is CancellationError {
                     guard generation == token else { return .discard }
                     isPolishing = false
@@ -1145,6 +1219,7 @@ import VoxInkCore
             return .discard
         } catch let error as CloudServiceError {
             guard generation == token, !Task.isCancelled else { return .discard }
+            localRetryAvailable = cloudTranscription && (modelState == .ready || ModelLocations.hasInstalledModel())
             fail(error.localizedDescription, recovery: .configureService)
         } catch let error as ModelInstallationError {
             guard generation == token else { return .discard }
@@ -1166,6 +1241,7 @@ import VoxInkCore
         } catch {
             guard generation == token else { return .discard }
             if !cloudTranscription { modelState = .failed }
+            else { localRetryAvailable = modelState == .ready || ModelLocations.hasInstalledModel() }
             fail(L("识别失败。可重试识别，或重新加载模型。"), recovery: .reloadModel)
         }
         return .audio
@@ -1177,7 +1253,8 @@ import VoxInkCore
             return
         }
         clearSetupTrial()
-        let preparingModel = phase == .loading && modelState == .loading
+        let preserveEarlierAudio = preserveRetainedAudio || phase == .recording
+        let preparingModel = setupDownload == nil && phase == .loading && modelState == .loading
         let interruptWorker = preparingModel || localRecognition != nil
         let pendingModelOperation = preparingModel ? operation : nil
         if connectionTestID != nil { connectionTestMessage = L("已取消 · 未发出粘贴") }
@@ -1199,9 +1276,11 @@ import VoxInkCore
         }
         cancellationTask = task
         await task.value
-        if !preserveRetainedAudio, let record = retainedAudio { await discardAudio(record.id) }
-        if interruptWorker { modelState = .notLoaded }
-        modelInstallationProgress = nil
+        if !preserveEarlierAudio, let record = retainedAudio { await discardAudio(record.id) }
+        if interruptWorker {
+            modelState = .notLoaded
+            modelInstallationProgress = nil
+        }
         cancellationTask = nil
         activeTarget = nil
         switch pasteOutcome {
@@ -1630,7 +1709,8 @@ import VoxInkCore
                 let result: String
                 if connection.purpose == .polishing {
                     let response = try await client.polish("我们，嗯，明天讨论这个方案，下午三点。", language: .mandarin, style: polishStyle)
-                    result = response.accepted ? response.text : L("接口可用，但测试润色结果未通过内容检查。")
+                    let output = response.accepted ? response.text : L("接口可用，但测试润色结果未通过内容检查。")
+                    result = response.reason == "length" ? L("结果可能被截断") + "\n" + output : output
                 } else {
                     guard let audioURL else { throw CloudServiceError.audioUnreadable }
                     let prepared = try await audioPreparer(audioURL)

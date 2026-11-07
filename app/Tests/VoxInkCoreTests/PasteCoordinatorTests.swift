@@ -52,7 +52,9 @@ private final class FakePasteEnvironment: PasteEnvironment {
         onSnapshot?()
         return try snapshotResult.get()
     }
-    func writePlainText(_ text: String) throws -> Int {
+    var transient: Bool?
+    func writePlainText(_ text: String, transient: Bool) throws -> Int {
+        self.transient = transient
         do {
             let version = try writeResult.get()
             changeCount = version
@@ -84,6 +86,17 @@ private final class FakePasteEnvironment: PasteEnvironment {
         cleanupDelays.append(duration)
         onCleanupDelay?()
         if pauseCleanup { await withCheckedContinuation { cleanupContinuation = $0 } }
+    }
+}
+
+@Test @MainActor func transientMarkerIsOnlyRequestedForLocalPaste() async {
+    for remote in [false, true] {
+        let environment = FakePasteEnvironment()
+        let coordinator = PasteCoordinator(environment: environment)
+        coordinator.setRemoteApplications(remote ? [.init(bundleID: target.bundleID, name: target.name)] : [])
+        #expect(await coordinator.paste(text: "sample", to: target, sessionID: UUID()) == .sent)
+        #expect(environment.transient == !remote)
+        await coordinator.finishPendingCleanup()
     }
 }
 
@@ -203,7 +216,10 @@ private final class RacingPasteboard: PasteboardAccess {
         if copyBetweenClearAndSet { changeCount += 1 }
         return true
     }
-    func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool { true }
+    func writeObjects(_ objects: [NSPasteboardWriting]) -> Bool {
+        if copyBetweenClearAndSet { changeCount += 1 }
+        return true
+    }
 }
 
 private let target = PasteTarget(pid: 42, bundleID: "test.target", name: "Target")
@@ -513,7 +529,7 @@ func nativeAdapterDoesNotClaimCopyBetweenClearAndSet() {
     let environment = AppKitPasteEnvironment(pasteboard: pasteboard)
 
     do {
-        _ = try environment.writePlainText("new")
+        _ = try environment.writePlainText("new", transient: true)
         Issue.record("Expected ownership race to fail")
     } catch let error as PasteboardMutationError {
         #expect(error.ownedChangeCount == 11)

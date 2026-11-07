@@ -25,12 +25,24 @@ public struct ModelConnection: Identifiable, Codable, Equatable, Sendable {
               let host = components.host, !host.isEmpty,
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil,
-              components.scheme == "https" || (components.scheme == "http" && ["localhost", "127.0.0.1", "[::1]", "::1"].contains(host)),
+              components.scheme == "https" || (components.scheme == "http" && Self.allowsHTTP(host)),
               let url = components.url else { throw CloudServiceError.invalidURL }
         // Accept a base URL including its API version, or the complete endpoint.
         let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         if path == purpose.endpoint || path.hasSuffix("/" + purpose.endpoint) { return url }
         return url.appendingPathComponent(purpose.endpoint)
+    }
+
+    static func allowsHTTP(_ host: String) -> Bool {
+        let name = host.lowercased()
+        if ["localhost", "127.0.0.1", "[::1]", "::1"].contains(name) { return true }
+        if name.hasSuffix(".local") && name.count > 6 { return true }
+        let parts = name.components(separatedBy: ".")
+        guard parts.count == 4 else { return false }
+        let bytes = parts.compactMap(UInt8.init)
+        guard bytes.count == 4, bytes.map(String.init) == parts else { return false }
+        return bytes[0] == 10 || (bytes[0] == 172 && (16...31).contains(bytes[1]))
+            || (bytes[0] == 192 && bytes[1] == 168) || (bytes[0] == 169 && bytes[1] == 254)
     }
 
     func validate() throws {
@@ -81,7 +93,7 @@ public enum CloudServiceError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidURL: L("请填写 HTTPS 服务地址；本机 localhost 可使用 HTTP。地址不能包含密钥、查询参数或片段。")
+        case .invalidURL: L("公网服务须使用 HTTPS。地址不能包含凭据、查询参数或片段。")
         case .invalidConfiguration: L("请填写连接名称、模型 ID，并将超时设为 1–120 秒。")
         case .invalidParameters: L("额外参数必须是 JSON 对象，不能覆盖模型、消息、流式、工具或认证字段。")
         case .missingConnection: L("所选服务不可用，请在“识别与润色”中重新选择。")

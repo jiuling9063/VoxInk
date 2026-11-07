@@ -1,8 +1,10 @@
 import VoxInkCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct WorkspaceHelpView: View {
     @ObservedObject var store: AppStore
+    @State private var exportMessage = ""
     let showDashboard: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -54,6 +56,22 @@ struct WorkspaceHelpView: View {
                     }
                 }
             }
+            Toggle(L("启动时检查更新"), isOn: Binding(get: { store.checksForUpdates }, set: store.setChecksForUpdates))
+            if let version = store.availableVersion {
+                Link(L("有新版本 \(version)"), destination: URL(string: "https://github.com/jiuling9063/VoxInk/releases/latest")!)
+            }
+            Button(L("导出诊断信息…")) {
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.plainText]
+                panel.nameFieldStringValue = "VoxInk-diagnostics.txt"
+                if panel.runModal() == .OK, let url = panel.url {
+                    do {
+                        try store.diagnosticSummary().write(to: url, atomically: true, encoding: .utf8)
+                        exportMessage = L("已导出诊断信息")
+                    } catch { exportMessage = L("导出失败，请检查保存位置。") }
+                }
+            }
+            if !exportMessage.isEmpty { Text(exportMessage).font(.caption) }
         }
     }
 

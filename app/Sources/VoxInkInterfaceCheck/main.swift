@@ -4,6 +4,7 @@ import VoxInkCore
 import VoxInkUI
 
 private enum Scenario: String, CaseIterable, Identifiable {
+    case preparation = "引导：准备", localTrial = "引导：本机试用"
     case setupRemote = "引导：远程配置", setupText = "引导：文字测试", setupSpeech = "引导：语音试用"
     case setup = "首次引导", ready = "日常就绪", loading = "模型加载"
     case recording = "录音", transcribing = "识别", pasting = "写入", cancelling = "取消"
@@ -133,7 +134,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
     }
 
     func captureReview(at directory: URL) async throws {
-        for (scenario, route) in [(Scenario.setup, "input"), (.setupRemote, "input"), (.setupSpeech, "input"),
+        for (scenario, route) in [(Scenario.setup, "input"), (.preparation, "input"), (.localTrial, "input"), (.setupRemote, "input"), (.setupSpeech, "input"),
                                   (.result, "input"), (.result, "history"), (.ready, "statistics"),
                                   (.ready, "shortcut"), (.ready, "engine"), (.ready, "help")] {
             await show(scenario)
@@ -226,6 +227,11 @@ private actor PreviewDictionary: UserDictionaryStorage {
             if scenario == .setup { return }
             store.warmUp()
             try await waitFor { store.modelState == .ready && store.canStart }
+            if scenario == .preparation || scenario == .localTrial {
+                store.advanceSetup()
+                if scenario == .localTrial { store.advanceSetup() }
+                return
+            }
             if [.setupRemote, .setupText, .setupSpeech].contains(scenario) {
                 store.setSetupUsage(.remote); store.advanceSetup(); store.advanceSetup()
                 store.setRemoteApplication(.init(bundleID: "preview", name: "模拟远程工具"))
@@ -241,7 +247,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
             }
             store.deferSetup()
             switch scenario {
-            case .setup, .setupRemote, .setupText, .setupSpeech, .ready: break
+            case .setup, .preparation, .localTrial, .setupRemote, .setupText, .setupSpeech, .ready: break
             case .loading:
                 await service.configure(held: .loading); store.warmUp()
             case .modelFailure:

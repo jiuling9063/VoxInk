@@ -64,15 +64,6 @@ public struct ContentView: View {
                                 Text(notice).foregroundStyle(theme.caution)
                                     .onDisappear { store.deviceNotice = nil }
                             }
-                            if store.setupHandoffVisible {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text(L("好了，以后这样用")).font(.headline)
-                                    if store.setupProgress.usage.needsRemote {
-                                        Text(L("换远程工具后，可在“使用方法”中重新检查。"))
-                                    }
-                                    Button(L("开始使用")) { store.setupHandoffVisible = false }
-                                }.padding(16).writingSurface()
-                            }
                             statusHero
                         }
                         retainedRecording
@@ -104,10 +95,6 @@ public struct ContentView: View {
                 }
             }
         }
-        .onOpenURL { url in
-            guard url.scheme?.lowercased() == "voxink" else { return }
-            navigation.open(url.pathComponents.last(where: { $0 != "/" }) ?? url.host ?? "")
-        }
         .onChange(of: store.sessionHistory.first?.id) { preview = nil }
         .tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
@@ -135,16 +122,21 @@ public struct ContentView: View {
     private var sidebarFooter: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !store.setupCompleted && !(page == .input && store.isShowingSetup) { setupCard }
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Button { page = .help } label: {
                     Label(L("使用方法"), systemImage: "questionmark.circle")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(page == .help ? theme.accent : Color.secondary)
                 .accessibilityAddTraits(page == .help ? .isSelected : [])
-                Spacer(minLength: 4)
+                HStack(spacing: 6) {
+                if let version = store.availableVersion {
+                    Button { page = .help } label: { Image(systemName: "arrow.up.circle.fill") }
+                        .buttonStyle(.plain).help(L("有新版本 \(version)")).accessibilityLabel(L("有新版本 \(version)"))
+                }
                 Text(appVersion).font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .font(.system(size: 11))
             .padding(.horizontal, 4)
@@ -164,7 +156,10 @@ public struct ContentView: View {
                 }
                 ProgressView(value: Double(index - 1), total: Double(max(steps.count, 1)))
                     .progressViewStyle(.linear).tint(theme.accent)
-                Text(store.setupResumeSummary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.setupResumeSummary).font(.caption)
+                    .foregroundStyle(store.transcriptionReady && store.setupProgress.step == .trial ? theme.accent : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(L("继续")).font(.caption).foregroundStyle(theme.accent)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,9 +190,14 @@ public struct ContentView: View {
     /// Keycap guidance, the trial controls and the input pipeline: the one place that shows readiness.
     private var statusHero: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if store.setupHandoffVisible { Text(L("好了，以后这样用")).font(.headline) }
             dailyInstruction
-            recordingControls
+            if !store.setupHandoffVisible { recordingControls }
             InputPipelineView(store: store) { page = $0 }
+            if store.setupHandoffVisible {
+                if store.setupProgress.usage.needsRemote { Text(L("换远程工具后，可在“使用方法”中重新检查。")).font(.caption) }
+                Button(L("开始使用")) { store.setupHandoffVisible = false }
+            }
         }.padding(22)
             .background(theme.ceramicGradient, in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.card))
             .writingSurface().id("activity")
@@ -230,8 +230,10 @@ public struct ContentView: View {
                     Image(systemName: store.phase == .failed ? "exclamationmark.circle" : "waveform")
                         .foregroundStyle(store.phase == .failed ? theme.caution : theme.accent)
                 }
-                Text(store.status).accessibilityIdentifier("dictationStatus")
+                if store.phase != .ready || (store.status != store.transcriptionStatus && ![L("准备就绪"), L("准备就绪 · 本地模型已加载")].contains(store.status)) {
+                    Text(store.status).accessibilityIdentifier("dictationStatus")
                     .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer()
                 if store.phase == .recording { Text(L("\(Int(store.elapsed)) / 60 秒")).monospacedDigit() }
             }
@@ -276,6 +278,9 @@ public struct ContentView: View {
                     .font(.headline)
                 Text(L("保留至 \(record.expiresAt.formatted(date: .abbreviated, time: .shortened))。重试只展示文字，不会自动写入。"))
                     .font(.caption).foregroundStyle(.secondary)
+                if store.localRetryAvailable {
+                    Button(L("改用本地识别重试")) { store.retryRetainedAudio(useLocal: true) }.disabled(!store.canRetryAudio)
+                }
                 HStack {
                     Button(L("重试识别")) { store.retryRetainedAudio() }.disabled(!store.canRetryAudio)
                     Button(L("删除保留录音"), role: .destructive) { store.deleteRetainedAudio() }

@@ -758,5 +758,15 @@
   "远程设置已更改，请重新确认": "Remote settings changed. Confirm again.",
   "远端出现这句话了吗？": "Did the sentence appear on the remote computer?",
   "重新运行首次引导": "Run setup again",
-  "语落会临时替换剪贴板以发送文字。": "VoxInk temporarily replaces the clipboard to send text."
+  "语落会临时替换剪贴板以发送文字。": "VoxInk temporarily replaces the clipboard to send text.",
+  "公网服务须使用 HTTPS。地址不能包含凭据、查询参数或片段。": "Public endpoints require HTTPS. Omit credentials, queries and fragments.",
+  "未加密连接，仅在可信的局域网中使用。": "Unencrypted connection. Use only on a trusted local network.",
+  "结果可能被截断": "The result may be truncated",
+  "改用本地识别重试": "Retry with local recognition",
+  "启动时检查更新": "Check for updates at launch",
+  "有新版本 {0}": "Version {0} available",
+  "导出诊断信息…": "Export diagnostics…",
+  "已导出诊断信息": "Diagnostics exported",
+  "导出失败，请检查保存位置。": "Export failed. Check the destination.",
+  "继续": "Continue"
 }

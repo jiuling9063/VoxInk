@@ -123,6 +123,15 @@ struct InputPipelineView: View {
 
     // MARK: Views
 
+    private func accessibleState(_ state: NodeState) -> String {
+        switch state {
+        case .ready: L("已就绪")
+        case .busy: L("正在处理")
+        case .attention: L("待处理")
+        case .off: L("关闭")
+        }
+    }
+
     private func color(_ state: NodeState) -> Color {
         switch state {
         case .ready: theme.accent
@@ -155,7 +164,7 @@ struct InputPipelineView: View {
                         }
                     }
                     Text(node.detail).font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
@@ -174,6 +183,8 @@ struct InputPipelineView: View {
         .disabled(!store.canStart)
         .help("\(node.detail) — \(node.hint)")
         .accessibilityLabel("\(node.title)，\(node.detail)")
+        .accessibilityValue(accessibleState(node.state))
+        .accessibilitySortPriority(Double(4 - (nodes.firstIndex { $0.id == node.id } ?? 0)))
         .accessibilityHint(node.hint)
     }
 

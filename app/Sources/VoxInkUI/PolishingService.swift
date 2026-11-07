@@ -63,7 +63,7 @@ public actor LocalPolishingService: PolishingService {
     private var loading: (id: UUID, model: PolishModel, task: Task<Void, Error>)?
     private var idleTask: Task<Void, Never>?
     private var activeRequest: UUID?
-    private var expiredRequest: UUID?
+    private static let loadingTimeout: Duration = .seconds(30)
     private var epoch = UUID()
 
     public init(resources: URL? = Bundle.main.resourceURL,
@@ -92,7 +92,7 @@ public actor LocalPolishingService: PolishingService {
 
     public func prepare(model: PolishModel) async throws {
         guard activeRequest == nil else { return }
-        try await ensureReady(model: model, timeout: .seconds(30))
+        try await ensureReady(model: model, timeout: Self.loadingTimeout)
         scheduleIdleRelease()
     }
 
@@ -152,26 +152,17 @@ public actor LocalPolishingService: PolishingService {
         guard activeRequest == nil else { throw Failure.failed }
         try Task.checkCancellation()
         let id = UUID(); activeRequest = id
-        expiredRequest = nil
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        let deadlineTask = Task { [weak self] in
-            do { try await Task.sleep(for: timeout) } catch { return }
-            await self?.expireRequest(id)
-        }
         defer {
-            deadlineTask.cancel()
             if activeRequest == id { activeRequest = nil; scheduleIdleRelease() }
         }
         do {
             return try await withTaskCancellationHandler {
-                try await ensureReady(model: model, timeout: timeout)
+                try await ensureReady(model: model, timeout: Self.loadingTimeout)
                 try Task.checkCancellation()
-                let remaining = ContinuousClock.now.duration(to: deadline)
-                guard remaining > .zero else { throw Failure.timeout }
                 struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int; let language: SpeechLanguage; let system_prompt: String? }
                 struct Response: Decodable { let result: PolishResult }
                 let request = Request(request_id: id, text: text, max_tokens: min(4096, max(128, text.utf8.count + 64)), language: language, system_prompt: style?.prompt(language: language))
-                let response = try await client.exchange(requestID: id, payload: JSONEncoder().encode(request), timeout: remaining)
+                let response = try await client.exchange(requestID: id, payload: JSONEncoder().encode(request), timeout: timeout)
                 try Task.checkCancellation()
                 let result = try JSONDecoder().decode(Response.self, from: response).result
                 guard !result.text.isEmpty else { throw Failure.failed }
@@ -188,7 +179,6 @@ public actor LocalPolishingService: PolishingService {
         } catch {
             await release()
             if Task.isCancelled { throw CancellationError() }
-            if expiredRequest == id { throw Failure.timeout }
             if error as? ResidentWorkerError == .timeout { throw Failure.timeout }
             if let failure = error as? Failure { throw failure }
             throw Failure.failed
@@ -197,12 +187,6 @@ public actor LocalPolishingService: PolishingService {
 
     private func cancelRequest(_ id: UUID) async {
         guard activeRequest == id else { return }
-        await release()
-    }
-
-    private func expireRequest(_ id: UUID) async {
-        guard activeRequest == id else { return }
-        expiredRequest = id
         await release()
     }
 

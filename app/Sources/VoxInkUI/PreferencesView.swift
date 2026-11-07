@@ -27,7 +27,6 @@ public struct PreferencesView: View {
                     .accessibilityHidden(true)
             }
             WorkspacePicker(L("设置分类"), value: [0: L("通用"), 1: L("系统权限"), 2: L("用户词典"), 3: L("识别与润色")][tab] ?? L("通用"), selection: $tab, options: [(L("通用"), 0), (L("系统权限"), 1), (L("识别与润色"), 3)] + (store.dictionary == nil ? [] : [(L("用户词典"), 2)]))
-            ReadinessSummary(store: store)
             ScrollView {
             Group {
             if tab == 0 {
@@ -76,34 +75,6 @@ public struct PreferencesView: View {
         .background(theme.background).tint(theme.accent)
         .buttonStyle(VoxInkButtonStyle())
         .onAppear { store.refreshPermissions(); loginItem.refresh() }
-    }
-}
-
-private struct ReadinessSummary: View {
-    @ObservedObject var store: AppStore
-    @Environment(\.colorScheme) private var scheme
-
-    private var ready: Bool {
-        store.canCompleteSetup
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill((ready ? Color.green : Color.orange).opacity(0.12)).frame(width: 38, height: 38)
-                Circle().fill(ready ? Color.green : Color.orange).frame(width: 8, height: 8)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ready ? L("语落已准备好") : (store.canStart ? L("尚未完成准备") : L("语落正在处理")))
-                    .font(.subheadline.weight(.semibold))
-                Text(ready ? L("模型、权限和快捷键均已就绪") : (store.canStart ? L("请检查权限、模型与快捷键状态") : L("当前任务结束后可继续使用")))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            StatusBadge(title: ready ? L("已就绪") : (store.canStart ? L("待处理") : L("处理中")), tone: ready ? .good : .warning)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 11)
-        .writingSurface()
     }
 }
 

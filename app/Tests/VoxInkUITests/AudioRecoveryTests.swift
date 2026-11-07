@@ -89,6 +89,38 @@ private actor RecoveryStorageStub: AudioRecoveryStorage {
                  audioPreparer: { $0 }, audioCleaner: { _ in }, audioRecovery: storage, clipboardWriter: copy)
     }
 
+    @Test func removingSelectedInputRestoresDefaultAndInterruptsRecording() async throws {
+        let storage = RecoveryStorageStub(), paste = RecoveryPaste()
+        let store = make(RecoveryTranscriber(), storage, paste: paste)
+        let builtin = InputDevice(id: "builtin", name: "Built-in")
+        let headset = InputDevice(id: "headset", name: "Headset")
+        store.reconcileInputDevices([builtin, headset], default: builtin)
+        store.selectDevice(headset.id)
+        #expect(store.inputDeviceName == headset.name)
+        store.handleShortcutPressed()
+        try await wait { store.phase == .recording }
+        store.reconcileInputDevices([builtin], default: builtin)
+        try await wait { store.phase == .failed }
+        #expect(store.recovery == .deviceDisconnected && store.retainedAudio != nil)
+        #expect(store.selectedDeviceUID == nil && store.inputDeviceName == builtin.name)
+        #expect(paste.calls == 0 && store.deviceNotice != nil)
+        store.deviceNotice = nil
+        store.reconcileInputDevices([builtin], default: builtin)
+        #expect(store.deviceNotice == nil)
+    }
+
+    @Test func cancellingNewRecordingPreservesPreviouslyRecoverableAudio() async throws {
+        let storage = RecoveryStorageStub()
+        let store = make(RecoveryTranscriber(), storage)
+        await store.transcribePrepared(source)
+        let previous = try #require(store.retainedAudio)
+        store.handleShortcutPressed()
+        try await wait { store.phase == .recording }
+        await store.cancel()
+        #expect(store.retainedAudio == previous)
+        #expect(await storage.record == previous)
+    }
+
     @Test func interruptedRecorderRetainsAudioWithoutTranscribingOrPasting() async throws {
         let recorder = RecoveryRecorder(), paste = RecoveryPaste(), service = RecoveryTranscriber()
         let store = AppStore(service: service, pasteService: paste, recorder: recorder, preferences: nil,

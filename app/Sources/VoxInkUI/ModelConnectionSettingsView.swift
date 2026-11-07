@@ -25,36 +25,13 @@ struct ModelServicePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             WorkspaceRow(L("处理方式")) {
-                WorkspaceMenu(title: purpose == .transcription ? L("识别服务") : L("润色服务"), value: selectionTitle) {
-                    if purpose == .polishing {
-                        serviceOption(L("不润色"), selected: !enabled) { store.setPolishingEnabled(false) }
-                    }
-                    serviceOption(L("本地模型"), selected: enabled && store.modelServices.selectedID(for: purpose) == nil) { select(nil) }
-                    if !saved.isEmpty {
-                        Section(L("已配置")) {
-                            ForEach(saved) { connection in
-                                serviceOption(connection.name, selected: enabled && selected?.id == connection.id) {
-                                    if (try? connection.validate()) == nil { editing = connection }
-                                    else { select(connection.id) }
-                                }
-                            }
-                        }
-                    }
-                    if let selected, enabled {
-                        Section {
-                            Button(L("设置…")) { editing = selected }
-                            Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
-                        }
-                    }
-                    Divider()
-                    Button(L("添加服务…")) { choosingProvider = true }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { serviceMenu; testButton }
+                    VStack(alignment: .leading, spacing: 8) { serviceMenu; testButton }
                 }
-                .disabled(!store.canEditModelServices)
             }
             if enabled, let selected {
                 Divider()
-                Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
-                    .disabled(!store.canEditModelServices)
                 ModelIDSettingsField(store: store, connection: selected).id(selected.id)
                 if store.connectionTestConnectionID == selected.id, !store.connectionTestMessage.isEmpty {
                     Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
@@ -72,6 +49,41 @@ struct ModelServicePicker: View {
                 choosingProvider = false
             }
         }
+    }
+
+    @ViewBuilder private var testButton: some View {
+        if let selected, enabled {
+            Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
+                .disabled(!store.canEditModelServices)
+        }
+    }
+
+    private var serviceMenu: some View {
+        WorkspaceMenu(title: purpose == .transcription ? L("识别服务") : L("润色服务"), value: selectionTitle) {
+            if purpose == .polishing {
+                serviceOption(L("不润色"), selected: !enabled) { store.setPolishingEnabled(false) }
+            }
+            serviceOption(L("本地模型"), selected: enabled && store.modelServices.selectedID(for: purpose) == nil) { select(nil) }
+            if !saved.isEmpty {
+                Section(L("已配置")) {
+                    ForEach(saved) { connection in
+                        serviceOption(connection.name, selected: enabled && selected?.id == connection.id) {
+                            if (try? connection.validate()) == nil { editing = connection }
+                            else { select(connection.id) }
+                        }
+                    }
+                }
+            }
+            if let selected, enabled {
+                Section {
+                    Button(L("设置…")) { editing = selected }
+                    Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
+                }
+            }
+            Divider()
+            Button(L("添加服务…")) { choosingProvider = true }
+        }
+        .disabled(!store.canEditModelServices)
     }
 
     /// The editor opens only after the picker sheet is gone; two sheets can't share one presentation.
