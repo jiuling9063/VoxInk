@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import Foundation
 
 public enum AudioCaptureError: Error, Equatable, Sendable {
@@ -23,11 +24,20 @@ public struct AudioCaptureSample: Equatable, Sendable {
 
 @MainActor
 public final class AudioCapture {
-    public var isRecording: Bool { recorder?.isRecording ?? false }
-
-    private var recorder: AVAudioRecorder?
+    public var deviceUID: String?
+    private var queue: AudioQueueRef?
+    private var file: AudioFileID?
     private var recordingURL: URL?
-    private var lastElapsed: TimeInterval = 0
+    private var bytes: Int64 = 0
+    private var writeFailed = false
+    private static let maximumBytes: Int64 = 60 * 16_000 * 2
+
+    public var isRecording: Bool {
+        guard let queue, !writeFailed else { return false }
+        var running: UInt32 = 0
+        var size = UInt32(MemoryLayout.size(ofValue: running))
+        return AudioQueueGetProperty(queue, kAudioQueueProperty_IsRunning, &running, &size) == noErr && running != 0
+    }
 
     public init() {}
 
@@ -36,67 +46,84 @@ public final class AudioCapture {
     }
 
     public func start() throws {
-        guard recorder == nil else { throw AudioCaptureError.alreadyRecording }
-
-        let outputURL = try AudioTemporaryStorage.makeOutputURL()
+        guard queue == nil else { throw AudioCaptureError.alreadyRecording }
+        let url = try AudioTemporaryStorage.makeOutputURL()
+        recordingURL = url
+        bytes = 0
+        writeFailed = false
+        var format = AudioStreamBasicDescription(mSampleRate: 16_000, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
+            mBytesPerPacket: 2, mFramesPerPacket: 1, mBytesPerFrame: 2, mChannelsPerFrame: 1,
+            mBitsPerChannel: 16, mReserved: 0)
         do {
-            let recorder = try AVAudioRecorder(
-                url: outputURL,
-                settings: AudioTemporaryStorage.outputSettings
-            )
-            recorder.isMeteringEnabled = true
-            guard recorder.prepareToRecord(), recorder.record(forDuration: AudioTemporaryStorage.maximumDuration) else {
-                throw AudioCaptureError.recordingFailed
+            try check(AudioFileCreateWithURL(url as CFURL, kAudioFileWAVEType, &format, .eraseFile, &file))
+            try AudioTemporaryStorage.secureFile(at: url)
+            try check(AudioQueueNewInputWithDispatchQueue(&queue, &format, 0, .main) { [weak self] queue, buffer, _, _, _ in
+                guard let self, self.queue == queue, let file = self.file else { return }
+                var count = min(buffer.pointee.mAudioDataByteSize, UInt32(Self.maximumBytes - self.bytes))
+                if count > 0 {
+                    guard AudioFileWriteBytes(file, false, self.bytes, &count, buffer.pointee.mAudioData) == noErr else {
+                        self.writeFailed = true
+                        return
+                    }
+                    self.bytes += Int64(count)
+                }
+                if self.bytes < Self.maximumBytes, AudioQueueEnqueueBuffer(queue, buffer, 0, nil) != noErr {
+                    self.writeFailed = true
+                }
+            })
+            guard let queue else { throw AudioCaptureError.recordingFailed }
+            if let deviceUID {
+                let string = deviceUID as CFString
+                var uid = Unmanaged.passUnretained(string).toOpaque()
+                defer { withExtendedLifetime(string) {} }
+                try check(AudioQueueSetProperty(queue, kAudioQueueProperty_CurrentDevice, &uid, UInt32(MemoryLayout<CFString>.size)))
             }
-            self.recorder = recorder
-            recordingURL = outputURL
-            lastElapsed = 0
+            var metering: UInt32 = 1
+            try check(AudioQueueSetProperty(queue, kAudioQueueProperty_EnableLevelMetering, &metering, 4))
+            for _ in 0..<3 {
+                var buffer: AudioQueueBufferRef?
+                try check(AudioQueueAllocateBuffer(queue, 1_024, &buffer))
+                guard let buffer else { throw AudioCaptureError.recordingFailed }
+                try check(AudioQueueEnqueueBuffer(queue, buffer, 0, nil))
+            }
+            try check(AudioQueueStart(queue, nil))
         } catch {
-            AudioFilePreparation.cleanup(url: outputURL)
+            cancel()
             throw error
         }
     }
 
     public func sample() -> AudioCaptureSample {
-        guard let recorder else {
-            return AudioCaptureSample(elapsed: 0, level: 0)
-        }
-        recorder.updateMeters()
-        lastElapsed = min(max(lastElapsed, recorder.currentTime), AudioTemporaryStorage.maximumDuration)
-        let decibels = recorder.averagePower(forChannel: 0)
-        let level = min(max((decibels + 60) / 60, 0), 1)
-        return AudioCaptureSample(elapsed: lastElapsed, level: level)
+        var meter = AudioQueueLevelMeterState()
+        var size = UInt32(MemoryLayout.size(ofValue: meter))
+        if let queue { AudioQueueGetProperty(queue, kAudioQueueProperty_CurrentLevelMeter, &meter, &size) }
+        return .init(elapsed: Double(bytes) / 32_000, level: min(1, max(0, meter.mPeakPower)))
     }
 
     public func stop() throws -> URL {
-        guard let recorder, let recordingURL else {
-            throw AudioCaptureError.notRecording
-        }
-        recorder.stop()
-        defer {
-            self.recorder = nil
-            self.recordingURL = nil
-        }
-
-        do {
-            guard FileManager.default.fileExists(atPath: recordingURL.path) else {
-                throw AudioCaptureError.recordingFailed
-            }
-            try AudioTemporaryStorage.secureFile(at: recordingURL)
-            return recordingURL
-        } catch {
-            AudioFilePreparation.cleanup(url: recordingURL)
-            throw error
-        }
+        guard let url = recordingURL else { throw AudioCaptureError.notRecording }
+        close()
+        recordingURL = nil
+        return url
     }
 
     public func cancel() {
-        recorder?.stop()
-        recorder = nil
-        if let recordingURL {
-            AudioFilePreparation.cleanup(url: recordingURL)
-        }
+        close()
+        if let recordingURL { AudioFilePreparation.cleanup(url: recordingURL) }
         recordingURL = nil
+    }
+
+    private func close() {
+        if let queue {
+            self.queue = nil
+            AudioQueueDispose(queue, true)
+        }
+        if let file { AudioFileClose(file); self.file = nil }
+    }
+
+    private func check(_ status: OSStatus) throws {
+        guard status == noErr else { throw AudioCaptureError.recordingFailed }
     }
 }
 

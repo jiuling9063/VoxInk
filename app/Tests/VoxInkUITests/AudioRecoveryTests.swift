@@ -89,6 +89,19 @@ private actor RecoveryStorageStub: AudioRecoveryStorage {
                  audioPreparer: { $0 }, audioCleaner: { _ in }, audioRecovery: storage, clipboardWriter: copy)
     }
 
+    @Test func interruptedRecorderRetainsAudioWithoutTranscribingOrPasting() async throws {
+        let recorder = RecoveryRecorder(), paste = RecoveryPaste(), service = RecoveryTranscriber()
+        let store = AppStore(service: service, pasteService: paste, recorder: recorder, preferences: nil,
+                             audioCleaner: { _ in }, audioRecovery: RecoveryStorageStub())
+        store.handleShortcutPressed()
+        try await wait { store.phase == .recording }
+        recorder.isRecording = false
+        try await wait { store.phase == .failed }
+        #expect(store.retainedAudio != nil)
+        #expect(store.recovery == .deviceDisconnected)
+        #expect(service.urls.isEmpty && paste.calls == 0)
+    }
+
     @Test func failureRetryKeepsDeadlineAndNeverAutomaticallyPastes() async throws {
         let service = RecoveryTranscriber(); service.failure = RecoveryStorageStub.Failure.disk
         let storage = RecoveryStorageStub(); let paste = RecoveryPaste(); let store = make(service, storage, paste: paste)

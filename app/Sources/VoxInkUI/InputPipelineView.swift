@@ -55,11 +55,11 @@ struct InputPipelineView: View {
     private var microphoneNode: Node {
         let granted = store.microphoneAuthorization == .authorized
         return Node(id: "microphone", icon: "mic", title: L("麦克风"),
-                    detail: granted ? L("系统默认") : L("需要允许录音"),
+                    detail: granted ? store.inputDeviceName : L("需要允许录音"),
                     state: granted ? .ready : .attention,
                     hint: granted ? L("打开系统设置") : L("允许麦克风")) {
             if store.microphoneAuthorization == .notDetermined { store.requestMicrophonePermission() }
-            else { store.openSystemSettings() }
+            else if granted { navigate(.shortcut) } else { store.openSystemSettings() }
         }
     }
 

@@ -115,6 +115,10 @@ struct SettingsSectionTitle: View {
 struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
+        WorkspacePicker(L("麦克风"), value: store.selectedDeviceUID == nil ? L("系统默认") : store.inputDeviceName,
+                        selection: Binding(get: { store.selectedDeviceUID }, set: store.selectDevice),
+                        options: [(L("系统默认"), nil)] + store.inputDevices.map { ($0.name, Optional($0.id)) })
+            .disabled(!store.canStart)
         ShortcutSettingsControl(store: store)
         WorkspacePicker(L("操作方式"), value: store.shortcutMode.title, selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) }), options: ShortcutMode.allCases.map { ($0.title, $0) }).disabled(!store.canChangeShortcut)
         Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Combine
 import Foundation
 import VoxInkCore
@@ -317,6 +318,34 @@ import VoxInkCore
     private var activeTarget: PasteTarget?
     private var lastTarget: PasteTarget?
     private var pasteOutcome: PasteOutcome?
+    private let deviceMonitor = InputDeviceMonitor()
+    @Published private(set) var inputDevices: [InputDevice] = []
+    @Published private(set) var selectedDeviceUID: String?
+    @Published var deviceNotice: String?
+    @Published private var defaultInput: InputDevice?
+    var inputDeviceName: String {
+        inputDevices.first { $0.id == selectedDeviceUID }?.name ?? defaultInput?.name ?? L("系统默认")
+    }
+
+    func selectDevice(_ uid: String?) {
+        selectedDeviceUID = uid
+        preferences?.set(uid, forKey: "microphoneUID")
+        (recorder as? AudioCapture)?.deviceUID = uid
+    }
+
+    private func refreshInputDevices() {
+        let devices = InputDeviceMonitor.devices
+        let current = AVCaptureDevice.default(for: .audio).map { InputDevice(id: $0.uniqueID, name: $0.localizedName) }
+        let missing = selectedDeviceUID.map { uid in !devices.contains { $0.id == uid } } ?? false
+        if missing || current?.id != defaultInput?.id { interruptRecording() }
+        inputDevices = devices
+        defaultInput = current
+        if missing {
+            selectDevice(nil)
+            deviceNotice = L("所选麦克风已断开，已切换到系统默认。")
+        }
+    }
+
     private let recorder: any AudioRecording
     private let audioPreparer: @Sendable (URL) async throws -> URL
     private let audioCleaner: @Sendable (URL) -> Void
@@ -468,6 +497,11 @@ import VoxInkCore
     }
 
     public func prepareForUse() {
+        selectedDeviceUID = preferences?.string(forKey: "microphoneUID")
+        refreshInputDevices()
+        (recorder as? AudioCapture)?.deviceUID = selectedDeviceUID
+        deviceMonitor.start(changed: { [weak self] in self?.refreshInputDevices() },
+                            sleeping: { [weak self] in self?.interruptRecording() })
         startPolishPressureMonitoring()
         refreshPolishDevice(); schedulePolishWarmup()
         guard canStart else { return }
@@ -570,6 +604,7 @@ import VoxInkCore
     }
 
     public func shutdown() async {
+        deviceMonitor.stop()
         isShuttingDown = true
         pressureSource?.cancel(); pressureSource = nil
         warmGeneration = UUID()
@@ -827,7 +862,7 @@ import VoxInkCore
                             recordingLimitReached = true
                             finishRecording(); return
                         }
-                        if !recorder.isRecording { finishRecording(); return }
+                        if !recorder.isRecording { interruptRecording(); return }
                         try? await Task.sleep(for: .milliseconds(100))
                     }
                 }
@@ -835,8 +870,46 @@ import VoxInkCore
         }
     }
 
+    private func interruptRecording() {
+        guard phase == .recording else { return }
+        meterTask?.cancel(); meterTask = nil
+        holdRecording = false
+        clearSetupTrial()
+        activeTarget = nil
+        lastTarget = nil
+        let token = generation
+        do {
+            let url = try recorder.stop()
+            phase = .loading
+            let task = Task {
+                defer { audioCleaner(url) }
+                do {
+                    if let audioRecovery {
+                        let record = try await audioRecovery.save(url)
+                        guard token == generation else { _ = await discardAudio(record.id); return }
+                        retainedAudio = record
+                        retainedTarget = nil
+                        transcriptAudioID = nil
+                        recoveryStorageWarning = nil
+                    }
+                } catch {
+                    guard token == generation else { return }
+                    recoveryStorageWarning = L("录音未能保留，无法重试；请检查磁盘空间与访问权限。")
+                }
+                guard token == generation else { return }
+                fail(L("录音设备已断开"), recovery: .deviceDisconnected)
+            }
+            operation = task
+            audioOperation = task
+        } catch {
+            recorder.cancel()
+            fail(L("录音未保存成功，请重试。"), recovery: .deviceDisconnected)
+        }
+    }
+
     public func finishRecording() {
         guard phase == .recording else { return }
+        guard recorder.isRecording || recordingLimitReached else { interruptRecording(); return }
         holdRecording = false
         meterTask?.cancel(); meterTask = nil
         do {

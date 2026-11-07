@@ -67,6 +67,7 @@ public struct RecordingFeedbackPresentation {
         case .installModel, .reloadModel, .checkInstallation: L("模型未就绪")
         case .configureService: L("服务暂不可用")
         case .inspectClipboard: L("请检查剪贴板")
+        case .deviceDisconnected: L("录音设备已断开")
         case .recordAgain, .chooseAudio: L("请重新录音")
         case nil: L("打开语落查看详情")
         }

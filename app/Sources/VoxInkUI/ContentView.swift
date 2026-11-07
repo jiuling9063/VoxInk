@@ -60,6 +60,10 @@ public struct ContentView: View {
                         if store.isShowingSetup { SetupView(store: store).id("setup") }
                         else {
                             WorkspaceHeading(title: L("语音工作台"), subtitle: "")
+                            if let notice = store.deviceNotice {
+                                Text(notice).foregroundStyle(theme.caution)
+                                    .onDisappear { store.deviceNotice = nil }
+                            }
                             statusHero
                         }
                         if store.isShowingSetup && store.setupProgress.step == .speech { recordingControls.padding(22).writingSurface().id("activity") }
@@ -253,7 +257,7 @@ public struct ContentView: View {
         case .microphone: Button(L("打开系统设置")) { store.openSystemSettings() }
         case .pastePermission: Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
         case .chooseAudio: Button(L("选择音频…")) { importing = true }.disabled(!store.canStart)
-        case .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation, .configureService: EmptyView()
+        case .deviceDisconnected, .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation, .configureService: EmptyView()
         }
     }
 
