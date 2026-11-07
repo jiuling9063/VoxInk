@@ -1,257 +1,163 @@
 import VoxInkCore
 import SwiftUI
 
-struct ReadinessRow<Actions: View>: View {
-    let icon: String
-    let title: String
-    let detail: String
-    let ready: Bool
-    var number: Int? = nil
-    @ViewBuilder var actions: () -> Actions
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 14) {
-                description
-                Spacer(minLength: 12)
-                actions().fixedSize()
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                description
-                actions().padding(.leading, 52)
-            }
-        }.padding(.vertical, 12)
-    }
-
-    private var description: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .font(.title3).foregroundStyle(.tint)
-                .frame(width: 38, height: 38)
-                .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(alignment: .topLeading) {
-                    if let number {
-                        Text("\(number)").font(.caption2.bold()).foregroundStyle(.white)
-                            .frame(width: 18, height: 18).background(.tint, in: Circle())
-                            .offset(x: -6, y: -6)
-                    }
-                }
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(title).font(.headline)
-                    if ready { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel(L("已就绪")) }
-                }
-                Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }.frame(minWidth: 160, alignment: .leading)
-        }
-    }
-}
-
 struct SetupView: View {
     @ObservedObject var store: AppStore
-    @State private var showingTroubleshooting = false
-
+    @Environment(\.colorScheme) private var scheme
+    @State private var troubleshooting = false
+    @State private var providers = false
+    @State private var shortcuts = false
+    private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     private var progress: SetupProgress { store.setupProgress }
-    private var confirmed: Bool {
-        progress.step == .text ? progress.textConfirmed : progress.speechConfirmed
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            WorkspaceHeading(title: progress.step.title,
-                             subtitle: L("第 \((progress.steps.firstIndex(of: progress.step) ?? 0) + 1) 步，共 \(progress.steps.count) 步 · 首次输入引导"))
-            ProgressView(value: Double(progress.steps.firstIndex(of: progress.step) ?? 0),
-                         total: Double(progress.steps.count))
-                .accessibilityLabel(L("首次准备"))
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 8) {
-                ForEach(Array(progress.steps.enumerated()), id: \.element.rawValue) { index, step in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("\(index + 1)").font(.caption.bold())
-                            .frame(width: 20, height: 20)
-                            .background(.tint.opacity(step == progress.step ? 0.18 : 0.05), in: Circle())
-                        Text(step.title).font(.caption).fixedSize(horizontal: false, vertical: true)
-                    }.foregroundStyle(step == progress.step ? Color.primary : Color.secondary)
-                        .accessibilityAddTraits(step == progress.step ? .isSelected : [])
+        VStack(alignment: .leading, spacing: 16) {
+            let index = (progress.steps.firstIndex(of: progress.step) ?? 0) + 1
+            Text("\(index) / \(progress.steps.count) · \(progress.step.title)").font(.caption)
+            ProgressView(value: Double(index), total: Double(progress.steps.count))
+            if let notice = store.setupNotice { Text(notice).foregroundStyle(theme.caution) }
+            switch progress.step {
+            case .usage:
+                Text(L("你在哪台电脑上打字？")).font(.title2.bold())
+                ViewThatFits(in: .horizontal) {
+                    HStack { scenarioCards }
+                    VStack { scenarioCards }
                 }
+                Button(L("两台都用")) { store.chooseSetupUsage(.remote) }.buttonStyle(.link)
+                Text(L("随时可以稍后设置；已完成的步骤会保存，可从“首次准备”继续。")).font(.caption)
+            case .preparation: preparation
+            case .remote: remote
+            case .trial: trial
             }
-            Group {
-                switch progress.step {
-                case .usage: usage
-                case .preparation: preparation
-                case .remote: remote
-                case .text, .speech: trial
-                }
-            }
-            if !store.canStart || progress.step == .text || progress.step == .speech {
-                Text(store.status).font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if store.canCancel {
-                Button(L("取消")) { Task { await store.cancel() } }
+            if store.phase == .failed && store.setupBlockingHint != store.status {
+                Text(store.status).font(.caption).foregroundStyle(theme.caution)
             }
         }
-        .onChange(of: progress.step) { _, _ in showingTroubleshooting = false }
+        .onChange(of: progress.step) { troubleshooting = false }
     }
 
-    private var usage: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L("你准备在哪里使用语音输入？")).font(.headline)
-            WorkspacePicker(L("使用场景"), value: progress.usage.title, selection: Binding(get: { progress.usage }, set: { store.setSetupUsage($0) }), options: SetupUsage.allCases.map { ($0.title, $0) }).disabled(!store.canStart)
-            Text(L("远程输入时，在本机说话并识别，再通过远程工具的剪贴板同步传递文字。"))
-                .font(.callout).foregroundStyle(.secondary)
-            Text(L("随时可以稍后设置；已完成的步骤会保存，可从“首次准备”继续。"))
-                .font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(18).writingSurface()
+    @ViewBuilder private var scenarioCards: some View {
+        scenario(.local, L("就在这台 Mac 上"), L("说完，文字写进当前应用。"), "laptopcomputer")
+        scenario(.remote, L("在远程桌面里的电脑上"), L("本机识别，经远程工具的剪贴板送到远端。"), "desktopcomputer")
+    }
+
+    private func scenario(_ usage: SetupUsage, _ title: String, _ detail: String, _ icon: String) -> some View {
+        Button { store.chooseSetupUsage(usage) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: icon).foregroundStyle(theme.accent)
+                Text(title).font(.headline)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }.frame(minWidth: 155, maxWidth: .infinity, alignment: .leading).padding(14).writingSurface()
+        }.buttonStyle(.plain).disabled(!store.canStart)
+    }
+
+    private func row<Actions: View>(_ title: String, _ detail: String, ready: Bool,
+                                    @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Circle().fill(ready ? theme.accent : theme.caution).frame(width: 7, height: 7)
+                Text(title).font(.headline)
+            }
+            Text(detail).font(.callout).foregroundStyle(.secondary)
+            actions()
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var preparation: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ModelServicePicker(store: store, purpose: .transcription)
-            VStack(spacing: 0) {
-                ReadinessRow(icon: "mic", title: L("允许麦克风"), detail: L("\(store.microphoneAuthorization.title) · 仅在你开始录音后采集声音。"),
-                    ready: store.microphoneAuthorization == .authorized, number: 1) {
-                    if store.microphoneAuthorization == .notDetermined {
-                        Button(L("允许麦克风")) { store.requestMicrophonePermission() }.disabled(!store.canStart)
-                    } else if store.microphoneAuthorization != .authorized {
-                        Button(L("打开系统设置")) { store.openSystemSettings() }
-                    }
-                }
-                Divider()
-                ReadinessRow(icon: "cursorarrow.and.square.on.square.dashed", title: L("允许文字写入"),
-                    detail: store.pastePermissionGranted ? L("已允许 · 识别后自动粘贴到目标输入框。") : L("需要辅助功能权限，用于把识别结果写入目标输入框。"),
-                    ready: store.pastePermissionGranted, number: 2) {
-                    if !store.pastePermissionGranted {
-                        Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
-                    }
-                }
-                Divider()
-                ReadinessRow(icon: "internaldrive", title: L("语音识别"), detail: store.transcriptionStatus,
-                    ready: store.transcriptionReady, number: 3) {
-                    if store.modelServices.transcriptionID != nil { EmptyView() }
-                    else if store.modelState == .loading { ProgressView().controlSize(.small) }
-                    else if store.modelState == .needsDownload {
-                        Button(L("下载或继续安装")) { store.installModel() }.disabled(!store.canStart)
-                    }
-                    else if store.modelState != .ready {
-                        Button(store.modelState == .failed ? L("重新加载") : L("加载模型")) { store.warmUp() }.disabled(!store.canStart)
-                    }
+        VStack(alignment: .leading, spacing: 12) {
+            row(L("麦克风"), store.microphoneAuthorization == .authorized
+                ? L("已允许 · 只在你开始录音后采集声音") : store.microphoneAuthorization.title,
+                ready: store.microphoneAuthorization == .authorized) {
+                if store.microphoneAuthorization == .notDetermined {
+                    Button(L("允许麦克风")) { store.requestMicrophonePermission() }
+                } else if store.microphoneAuthorization != .authorized {
+                    Button(L("打开系统设置")) { store.openSystemSettings() }
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 6)
-            .writingSurface()
-            if let progress = store.modelInstallationProgress {
-                ProgressView(progress.title, value: progress.fraction)
-                    .accessibilityLabel(L("模型准备进度"))
+            Divider()
+            row(L("文字写入"), store.pastePermissionGranted ? L("已允许") : L("需要辅助功能权限"), ready: store.pastePermissionGranted) {
+                if !store.pastePermissionGranted { Button(L("允许文字写入")) { store.requestPastePermission() } }
             }
-            if store.modelServices.transcriptionID == nil && store.modelState == .needsDownload {
-                Text(L("识别在本机完成。首次下载约 713 MB，支持中断后继续。"))
-                    .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            row(L("快捷键"), store.shortcutAvailable ? store.shortcutMode.title : store.shortcutStatus, ready: store.shortcutAvailable) {
+                HStack { Keycap(title: store.shortcutCombination.title); Button(L("更改")) { shortcuts = true } }
+                    .popover(isPresented: $shortcuts) { ShortcutSettingsControl(store: store).padding(16) }
             }
-            ShortcutSettingsControl(store: store)
-            Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
-            Button(L("刷新状态"), systemImage: "arrow.clockwise") { store.refreshPermissions() }
-                .disabled(!store.canStart)
-        }
+            Divider()
+            row(L("识别"), store.modelServices.transcriptionID == nil && !store.transcriptionReady
+                ? L("本地 Qwen3-ASR · 约 713 MB，可断点续传") : store.transcriptionStatus, ready: store.transcriptionReady) {
+                if let install = store.modelInstallationProgress { ProgressView(install.title, value: install.fraction) }
+                Button(L("改用在线服务…")) { providers = true }.buttonStyle(.link)
+                    .popover(isPresented: $providers) { ModelServicePicker(store: store, purpose: .transcription).padding(16).frame(width: 400) }
+            }
+        }.padding(16).writingSurface()
     }
 
     private var remote: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L("添加本机安装的远程工具，按远端电脑的系统选择粘贴方式。"))
-                .font(.callout)
+        VStack(alignment: .leading, spacing: 12) {
             RemoteInputSettingsView(store: store, initiallyExpanded: true)
-            Divider()
-            Text(L("连接远端后，确认本机复制的文字能手动粘贴到远端。有“剪贴板同步”或“共享剪贴板”开关时，请在两端开启；默认同步的工具可直接验证。"))
-                .font(.callout).fixedSize(horizontal: false, vertical: true)
-            Text(L("语落无法读取或代开这个开关；下一步会实际测试文字能否传过去。"))
-                .font(.caption).foregroundStyle(.secondary)
-            Toggle(L("我已确认本机复制的文字可以粘贴到远端"), isOn: Binding(
-                get: { progress.clipboardSyncConfirmed }, set: { store.confirmSetupClipboardSync($0) }))
-                .disabled(!store.canStart || store.remoteApplications.isEmpty)
-        }.padding(18).writingSurface()
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L("剪贴板同步")).font(.headline)
+                Text(L("连接远端后，确认本机复制的文字能手动粘贴到远端。有“剪贴板同步”或“共享剪贴板”开关时，请在两端开启；默认同步的工具可直接验证。"))
+                Text(L("语落会临时替换剪贴板以发送文字。")).font(.caption)
+                Toggle(L("我已确认本机复制的文字可以粘贴到远端"), isOn: Binding(
+                    get: { progress.clipboardSyncConfirmed }, set: store.confirmSetupClipboardSync))
+                    .disabled(store.remoteApplications.isEmpty)
+                DisclosureGroup(L("为什么需要确认")) {
+                    Text(L("语落无法读取或代开这个开关；下一步会实际测试文字能否传过去。"))
+                }
+            }.padding(14).background(theme.caution.opacity(0.1), in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.card))
+        }.font(.callout)
     }
 
     private var trial: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(L("本次输入配置")).font(.subheadline.bold())
-                Label(progress.step == .text ? store.shortcutCombination.title : store.shortcutInstruction, systemImage: "command")
-                Label(progress.usage.title, systemImage: progress.usage.needsRemote ? "desktopcomputer" : "laptopcomputer")
-                if progress.usage.needsRemote {
-                    ForEach(store.remoteApplications) { profile in
-                        Text("\(profile.name) · \(profile.usesControl ? "Ctrl V · Windows / Linux" : "⌘ V · Mac")")
-                    }
-                    Text(L("剪贴板同步：已由你确认。UU 用户还需核对“仅控制端响应”的组合与上方一致。"))
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            let recognition = store.modelInstallationProgress?.title ?? L("识别")
+            Text(([L("麦克风"), recognition, L("文字写入")] + (progress.usage.needsRemote ? [store.remoteApplications.first?.name ?? L("远程工具")] : [])).joined(separator: " → ")).font(.caption).foregroundStyle(theme.accent)
+            if store.transcriptionReady {
+                Text(progress.usage.needsRemote ? L("切到远端的记事本，说“明天下午开会”。") : L("切到任意输入框，说“明天下午开会”。")).font(.title3)
+                ViewThatFits(in: .horizontal) {
+                    HStack { keyInstruction }
+                    VStack(alignment: .leading) { keyInstruction }
                 }
-            }.font(.callout).fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                .background(.tint.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-            Text(progress.usage.needsRemote
-                 ? L("请在已添加的远程工具内，打开远端记事本或其他可清空的输入框。")
-                 : L("请在本机文本编辑器中打开一个可清空的输入框。"))
-                .font(.callout)
-            Text(L("测试期间保持同一输入位置，只检查文字是否出现，不发送消息。"))
-                .font(.caption).foregroundStyle(.secondary)
-            if progress.step == .text {
-                Text(L("先点击“准备测试”，再切换到输入框，按一次当前快捷键。此次只写入固定文字，不会录音。"))
-                    .font(.callout)
-                Text(L("语落固定文字测试：中文、English、123。"))
-                    .textSelection(.enabled).padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                Button(store.fixedTextTestArmed ? L("取消测试") : L("准备测试"), systemImage: "text.cursor") {
-                    if store.fixedTextTestArmed { store.stopSetupTextTest() }
-                    else { showingTroubleshooting = false; store.startSetupTextTest() }
-                }.disabled(!store.canStart || !store.pastePermissionGranted || !store.shortcutAvailable)
             } else {
-                Text(store.shortcutInstruction).font(.headline)
-                Text(L("试着说：“明天下午开会。”结束录音后，等待文字出现在目标输入框。"))
-                    .font(.callout)
+                Text(store.modelInstallationProgress?.title ?? store.transcriptionStatus)
+                fixedTest
             }
-            Label(store.shortcutCombination.title, systemImage: "command").font(.headline)
-            if confirmed {
-                Label(L("已由你确认文字出现在目标输入框"), systemImage: "checkmark.circle.fill")
-                    .font(.callout).foregroundStyle(.green)
-            } else {
-                Text(L("“已发送粘贴”不代表远端已收到，请查看目标输入框后确认。"))
-                    .font(.caption).foregroundStyle(.secondary)
+            if store.setupTrialCanConfirm {
+                Text(store.transcript).font(.transcriptBody(size: 17)).textSelection(.enabled)
+                Text(L("已发送到 \(store.shortcutTargetName ?? L("目标应用"))")).font(.caption)
+                Text(progress.usage.needsRemote ? L("远端出现这句话了吗？") : L("\(store.shortcutTargetName ?? L("目标应用"))里出现这句话了吗？"))
+                Button(L("出现了")) { store.confirmSetupTrial(true); troubleshooting = false }
+                    .buttonStyle(VoxInkButtonStyle(prominent: true))
             }
-            ViewThatFits(in: .horizontal) {
-                HStack { confirmationButtons }
-                VStack(alignment: .leading, spacing: 10) { confirmationButtons }
-            }
-            if showingTroubleshooting || store.phase == .failed { troubleshooting }
+            Button(L("没有 / 不对")) { store.confirmSetupTrial(false); troubleshooting = true }
             if progress.usage.needsRemote {
-                Text(L("本次确认仅针对你测试的远程会话；更换工具、远端系统或设备后，请重新验证。"))
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(L("“已发送粘贴”不代表远端已收到，请查看目标输入框后确认。")).font(.caption)
             }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(18).writingSurface()
+            if troubleshooting || store.phase == .failed {
+                Divider()
+                if store.transcriptionReady { fixedTest }
+                Text(L("1. 复制测试文字，切换到同一个输入框，手动粘贴。此操作会替换当前剪贴板。"))
+                Button(L("复制测试文字")) { store.copySetupTestText() }
+                if progress.usage.needsRemote {
+                    Text(L("2. 手动粘贴也失败：检查远程连接与两端剪贴板同步；出现旧文字时，尝试更长的同步等待。"))
+                }
+                Text(L("手动成功、自动失败：检查文字写入权限、粘贴方式和输入框焦点。"))
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).writingSurface()
     }
 
-    @ViewBuilder private var confirmationButtons: some View {
-        Button(L("看到了正确文字")) { store.confirmSetupTrial(true); showingTroubleshooting = false }
-            .disabled(!store.canStart || !store.setupTrialCanConfirm || store.fixedTextTestArmed)
-        Button(L("没有出现或文字不对")) { store.confirmSetupTrial(false); showingTroubleshooting = true }
-            .disabled(!store.canStart || store.fixedTextTestArmed)
+    @ViewBuilder private var keyInstruction: some View {
+        Keycap(title: store.shortcutCombination.title)
+        Text(store.shortcutMode.title).font(.headline)
     }
 
-    private var troubleshooting: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Divider()
-            Text(L("按顺序排查")).font(.headline)
-            Text(L("1. 复制测试文字，切换到同一个输入框，手动粘贴。此操作会替换当前剪贴板。"))
-            Button(L("复制测试文字")) { store.copySetupTestText() }.disabled(!store.canStart)
-            if progress.usage.needsRemote {
-                Text(L("2. 手动粘贴也失败：检查远程连接与两端剪贴板同步；出现旧文字时，尝试更长的同步等待。"))
-            }
-            Text(L("3. 手动粘贴成功但自动写入失败：检查辅助功能权限、远端粘贴方式、输入框焦点和快捷键冲突。可返回前面步骤修改。"))
-            if progress.step == .speech {
-                Text(L("4. 没有录到声音或识别不对：在下方工作台试录，检查麦克风、模型和语音语言。工作台录音只展示结果，不自动写入。"))
-            }
-            Text(L("确认目标没有重复文字后再重试；仍不成功，可稍后设置，在工作台录音并手动复制。"))
-        }.font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    private var fixedTest: some View {
+        Button(store.fixedTextTestArmed ? L("取消测试") : L("只测写入")) {
+            if store.fixedTextTestArmed { store.stopSetupTextTest() } else { store.startSetupTextTest() }
+        }.disabled(!store.canStart || !store.pastePermissionGranted || !store.shortcutAvailable)
     }
-
 }
 
 struct SetupNavigationView: View {
@@ -278,8 +184,11 @@ struct SetupNavigationView: View {
         }
         Button(L("稍后设置")) { store.deferSetup() }.disabled(!store.canStart)
         Spacer(minLength: 0)
-        Button(store.setupProgress.step == .speech ? L("完成引导") : L("下一步"), systemImage: "arrow.right") {
-            store.advanceSetup()
-        }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canAdvanceSetup)
+        if store.setupProgress.step != .usage {
+            Button(store.canStartSetupDownload ? L("下载并继续") : (store.setupProgress.step == .trial ? L("完成引导") : L("下一步")),
+                   systemImage: "arrow.right") {
+                store.prepareAndAdvanceSetup()
+            }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canAdvanceSetup && !store.canStartSetupDownload)
+        }
     }
 }

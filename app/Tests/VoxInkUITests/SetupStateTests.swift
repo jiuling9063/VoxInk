@@ -32,6 +32,34 @@ private actor SetupTranscriber: TranscriptionService {
 }
 
 @MainActor struct SetupStateTests {
+    @Test func migratesOldTrialStepsAndDefaultsToLocal() throws {
+        for old in ["text", "speech"] {
+            let data = try JSONEncoder().encode(old)
+            #expect(try JSONDecoder().decode(SetupStep.self, from: data) == .trial)
+        }
+        #expect(SetupProgress().usage == .local)
+    }
+
+    @Test func downloadsWhileUserCanTestDelivery() async throws {
+        let paste = SetupPaste()
+        paste.accessibilityGranted = true
+        paste.outcome = .sent
+        let store = AppStore(service: SetupTranscriber(), pasteService: paste, preferences: nil, microphoneStatus: { .authorized })
+        store.refreshPermissions()
+        store.configureShortcutRegistration { _ in true }
+        store.chooseSetupUsage(.local)
+        #expect(store.setupProgress.step == .preparation && store.canStartSetupDownload)
+        store.prepareAndAdvanceSetup()
+        #expect(store.setupProgress.step == .trial && store.transcriptionPreparing)
+        #expect(!store.canCompleteSetup)
+        store.startSetupTextTest()
+        #expect(store.fixedTextTestArmed)
+        store.handleGlobalShortcut()
+        try await waitUntil { store.canStart && store.transcriptionReady }
+        store.confirmSetupTrial(true)
+        #expect(store.setupProgress.textConfirmed && !store.canCompleteSetup)
+    }
+
     private func waitUntil(_ predicate: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !predicate(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
@@ -50,8 +78,8 @@ private actor SetupTranscriber: TranscriptionService {
         return store
     }
 
-    private func reachTextStep(_ store: AppStore, remote: Bool) {
-        if !remote { store.setSetupUsage(.local) }
+    private func reachTrialStep(_ store: AppStore, remote: Bool) {
+        if remote && !store.setupProgress.usage.needsRemote { store.setSetupUsage(.remote) }
         store.advanceSetup()
         store.advanceSetup()
         if remote {
@@ -59,7 +87,7 @@ private actor SetupTranscriber: TranscriptionService {
             store.confirmSetupClipboardSync(true)
             store.advanceSetup()
         }
-        #expect(store.setupProgress.step == .text)
+        #expect(store.setupProgress.step == .trial)
     }
 
     private func sendTestText(_ store: AppStore) async throws {
@@ -179,23 +207,17 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.modelState == .ready)
     }
     @Test(arguments: SetupUsage.allCases)
-    func guideRequiresSeparateHumanConfirmationOfTextAndSpeech(usage: SetupUsage) async throws {
+    func guideRequiresHumanConfirmationOfSpeech(usage: SetupUsage) async throws {
         let name = "VoxInk.SetupComplete.\(UUID())"
         let preferences = try #require(UserDefaults(suiteName: name))
         defer { preferences.removePersistentDomain(forName: name) }
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste, preferences: preferences)
         store.setSetupUsage(usage)
-        reachTextStep(store, remote: usage.needsRemote)
+        reachTrialStep(store, remote: usage.needsRemote)
         store.confirmSetupTrial(true)
         #expect(!store.setupProgress.textConfirmed)
-        try await sendTestText(store)
-        #expect(store.setupTrialCanConfirm)
-        #expect(!store.canAdvanceSetup)
-        store.confirmSetupTrial(true)
-        store.advanceSetup()
-        #expect(store.setupProgress.step == .speech)
-        #expect(!store.setupTrialCanConfirm)
+        #expect(!store.canCompleteSetup)
         store.handleGlobalShortcut()
         try await waitUntil { store.phase == .recording }
         store.finishRecording()
@@ -208,6 +230,7 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.setupCompleted)
         #expect(!store.isShowingSetup)
         let restored = AppStore(preferences: preferences)
+        #expect(store.setupHandoffVisible && !restored.setupHandoffVisible)
         #expect(restored.setupCompleted)
         #expect(restored.setupProgress.verified)
         #expect(!restored.isShowingSetup)
@@ -223,7 +246,7 @@ private actor SetupTranscriber: TranscriptionService {
         defer { preferences.removePersistentDomain(forName: name) }
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste, preferences: preferences)
-        reachTextStep(store, remote: true)
+        reachTrialStep(store, remote: true)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         store.deferSetup()
@@ -232,7 +255,7 @@ private actor SetupTranscriber: TranscriptionService {
         let restored = AppStore(preferences: preferences)
         #expect(!restored.isShowingSetup)
         restored.showSetup()
-        #expect(restored.setupProgress.step == .text)
+        #expect(restored.setupProgress.step == .trial)
         #expect(restored.setupProgress.textConfirmed)
         #expect(!restored.setupTrialCanConfirm)
         #expect(restored.isShowingSetup)
@@ -240,6 +263,7 @@ private actor SetupTranscriber: TranscriptionService {
 
     @Test func remoteGuideRequiresProfileAndClipboardAcknowledgement() async throws {
         let store = try await readyStore(SetupPaste())
+        store.setSetupUsage(.remote)
         store.advanceSetup(); store.advanceSetup()
         #expect(store.setupProgress.step == .remote)
         #expect(!store.canAdvanceSetup)
@@ -257,7 +281,7 @@ private actor SetupTranscriber: TranscriptionService {
     @Test func remoteTrialCannotBeConfirmedForAnUnconfiguredLocalTarget() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: true)
+        reachTrialStep(store, remote: true)
         paste.target = .init(pid: 2, bundleID: "local.editor", name: "本地编辑器")
         try await sendTestText(store)
         store.confirmSetupTrial(true)
@@ -268,7 +292,7 @@ private actor SetupTranscriber: TranscriptionService {
     @Test func failedOrUnobservedPasteNeverCompletesTextStep() async throws {
         let paste = SetupPaste()
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: false)
+        reachTrialStep(store, remote: false)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         #expect(!store.setupProgress.textConfirmed)
@@ -283,7 +307,7 @@ private actor SetupTranscriber: TranscriptionService {
 
     @Test func navigationAndDeferralDisarmFixedTextTest() async throws {
         let store = try await readyStore(SetupPaste())
-        reachTextStep(store, remote: false)
+        reachTrialStep(store, remote: false)
         store.startSetupTextTest()
         #expect(store.fixedTextTestArmed)
         store.previousSetupStep()
@@ -298,7 +322,7 @@ private actor SetupTranscriber: TranscriptionService {
     @Test func remoteChangesAndUsageChangesInvalidateEarlierEvidence() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: true)
+        reachTrialStep(store, remote: true)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         store.setRemotePasteTiming(.fast)
@@ -315,14 +339,14 @@ private actor SetupTranscriber: TranscriptionService {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
         store.setSetupUsage(usage)
-        reachTextStep(store, remote: usage.needsRemote)
+        reachTrialStep(store, remote: usage.needsRemote)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         store.advanceSetup()
         #expect(store.setShortcutCombination(.controlOptionSpace))
-        #expect(!store.setupProgress.textConfirmed && !store.setupProgress.speechConfirmed)
+        #expect(store.setupProgress.textConfirmed == !usage.needsRemote && !store.setupProgress.speechConfirmed)
         #expect(!store.setupTrialCanConfirm && !store.canAdvanceSetup)
-        #expect(store.setupProgress.step == (usage.needsRemote ? .remote : .text))
+        #expect(store.setupProgress.step == (usage.needsRemote ? .remote : .trial))
         #expect(store.setupBlockingHint != nil)
         if usage.needsRemote { #expect(!store.setupProgress.clipboardSyncConfirmed) }
     }
@@ -330,7 +354,7 @@ private actor SetupTranscriber: TranscriptionService {
     @Test func unchangedOrRejectedShortcutPreservesInputEvidence() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: true)
+        reachTrialStep(store, remote: true)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         let current = store.shortcutCombination
@@ -338,26 +362,25 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.setupProgress.textConfirmed)
         store.configureShortcutRegistration { $0 == current }
         #expect(!store.setShortcutCombination(.controlOptionSpace))
-        #expect(store.setupProgress.textConfirmed && store.canAdvanceSetup)
-        #expect(store.setupBlockingHint == nil)
+        #expect(store.setupProgress.textConfirmed && !store.canAdvanceSetup)
     }
 
     @Test func changingGestureModeRequiresAnotherInputTest() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: false)
+        reachTrialStep(store, remote: false)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
         store.advanceSetup()
         store.setShortcutMode(.toggle)
-        #expect(store.setupProgress.step == .text)
-        #expect(!store.setupProgress.textConfirmed && !store.canCompleteSetup)
+        #expect(store.setupProgress.step == .trial)
+        #expect(store.setupProgress.textConfirmed && !store.canCompleteSetup)
     }
 
     @Test func cancelledTrialAndWorkspaceRecordingDoNotCountAsInputVerification() async throws {
         let paste = SetupPaste(); paste.outcome = .sent
         let store = try await readyStore(paste)
-        reachTextStep(store, remote: false)
+        reachTrialStep(store, remote: false)
         store.startSetupTextTest()
         await store.cancel()
         #expect(!store.fixedTextTestArmed)

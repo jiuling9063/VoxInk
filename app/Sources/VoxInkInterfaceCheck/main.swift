@@ -132,6 +132,30 @@ private actor PreviewDictionary: UserDictionaryStorage {
         workspaceWindow?.present()
     }
 
+    func captureReview(at directory: URL) async throws {
+        for (scenario, route) in [(Scenario.setup, "input"), (.setupRemote, "input"), (.setupSpeech, "input"),
+                                  (.result, "input"), (.result, "history"), (.ready, "statistics"),
+                                  (.ready, "shortcut"), (.ready, "engine"), (.ready, "help")] {
+            await show(scenario)
+            guard error == nil else { throw CocoaError(.validationMissingMandatoryProperty) }
+            let controller = WorkspaceWindowController(store: store, restoresFrame: false)
+            guard let window = controller.window, let view = window.contentView else { throw CocoaError(.fileWriteUnknown) }
+            controller.openRoute(route)
+            window.setContentSize(NSSize(width: 660, height: 750))
+            for name in [NSAppearance.Name.aqua, .darkAqua, .accessibilityHighContrastDarkAqua] {
+                window.appearance = NSAppearance(named: name)
+                window.orderFront(nil)
+                try await Task.sleep(for: .milliseconds(120))
+                view.layoutSubtreeIfNeeded()
+                guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+                try png.write(to: directory.appendingPathComponent("\(scenario.rawValue)-\(route)-\(name.rawValue).png"))
+            }
+            controller.close()
+        }
+    }
+
     func useCloudSettingsFixture() {
         do {
             for purpose in ModelServicePurpose.allCases {
@@ -203,7 +227,7 @@ private actor PreviewDictionary: UserDictionaryStorage {
             store.warmUp()
             try await waitFor { store.modelState == .ready && store.canStart }
             if [.setupRemote, .setupText, .setupSpeech].contains(scenario) {
-                store.advanceSetup(); store.advanceSetup()
+                store.setSetupUsage(.remote); store.advanceSetup(); store.advanceSetup()
                 store.setRemoteApplication(.init(bundleID: "preview", name: "模拟远程工具"))
                 if scenario != .setupRemote {
                     store.confirmSetupClipboardSync(true); store.advanceSetup()
@@ -298,6 +322,14 @@ private actor PreviewDictionary: UserDictionaryStorage {
         .onChange(of: scenario) { _, value in Task { await controller.show(value) } }
         .onChange(of: dark) { _, value in NSApp.appearance = NSAppearance(named: value ? .darkAqua : .aqua) }
         .task {
+            if let path = ProcessInfo.processInfo.environment["VOXINK_REVIEW_OUTPUT"] {
+                let directory = URL(fileURLWithPath: path, isDirectory: true)
+                do {
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    try await controller.captureReview(at: directory)
+                    exit(0)
+                } catch { exit(1) }
+            }
             NSApp.appearance = NSAppearance(named: .darkAqua)
             await controller.show(scenario)
         }

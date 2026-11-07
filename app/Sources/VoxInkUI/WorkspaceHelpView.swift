@@ -60,7 +60,7 @@ struct WorkspaceHelpView: View {
     @ViewBuilder private var actions: some View {
         Button(L("去工作台试试"), systemImage: "mic") { showDashboard() }
             .buttonStyle(VoxInkButtonStyle(prominent: true))
-        Button(L("首次准备"), systemImage: "checklist") { store.showSetup(); showDashboard() }
+        Button(L("重新运行首次引导"), systemImage: "checklist") { store.showSetup(); showDashboard() }
         SettingsLink { Label(L("偏好设置"), systemImage: "slider.horizontal.3") }
     }
 

@@ -290,7 +290,55 @@ import VoxInkCore
     @Published public private(set) var setupDeferred: Bool
     @Published public private(set) var setupProgress: SetupProgress
     @Published public private(set) var setupTrialCanConfirm = false
-    private var setupTrialKind: SetupStep?
+    private enum TrialKind { case text, speech }
+    private var setupTrialKind: TrialKind?
+    @Published private(set) var setupNotice: String?
+    @Published var setupHandoffVisible = false
+    private var setupDownload: Task<Void, Never>?
+    var transcriptionPreparing: Bool { modelState == .loading || modelInstallationProgress != nil }
+    var setupResumeSummary: String {
+        if let progress = modelInstallationProgress { return progress.title }
+        if setupProgress.step == .trial && transcriptionReady { return L("模型已就绪 · 试一句") }
+        return setupProgress.step.title
+    }
+    var canStartSetupDownload: Bool {
+        setupProgress.step == .preparation && canStart && microphoneAuthorization == .authorized &&
+        pastePermissionGranted && shortcutAvailable && modelServices.transcriptionID == nil &&
+        !transcriptionReady && !transcriptionPreparing
+    }
+
+    func chooseSetupUsage(_ usage: SetupUsage) {
+        setSetupUsage(usage)
+        advanceSetup()
+    }
+
+    func prepareAndAdvanceSetup() {
+        if canStartSetupDownload { startSetupDownload() }
+        advanceSetup()
+    }
+
+    private func startSetupDownload() {
+        modelState = .loading
+        recovery = nil
+        phase = .ready
+        setupDownload = Task {
+            defer { setupDownload = nil; modelInstallationProgress = nil }
+            do {
+                try await service.prepare(allowDownload: true) { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.setupDownload != nil else { return }
+                        self.modelInstallationProgress = progress
+                    }
+                }
+                try Task.checkCancellation()
+                modelState = .ready
+                if canStart { status = L("准备就绪 · 本地模型已加载") }
+            } catch {
+                modelState = .needsDownload
+                setupNotice = L("模型安装未完成，请检查网络与可用磁盘空间后继续。已保留下载进度。")
+            }
+        }
+    }
     public var isShowingSetup: Bool { !setupCompleted && !setupDeferred }
     @Published public private(set) var recovery: RecoveryAction?
     @Published public private(set) var retainedAudio: RetainedAudio?
@@ -362,27 +410,26 @@ import VoxInkCore
     }
     public var canCancel: Bool { phase == .loading || phase == .recording || phase == .transcribing || phase == .pasting }
     public var canPasteAgain: Bool { canStart && lastTarget != nil && !transcript.isEmpty }
-    public var canRetryAudio: Bool { canStart && retainedAudio.map { $0.expiresAt > Date() } == true }
+    public var canRetryAudio: Bool { setupDownload == nil && canStart && retainedAudio.map { $0.expiresAt > Date() } == true }
     public var repasteTargetName: String? { lastTarget?.name }
     public var inputReady: Bool { canRecord && pastePermissionGranted && shortcutAvailable }
     public var canCompleteSetup: Bool {
         inputReady && setupProgress.verified && (!setupProgress.usage.needsRemote || !remoteApplications.isEmpty)
     }
     public var canAdvanceSetup: Bool {
-        guard canStart, !fixedTextTestArmed else { return false }
+        guard (canStart || (setupProgress.step == .preparation && transcriptionPreparing)), !fixedTextTestArmed else { return false }
         switch setupProgress.step {
         case .usage: return true
-        case .preparation: return inputReady
+        case .preparation: return microphoneAuthorization == .authorized && pastePermissionGranted && shortcutAvailable && (transcriptionReady || transcriptionPreparing)
         case .remote: return !remoteApplications.isEmpty && setupProgress.clipboardSyncConfirmed
-        case .text: return setupProgress.textConfirmed
-        case .speech: return canCompleteSetup
+        case .trial: return canCompleteSetup
         }
     }
     public var setupBlockingHint: String? {
-        if canAdvanceSetup { return nil }
+        if canAdvanceSetup || canStartSetupDownload { return nil }
         if fixedTextTestArmed { return L("切换到目标输入框，按一次当前快捷键完成文字测试。") }
         if !canStart { return status }
-        if setupProgress.step == .preparation || setupProgress.step == .speech {
+        if setupProgress.step == .preparation || setupProgress.step == .trial {
             if microphoneAuthorization != .authorized { return L("先允许麦克风，返回语落后会自动刷新状态。") }
             if !pastePermissionGranted { return L("先允许文字写入，返回语落后会自动刷新状态。") }
             if !transcriptionReady {
@@ -393,7 +440,7 @@ import VoxInkCore
         switch setupProgress.step {
         case .remote:
             return remoteApplications.isEmpty ? L("先添加本机安装的远程工具。") : L("请先核对远程工具设置，并确认剪贴板可以同步。")
-        case .text, .speech:
+        case .trial:
             return L("完成本步测试，确认目标输入框出现正确文字后继续。")
         default: return nil
         }
@@ -604,6 +651,8 @@ import VoxInkCore
     }
 
     public func shutdown() async {
+        setupDownload?.cancel()
+        if setupDownload != nil { await service.cancel(); await setupDownload?.value }
         deviceMonitor.stop()
         isShuttingDown = true
         pressureSource?.cancel(); pressureSource = nil
@@ -669,21 +718,23 @@ import VoxInkCore
         setupProgress.clipboardSyncConfirmed = false
         setupProgress.invalidateTrials()
         clearSetupTrial()
-        if setupProgress.step == .text || setupProgress.step == .speech { setupProgress.step = .remote }
+        if setupProgress.step == .trial { setupProgress.step = .remote }
+        setupNotice = L("远程设置已更改，请重新确认")
         saveSetupProgress()
     }
 
     private func invalidateShortcutSetup() {
         if setupProgress.usage.needsRemote { invalidateRemoteSetup(); return }
-        setupProgress.invalidateTrials()
+        setupProgress.speechConfirmed = false
         clearSetupTrial()
-        if setupProgress.step == .speech { setupProgress.step = .text }
+        setupNotice = L("快捷键已更改，请再试一句。")
         saveSetupProgress()
     }
 
     public func advanceSetup() {
         guard canAdvanceSetup else { return }
-        if setupProgress.step == .speech { completeSetup(); return }
+        setupNotice = nil
+        if setupProgress.step == .trial { completeSetup(); return }
         let steps = setupProgress.steps
         guard let index = steps.firstIndex(of: setupProgress.step), steps.indices.contains(index + 1) else { return }
         clearSetupTrial()
@@ -694,14 +745,15 @@ import VoxInkCore
     public func previousSetupStep() {
         guard canStart, let index = setupProgress.steps.firstIndex(of: setupProgress.step), index > 0 else { return }
         clearSetupTrial()
+        setupNotice = nil
         setupProgress.step = setupProgress.steps[index - 1]
         saveSetupProgress()
     }
 
     public func startSetupTextTest() {
-        guard isShowingSetup, setupProgress.step == .text, canStart, pastePermissionGranted, shortcutAvailable else { return }
+        guard isShowingSetup, setupProgress.step == .trial, canStart, pastePermissionGranted, shortcutAvailable else { return }
         clearSetupTrial()
-        setupProgress.invalidateTrials()
+        setupProgress.textConfirmed = false
         saveSetupProgress()
         armFixedTextTest()
     }
@@ -720,10 +772,14 @@ import VoxInkCore
     public func confirmSetupTrial(_ appeared: Bool) {
         guard canStart, !fixedTextTestArmed else { return }
         guard !appeared || setupTrialCanConfirm else { return }
-        switch setupProgress.step {
-        case .text:
-            setupProgress.textConfirmed = appeared
+        guard setupProgress.step == .trial else { return }
+        if !appeared && setupTrialKind == nil {
             setupProgress.speechConfirmed = false
+            saveSetupProgress()
+            return
+        }
+        switch setupTrialKind {
+        case .text: setupProgress.textConfirmed = appeared
         case .speech: setupProgress.speechConfirmed = appeared
         default: return
         }
@@ -734,6 +790,7 @@ import VoxInkCore
     public func completeSetup() {
         guard canCompleteSetup else { return }
         clearSetupTrial()
+        setupHandoffVisible = true
         setupCompleted = true
         setupDeferred = false
         saveSetupProgress()
@@ -754,6 +811,8 @@ import VoxInkCore
             setupProgress.clipboardSyncConfirmed = false
             setupProgress.invalidateTrials()
         }
+        setupHandoffVisible = false
+        setupNotice = nil
         setupCompleted = false
         setupDeferred = false
         saveSetupProgress()
@@ -791,7 +850,7 @@ import VoxInkCore
     public func installModel() { prepareModel(allowDownload: true) }
 
     private func prepareModel(allowDownload: Bool) {
-        guard canStart else { return }
+        guard canStart, setupDownload == nil else { return }
         if modelServices.transcriptionID != nil {
             status = transcriptionStatus
             return
@@ -835,7 +894,7 @@ import VoxInkCore
     }
 
     private func beginRecording(target: PasteTarget?) {
-        guard canStart else { return }
+        guard canStart, setupDownload == nil else { return }
         activeTarget = target; lastTarget = nil; pasteOutcome = nil; recovery = nil
         shortcutTargetName = target?.name
         let token = UUID(); generation = token
@@ -848,6 +907,7 @@ import VoxInkCore
             guard allowed else { fail(L("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。"), recovery: .microphone); return }
             do {
                 try recorder.start()
+                setupHandoffVisible = false
                 elapsed = 0; level = 0; recordingLimitReached = false
                 refreshPolishDevice(); schedulePolishWarmup()
                 phase = .recording
@@ -929,7 +989,7 @@ import VoxInkCore
     }
 
     public func importAudio(_ url: URL) {
-        guard canStart else { return }
+        guard setupDownload == nil, canStart else { return }
         clearSetupTrial()
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil; pasteOutcome = nil; recovery = nil
         recordingLimitReached = false
@@ -1352,8 +1412,8 @@ import VoxInkCore
         if isShowingSetup {
             let isRemoteTarget = remoteApplications.contains { $0.bundleID == target.bundleID }
             if setupProgress.usage.needsRemote == isRemoteTarget {
-                if fixedTextTestArmed && setupProgress.step == .text { setupTrialKind = .text }
-                else if !fixedTextTestArmed && setupProgress.step == .speech {
+                if fixedTextTestArmed && setupProgress.step == .trial { setupTrialKind = .text }
+                else if !fixedTextTestArmed && setupProgress.step == .trial {
                     setupTrialKind = .speech
                     setupProgress.speechConfirmed = false
                     saveSetupProgress()
@@ -1403,7 +1463,7 @@ import VoxInkCore
         return L("已配置：\(connection.name)")
     }
 
-    public var canEditModelServices: Bool { canStart && !isInstallingPolishModel && !isShuttingDown }
+    public var canEditModelServices: Bool { setupDownload == nil && canStart && !isInstallingPolishModel && !isShuttingDown }
 
     func saveAndSelectModelConnection(_ connection: ModelConnection, apiKey: String?,
                                       clearKey: Bool = false, reuseKeyFrom sourceID: UUID? = nil) throws {
@@ -1609,10 +1669,9 @@ import VoxInkCore
         case .sentWithCleanupFailure: phase = .failed; recovery = .inspectClipboard
         default: phase = .ready; recovery = nil
         }
-        if outcome == .sent, isShowingSetup, setupTrialKind == setupProgress.step {
+        if outcome == .sent, isShowingSetup, setupProgress.step == .trial, setupTrialKind != nil {
             setupTrialCanConfirm = true
-        }
-        setupTrialKind = nil
+        } else { setupTrialKind = nil }
         status = outcome.message
     }
 }

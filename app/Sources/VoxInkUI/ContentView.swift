@@ -64,11 +64,19 @@ public struct ContentView: View {
                                 Text(notice).foregroundStyle(theme.caution)
                                     .onDisappear { store.deviceNotice = nil }
                             }
+                            if store.setupHandoffVisible {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(L("好了，以后这样用")).font(.headline)
+                                    if store.setupProgress.usage.needsRemote {
+                                        Text(L("换远程工具后，可在“使用方法”中重新检查。"))
+                                    }
+                                    Button(L("开始使用")) { store.setupHandoffVisible = false }
+                                }.padding(16).writingSurface()
+                            }
                             statusHero
                         }
-                        if store.isShowingSetup && store.setupProgress.step == .speech { recordingControls.padding(22).writingSurface().id("activity") }
                         retainedRecording
-                        if !store.isShowingSetup || store.setupProgress.step == .speech || !store.transcript.isEmpty {
+                        if !store.isShowingSetup {
                             result.padding(22).writingSurface().id("result")
                         }
                         if !store.isShowingSetup { recentHistory }
@@ -126,7 +134,7 @@ public struct ContentView: View {
     /// Setup progress (until finished), help and version — kept small and out of the main navigation.
     private var sidebarFooter: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !store.setupCompleted { setupCard }
+            if !store.setupCompleted && !(page == .input && store.isShowingSetup) { setupCard }
             HStack(spacing: 8) {
                 Button { page = .help } label: {
                     Label(L("使用方法"), systemImage: "questionmark.circle")
@@ -156,7 +164,7 @@ public struct ContentView: View {
                 }
                 ProgressView(value: Double(index - 1), total: Double(max(steps.count, 1)))
                     .progressViewStyle(.linear).tint(theme.accent)
-                Text(store.setupProgress.step.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.setupResumeSummary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)

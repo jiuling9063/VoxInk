@@ -68,6 +68,8 @@ import SwiftUI
         if let route = coder.decodeObject(of: NSString.self, forKey: "page") as String? { navigation.open(route) }
     }
 
+    public func openRoute(_ route: String) { navigation.open(route) }
+
     public func present() {
         window?.deminiaturize(nil)
         showWindow(nil)

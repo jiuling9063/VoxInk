@@ -16,31 +16,35 @@ public enum SetupUsage: String, Codable, CaseIterable, Sendable {
 }
 
 public enum SetupStep: String, Codable, Sendable {
-    case usage, preparation, remote, text, speech
+    case usage, preparation, remote, trial
+
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = ["text", "speech"].contains(value) ? .trial : Self(rawValue: value) ?? .usage
+    }
 
     public var title: String {
         switch self {
         case .usage: L("选择使用场景")
         case .preparation: L("基础准备")
         case .remote: L("连接远程工具")
-        case .text: L("测试文字写入")
-        case .speech: L("试说第一句话")
+        case .trial: L("试一句")
         }
     }
 }
 
 public struct SetupProgress: Codable, Equatable, Sendable {
-    public internal(set) var usage: SetupUsage = .remote
+    public internal(set) var usage: SetupUsage = .local
     public internal(set) var step: SetupStep = .usage
     public internal(set) var clipboardSyncConfirmed = false
     public internal(set) var textConfirmed = false
     public internal(set) var speechConfirmed = false
 
     public var steps: [SetupStep] {
-        usage.needsRemote ? [.usage, .preparation, .remote, .text, .speech] : [.usage, .preparation, .text, .speech]
+        usage.needsRemote ? [.usage, .preparation, .remote, .trial] : [.usage, .preparation, .trial]
     }
     public var verified: Bool {
-        textConfirmed && speechConfirmed && (!usage.needsRemote || clipboardSyncConfirmed)
+        speechConfirmed && (!usage.needsRemote || clipboardSyncConfirmed)
     }
 
     mutating func invalidateTrials() {
