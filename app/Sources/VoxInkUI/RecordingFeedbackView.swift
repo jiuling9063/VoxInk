@@ -59,6 +59,8 @@ public struct RecordingFeedbackPresentation {
         return max(1, 60 - safeElapsed)
     }
     /// One short line under "未写入" saying why, instead of a generic "see details".
+    var failureTitle: String { recovery == .inspectClipboard ? L("已发送粘贴") : L("未写入") }
+
     var failureReason: String {
         switch recovery {
         case .checkTarget: L("目标已切换")
@@ -128,7 +130,7 @@ public struct RecordingFeedbackView: View {
                 }
             } else if presentation.phase == .failed {
                 VStack(spacing: 5) {
-                    Label(L("未写入"), systemImage: presentation.symbol)
+                    Label(presentation.failureTitle, systemImage: presentation.symbol)
                         .font(.caption.weight(.semibold)).foregroundStyle(Self.caution)
                     Text(presentation.failureReason)
                         .font(.system(size: 11)).foregroundStyle(Color.white)

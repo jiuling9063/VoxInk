@@ -1,0 +1,19 @@
+name: VoxInk checks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      VOXINK_UI_LANGUAGE: zh-Hans
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Swift package
+        run: swift test --package-path app --no-parallel
+      - name: Check translations
+        run: python3 script/check_localizations.py

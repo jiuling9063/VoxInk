@@ -42,6 +42,9 @@ import Testing
 
     @Test func failureNamesTheReasonInOneLine() {
         let switched = RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .checkTarget)
+        #expect(switched.failureTitle == "未写入")
+        #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .inspectClipboard).failureTitle == "已发送粘贴")
+        #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .deviceDisconnected).failureReason == "录音设备已断开")
         #expect(switched.failureReason == "目标已切换")
         #expect(switched.hint == "目标已切换")
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "").failureReason == "打开语落查看详情")

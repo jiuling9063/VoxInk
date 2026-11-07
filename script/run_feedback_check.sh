@@ -12,7 +12,10 @@ esac
 CHECK_BIN="$(/usr/bin/swift build --package-path "$ROOT/app" --scratch-path "$APP_BUILD" --show-bin-path)"
 CHECK_ROOT="$(mktemp -d /tmp/voxink-feedback-check.XXXXXX)"
 CHECK_BUNDLE="$CHECK_ROOT/VoxInkFeedbackCheck.app"
-mkdir -p "$CHECK_BUNDLE/Contents/MacOS"
+mkdir -p "$CHECK_BUNDLE/Contents/MacOS" "$CHECK_BUNDLE/Contents/Resources"
+for resource in "$CHECK_BIN"/VoxInkAppCore_VoxInk{Core,UI}.bundle; do
+  /usr/bin/ditto --norsrc --noextattr "$resource" "$CHECK_BUNDLE/Contents/Resources/$(basename "$resource")"
+done
 /usr/bin/ditto --norsrc --noextattr "$CHECK_BIN/voxink-feedback-check" "$CHECK_BUNDLE/Contents/MacOS/voxink-feedback-check"
 cat > "$CHECK_BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
