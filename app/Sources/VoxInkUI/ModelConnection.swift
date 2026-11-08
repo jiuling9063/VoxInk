@@ -9,16 +9,26 @@ public enum ModelServicePurpose: String, Codable, CaseIterable, Sendable {
     var endpoint: String { self == .transcription ? "audio/transcriptions" : "chat/completions" }
 }
 
+public enum PolishingProtocol: String, Codable, Sendable {
+    case openai, volcengine
+}
+
 public struct ModelConnection: Identifiable, Codable, Equatable, Sendable {
     public var id = UUID()
     public var name = ""
     public var purpose: ModelServicePurpose = .polishing
+    // Connections saved before Responses support use the original chat endpoint.
+    public var polishingProtocol: PolishingProtocol?
     public var baseURL = ""
     public var model = ""
     public var timeoutSeconds: Double = 30
     public var extraBodyJSON = "{}"
 
     public init() {}
+
+    var endpoint: String {
+        purpose == .polishing && polishingProtocol == .volcengine ? "responses" : purpose.endpoint
+    }
 
     func endpointURL() throws -> URL {
         guard let components = URLComponents(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -29,8 +39,8 @@ public struct ModelConnection: Identifiable, Codable, Equatable, Sendable {
               let url = components.url else { throw CloudServiceError.invalidURL }
         // Accept a base URL including its API version, or the complete endpoint.
         let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        if path == purpose.endpoint || path.hasSuffix("/" + purpose.endpoint) { return url }
-        return url.appendingPathComponent(purpose.endpoint)
+        if path == endpoint || path.hasSuffix("/" + endpoint) { return url }
+        return url.appendingPathComponent(endpoint)
     }
 
     static func allowsHTTP(_ host: String) -> Bool {

@@ -31,15 +31,36 @@ struct ModelProviderPresetTests {
     }
 
     @Test(arguments: ModelProviderPreset.allCases.filter { $0 != .custom })
-    func presetsUseValidHTTPSChatEndpoints(provider: ModelProviderPreset) throws {
+    func presetsUseValidHTTPSPolishingEndpoints(provider: ModelProviderPreset) throws {
         var connection = provider.makeConnection(for: .polishing)
         if connection.model.isEmpty { connection.model = "account-selected-model" }
         try connection.validate()
         let endpoint = try connection.endpointURL()
         #expect(endpoint.scheme == "https")
-        #expect(endpoint.path.hasSuffix("/chat/completions"))
+        #expect(endpoint.path.hasSuffix(provider == .volcengine ? "/responses" : "/chat/completions"))
         #expect(provider.consoleURL?.scheme == "https")
         #expect(provider.documentationURL?.scheme == "https")
+    }
+
+    @Test func volcengineEditorUsesResponsesAndKeepsLegacyChatConnections() throws {
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "endpoint-id"
+        let encoded = try JSONEncoder().encode(ark)
+        #expect(try JSONDecoder().decode(ModelConnection.self, from: encoded) == ark)
+        var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy.removeValue(forKey: "polishingProtocol")
+        let saved = try JSONDecoder().decode(ModelConnection.self, from: JSONSerialization.data(withJSONObject: legacy))
+        var draft = ModelConnectionDraft(connection: saved, isExisting: true)
+        #expect(draft.provider == .volcengine)
+        #expect(try saved.endpointURL().path == "/api/v3/chat/completions")
+        draft.selectProvider(.openAI)
+        draft.selectProvider(.volcengine)
+        #expect(try draft.connection.endpointURL().path == "/api/v3/responses")
+        draft.connection.baseURL = try draft.connection.endpointURL().absoluteString
+        #expect(try draft.connection.endpointURL().path == "/api/v3/responses")
+        #expect(try ModelCatalog.url(for: draft.connection).absoluteString == "https://ark.cn-beijing.volces.com/api/v3/models")
+        draft.selectProvider(.openAI)
+        #expect(try draft.connection.endpointURL().path == "/v1/chat/completions")
     }
 
     @Test(arguments: [ModelProviderPreset.siliconFlow, .openAI, .groq])

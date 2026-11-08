@@ -123,14 +123,30 @@ struct CloudModelClient: Sendable {
         guard connection.purpose == .polishing else { throw CloudServiceError.invalidConfiguration }
         guard text.count <= 2000 else { throw LocalPolishingService.Failure.tooLong }
         let source = try JSONEncoder().encode(["source": text])
-        let prompt = style.prompt(language: language)
+        let messages = [["role": "system", "content": style.prompt(language: language)],
+                        ["role": "user", "content": String(decoding: source, as: UTF8.self)]]
         var body = try connection.extraBody()
         body["model"] = connection.model
         body["stream"] = false
-        body["messages"] = [["role": "system", "content": prompt],
-                            ["role": "user", "content": String(decoding: source, as: UTF8.self)]]
+        let usesResponses = connection.polishingProtocol == .volcengine
+        if usesResponses {
+            body["input"] = messages
+            body["store"] = body["store"] ?? false
+        } else {
+            body["messages"] = messages
+        }
         let started = ContinuousClock.now
         let data = try await send(request(contentType: "application/json", body: JSONSerialization.data(withJSONObject: body)))
+        let (output, truncated) = try usesResponses ? decodeVolcengine(data) : decodeChat(data)
+        let candidate = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let accepted = PolishTextSafety.accepts(source: text, output: candidate, language: language, style: style)
+        let duration = started.duration(to: .now).components
+        return .init(accepted: accepted, reason: truncated ? "length" : (accepted ? "checks_passed" : "protected_content_changed"),
+                     text: accepted ? candidate : text,
+                     generationSeconds: Double(duration.seconds) + Double(duration.attoseconds) / 1e18)
+    }
+
+    private func decodeChat(_ data: Data) throws -> (text: String, truncated: Bool) {
         struct Response: Decodable {
             struct Choice: Decodable {
                 struct Message: Decodable { let content: String? }
@@ -142,12 +158,38 @@ struct CloudModelClient: Sendable {
         guard let response = try? JSONDecoder().decode(Response.self, from: data),
               let choice = response.choices.first, ["stop", "length"].contains(choice.finish_reason ?? ""),
               let output = choice.message.content else { throw CloudServiceError.invalidResponse }
-        let candidate = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        let accepted = PolishTextSafety.accepts(source: text, output: candidate, language: language, style: style)
-        let duration = started.duration(to: .now).components
-        return .init(accepted: accepted, reason: choice.finish_reason == "length" ? "length" : (accepted ? "checks_passed" : "protected_content_changed"),
-                     text: accepted ? candidate : text,
-                     generationSeconds: Double(duration.seconds) + Double(duration.attoseconds) / 1e18)
+        return (output, choice.finish_reason == "length")
+    }
+
+    private func decodeVolcengine(_ data: Data) throws -> (text: String, truncated: Bool) {
+        struct Response: Decodable {
+            struct Output: Decodable {
+                struct Content: Decodable {
+                    let type: String
+                    let text: String?
+                }
+                let type: String
+                let role: String?
+                let phase: String?
+                let content: [Content]?
+            }
+            struct IncompleteDetails: Decodable { let reason: String }
+            let status: String
+            let incomplete_details: IncompleteDetails?
+            let output: [Output]
+        }
+        guard let response = try? JSONDecoder().decode(Response.self, from: data) else {
+            throw CloudServiceError.invalidResponse
+        }
+        let truncated = response.status == "incomplete" && response.incomplete_details?.reason == "max_output_tokens"
+        guard response.status == "completed" || truncated else { throw CloudServiceError.invalidResponse }
+        let contents = response.output
+            .filter { $0.type == "message" && $0.role == "assistant" && $0.phase != "commentary" }
+            .flatMap { $0.content ?? [] }
+        guard !contents.isEmpty, contents.allSatisfy({ $0.type == "output_text" && $0.text != nil }) else {
+            throw CloudServiceError.invalidResponse
+        }
+        return (contents.compactMap(\.text).joined(), truncated)
     }
 }
 

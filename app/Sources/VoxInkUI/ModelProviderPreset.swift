@@ -132,13 +132,17 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
         connection.baseURL = baseURL
         connection.model = model(for: purpose)
         connection.extraBodyJSON = parameters(for: purpose)
+        if self == .volcengine { connection.polishingProtocol = .volcengine }
         return connection
     }
 
     static func matching(_ connection: ModelConnection) -> Self {
         guard let endpoint = try? connection.endpointURL() else { return .custom }
-        return available(for: connection.purpose).first {
-            $0 != .custom && (try? $0.makeConnection(for: connection.purpose).endpointURL()) == endpoint
+        return available(for: connection.purpose).first { provider in
+            guard provider != .custom else { return false }
+            var preset = provider.makeConnection(for: connection.purpose)
+            if provider == .volcengine { preset.polishingProtocol = connection.polishingProtocol }
+            return (try? preset.endpointURL()) == endpoint
         } ?? .custom
     }
 }
@@ -172,8 +176,9 @@ struct ModelConnectionDraft {
         guard provider != self.provider, provider.supports(connection.purpose) else { return }
         let previous = self.provider
         self.provider = provider
-        guard provider != .custom else { return }
         let preset = provider.makeConnection(for: connection.purpose)
+        connection.polishingProtocol = preset.polishingProtocol
+        guard provider != .custom else { return }
         if connection.name.isEmpty || connection.name == previous.makeConnection(for: connection.purpose).name {
             connection.name = preset.name
         }
@@ -194,8 +199,9 @@ struct ModelConnectionDraft {
             connection.baseURL = ""
             if connection.name == previousName { connection.name = "" }
         }
+        let preset = provider.makeConnection(for: purpose)
+        connection.polishingProtocol = preset.polishingProtocol
         if provider != .custom {
-            let preset = provider.makeConnection(for: purpose)
             connection.baseURL = preset.baseURL
             connection.model = preset.model
             connection.extraBodyJSON = preset.extraBodyJSON

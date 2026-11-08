@@ -22,7 +22,7 @@ enum ModelCatalog {
 
     static func url(for connection: ModelConnection) throws -> URL {
         var base = try connection.endpointURL()
-        for _ in connection.purpose.endpoint.split(separator: "/") { base.deleteLastPathComponent() }
+        for _ in connection.endpoint.split(separator: "/") { base.deleteLastPathComponent() }
         guard var components = URLComponents(url: base.appendingPathComponent("models"), resolvingAgainstBaseURL: false) else {
             throw CloudServiceError.invalidURL
         }

@@ -20,10 +20,13 @@ private actor MockModelTransport: ModelHTTPTransport {
     let finish: String
     let delay: Duration
     let malformed: Bool
+    let responseJSON: String?
     private(set) var cancelled = false
 
-    init(status: Int = 200, text: String = "明天开会。", finish: String = "stop", delay: Duration = .zero, malformed: Bool = false) {
+    init(status: Int = 200, text: String = "明天开会。", finish: String = "stop", delay: Duration = .zero, malformed: Bool = false,
+         responseJSON: String? = nil) {
         self.status = status; self.text = text; self.finish = finish; self.delay = delay; self.malformed = malformed
+        self.responseJSON = responseJSON
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -33,7 +36,13 @@ private actor MockModelTransport: ModelHTTPTransport {
         let body: [String: Any] = request.url?.path.hasSuffix("audio/transcriptions") == true
             ? ["text": text]
             : ["choices": [["finish_reason": finish, "message": ["content": text]]]]
-        return (malformed ? Data("not-json".utf8) : try JSONSerialization.data(withJSONObject: body),
+        let data: Data
+        if let responseJSON {
+            data = Data(responseJSON.utf8)
+        } else {
+            data = malformed ? Data("not-json".utf8) : try JSONSerialization.data(withJSONObject: body)
+        }
+        return (data,
                 HTTPURLResponse(url: try #require(request.url), statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!)
     }
 }
@@ -114,6 +123,46 @@ struct CloudModelClientTests {
     func rejectsOverrides(parameters: String) {
         var config = connection(); config.extraBodyJSON = parameters
         #expect(throws: CloudServiceError.invalidParameters) { try config.validate() }
+    }
+
+    @Test(arguments: ["completed", "incomplete"])
+    func volcengineReadsOnlyAssistantOutputText(status: String) async throws {
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "endpoint-id"
+        let details = status == "incomplete" ? #"{"reason":"max_output_tokens"}"# : "null"
+        let transport = MockModelTransport(responseJSON: """
+            {"status":"\(status)","incomplete_details":\(details),"output":[
+                {"type":"reasoning","summary":[{"text":"内部推理"}]},
+                {"type":"message","role":"assistant","content":[
+                    {"type":"output_text","text":"明天"},{"type":"output_text","text":"开会。"}]}]}
+            """)
+        let result = try await CloudModelClient(connection: ark, apiKey: nil, transport: transport).polish("明天开会", language: .mandarin)
+        #expect(result.accepted)
+        #expect(result.text == "明天开会。")
+        #expect(result.reason == (status == "incomplete" ? "length" : "checks_passed"))
+        let request = try #require(await transport.requests.first)
+        #expect(request.url?.path == "/api/v3/responses")
+        let data = try #require(request.httpBody)
+        let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(body["model"] as? String == "endpoint-id")
+        #expect(body["store"] as? Bool == false)
+        #expect(body["stream"] as? Bool == false)
+        let input = try #require(body["input"] as? [[String: String]])
+        #expect(input.map { $0["role"] } == ["system", "user"])
+        let source = try #require(input.last?["content"])
+        #expect(try JSONDecoder().decode([String: String].self, from: Data(source.utf8)) == ["source": "明天开会"])
+    }
+
+    @Test(arguments: [
+        #"{"status":"completed","output":[{"type":"reasoning","summary":[]}]}"#,
+        #"{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}"#,
+        #"{"status":"failed","output":[]}"#
+    ])
+    func volcengineRejectsResponsesWithoutUsableText(json: String) async {
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "endpoint-id"
+        let client = CloudModelClient(connection: ark, apiKey: nil, transport: MockModelTransport(responseJSON: json))
+        await #expect(throws: CloudServiceError.invalidResponse) { try await client.polish("明天开会", language: .mandarin) }
     }
 
     @Test func transcriptionMultipartContainsAudioModelAndLanguageWithoutLocalPath() async throws {
