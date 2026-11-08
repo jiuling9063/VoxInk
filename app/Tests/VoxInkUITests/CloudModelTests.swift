@@ -451,7 +451,8 @@ struct CloudModelClientTests {
         let url = try signalFixture()
         defer { try? FileManager.default.removeItem(at: url) }
         let transport = MockModelTransport(text: "明天开会"), local = LocalFixtureTranscriber(), polisher = LocalFixturePolisher()
-        let store = AppStore(polishingService: polisher, polishInventory: { [.balanced] }, service: local,
+        let store = AppStore(polishingService: polisher, polishDeviceProvider: { .init(memoryGB: 16) },
+                             polishInventory: { [.balanced] }, service: local,
                              preferences: nil, modelCredentials: MemoryModelCredentials(), modelTransport: transport,
                              cloudSpeechDetector: { _ in true }, audioCleaner: { _ in })
         let config = connection(.transcription)
