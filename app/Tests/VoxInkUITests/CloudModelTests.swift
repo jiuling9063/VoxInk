@@ -184,6 +184,44 @@ struct CloudModelClientTests {
         #expect(!prefix.contains(url.path))
     }
 
+    @Test(arguments: [ArkModelAccessError.notActivated, .notFound, .endpointRequired])
+    func arkModelAccessFailuresOnlyExposeKnownCodes(code: ArkModelAccessError) async {
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "fixture"
+        let transport = MockModelTransport(status: 404, responseJSON: """
+        {"error":{"code":"\(code.rawValue)","message":"private-provider-body"}}
+        """)
+        let error = CloudServiceError.arkModelAccess(404, code)
+        await #expect(throws: error) { try await CloudModelClient(connection: ark, apiKey: nil, transport: transport).polish("测试", language: .mandarin) }
+        #expect(error.localizedDescription.contains(code.rawValue))
+        #expect(!error.localizedDescription.contains("private-provider-body"))
+        let foreign = CloudModelClient(connection: connection(), apiKey: nil, transport: transport)
+        await #expect(throws: CloudServiceError.http(404)) { try await foreign.polish("测试", language: .mandarin) }
+    }
+
+    @Test func arkDictationSkipsThinkingOnlyForTheVerifiedModelAndRespectsExplicitParameters() async throws {
+        let model = "doubao-seed-2-1-lite-260915"
+        for (id, parameters, expected) in [
+            (model, "{}", "disabled"), (model, #"{"thinking":{"type":"enabled"}}"#, "enabled"),
+            (model, #"{"reasoning":{"effort":"high"}}"#, nil), ("ep-opaque", "{}", nil)
+        ] {
+            var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+            ark.model = id; ark.extraBodyJSON = parameters
+            let transport = MockModelTransport(responseJSON: #"{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"明天开会。"}]}]}"#)
+            _ = try await CloudModelClient(connection: ark, apiKey: nil, transport: transport).polish("明天开会", language: .mandarin)
+            let data = try #require(await transport.requests.first?.httpBody)
+            let body = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect((body["thinking"] as? [String: String])?["type"] == expected)
+        }
+    }
+
+    @Test func unknownArkErrorIsNotEchoed() async {
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "fixture"
+        let client = CloudModelClient(connection: ark, apiKey: nil, transport: MockModelTransport(status: 404, responseJSON: #"{"error":{"code":"private-provider-body"}}"#))
+        await #expect(throws: CloudServiceError.http(404)) { try await client.polish("测试", language: .mandarin) }
+    }
+
     @Test func automaticLanguageDoesNotForceChinese() async throws {
         let url = try signalFixture()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -331,6 +369,23 @@ struct CloudModelClientTests {
         store.setPolishStyle(.original)
         #expect(store.polishStyle == .natural)
         store.finishShortcutRecording()
+    }
+
+    @Test func togglingPolishingRestoresSelectedProviderModelAndStyle() throws {
+        let store = AppStore(preferences: nil, modelCredentials: MemoryModelCredentials())
+        var ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        ark.model = "saved-endpoint"
+        try store.saveAndSelectModelConnection(ark, apiKey: "fixture-key")
+        store.setPolishStyle(.natural)
+        let services = store.modelServices
+
+        store.setPolishingEnabled(false)
+        #expect(!store.polishingEnabled)
+        store.setPolishingEnabled(true)
+        #expect(store.polishingEnabled)
+        #expect(store.modelServices == services)
+        #expect(store.modelServices.polishingID == ark.id)
+        #expect(store.polishStyle == .natural)
     }
 
     @Test func saveAndUseReusesProviderKeyWithoutChangingOtherPurpose() throws {

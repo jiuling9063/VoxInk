@@ -61,35 +61,36 @@ enum ModelCatalog {
     static func suitability(_ item: [String: Any], id: String, purpose: ModelServicePurpose,
                             serverFiltered: Bool) -> Suitability {
         if item["active"] as? Bool == false { return .unrelated }
-        let capabilities = Set(((item["capabilities"] as? [String] ?? [])
+        let nonTextDomains: Set<String> = ["3dgeneration", "imagegeneration", "videogeneration", "embedding"]
+        if let domain = item["domain"] as? String, nonTextDomains.contains(domain.lowercased()) { return .unrelated }
+        let capabilities = Set(((item["capabilities"] as? [String] ?? []) + (item["task_type"] as? [String] ?? [])
             + [item["sub_type"] as? String, item["type"] as? String].compactMap { $0 }).map { $0.lowercased() })
         let speech: Set<String> = ["speech-to-text", "asr", "transcription"]
         let chat: Set<String> = ["chat", "text-generation", "textgeneration", "tg"]
-        let other: Set<String> = ["embedding", "embeddings", "rerank", "reranker", "text-to-speech", "tts",
+        let other: Set<String> = ["embedding", "embeddings", "rerank", "reranker", "text-to-speech", "tts", "textto3d", "imageto3d",
                                  "text-to-image", "image-to-image", "text-to-video", "image-to-video", "ig", "vg", "me"]
         let requested = purpose == .transcription ? speech : chat
-        if !capabilities.isDisjoint(with: requested) { return .suitable }
-        if !capabilities.isDisjoint(with: speech.union(chat).union(other)) { return .unrelated }
-
         let architecture = item["architecture"] as? [String: Any] ?? [:]
         let inference = item["inference_metadata"] as? [String: Any] ?? [:]
-        let inputs = (item["input_modalities"] as? [String] ?? architecture["input_modalities"] as? [String]
+        let modalities = item["modalities"] as? [String: Any] ?? [:]
+        let inputs = (item["input_modalities"] as? [String] ?? modalities["input_modalities"] as? [String] ?? architecture["input_modalities"] as? [String]
             ?? inference["request_modality"] as? [String])?.map { $0.lowercased() }
-        let outputs = (item["output_modalities"] as? [String] ?? architecture["output_modalities"] as? [String]
+        let outputs = (item["output_modalities"] as? [String] ?? modalities["output_modalities"] as? [String] ?? architecture["output_modalities"] as? [String]
             ?? inference["response_modality"] as? [String])?.map { $0.lowercased() }
         if let outputs, !outputs.isEmpty, !outputs.contains("text") { return .unrelated }
+        let requiredInput = purpose == .polishing ? "text" : "audio"
+        if let inputs, !inputs.isEmpty, !inputs.contains(requiredInput) { return .unrelated }
+        if !capabilities.isDisjoint(with: requested) { return .suitable }
+        if !capabilities.isDisjoint(with: speech.union(chat).union(other)) { return .unrelated }
         if purpose == .polishing, let inputs, let outputs {
             return inputs.contains("text") && outputs.contains("text") ? .suitable : .unrelated
-        }
-        if purpose == .transcription, let inputs, !inputs.isEmpty, !inputs.contains("audio") {
-            return .unrelated
         }
         // Audio input alone does not prove compatibility with audio/transcriptions.
         if serverFiltered { return .suitable }
 
         // ID hints only remove well-known specialized families; opaque IDs remain selectable.
         let name = id.lowercased()
-        let irrelevant = #"(^|[/_-])(embedding|embeddings|rerank|reranker|tts|moderation|safeguard|prompt-guard)([/_.-]|$)|(^|/)(dall-e|gpt-image|imagen-|veo-|sora-|seedream-|seedance-|flux[.-]|bge-)"#
+        let irrelevant = #"(^|[/_-])(embedding|embeddings|rerank|reranker|tts|moderation|safeguard|prompt-guard|seed3d|seedream|seedance|hyper3d|hitem3d)([/_.-]|$)|(^|/)(dall-e|gpt-image|imagen-|veo-|sora-|flux[.-]|bge-)"#
         if name.range(of: irrelevant, options: .regularExpression) != nil { return .unrelated }
         let transcription = #"(^|[/_-])(whisper|asr|transcribe|sensevoice)([/_.-]|$)|sensevoicesmall"#
         if name.range(of: transcription, options: .regularExpression) != nil {

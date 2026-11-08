@@ -65,6 +65,18 @@ struct CloudModelClient: Sendable {
                 group.addTask {
                     let (data, response) = try await transport.send(request)
                     try Task.checkCancellation()
+                    if [403, 404].contains(response.statusCode), request.httpMethod == "POST",
+                       ModelProviderPreset.matching(connection) == .volcengine,
+                       data.count <= ModelURLSessionTransport.responseLimit {
+                        struct Failure: Decodable {
+                            struct Detail: Decodable { let code: ArkModelAccessError }
+                            let error: Detail
+                        }
+                        // Only decode documented codes. Provider messages can contain user data.
+                        if let failure = try? JSONDecoder().decode(Failure.self, from: data) {
+                            throw CloudServiceError.arkModelAccess(response.statusCode, failure.error.code)
+                        }
+                    }
                     switch response.statusCode {
                     case 200..<300: break
                     case 401, 403: throw CloudServiceError.authentication
@@ -132,6 +144,11 @@ struct CloudModelClient: Sendable {
         if usesResponses {
             body["input"] = messages
             body["store"] = body["store"] ?? false
+            // This model reasons by default. Dictation needs its direct edit, unless the user opted in.
+            if connection.model == "doubao-seed-2-1-lite-260915", ModelProviderPreset.matching(connection) == .volcengine,
+               body["thinking"] == nil, body["reasoning"] == nil {
+                body["thinking"] = ["type": "disabled"]
+            }
         } else {
             body["messages"] = messages
         }

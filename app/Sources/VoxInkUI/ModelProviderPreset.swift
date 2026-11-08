@@ -93,24 +93,34 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
     }
 
     func model(for purpose: ModelServicePurpose) -> String {
+        defaultModel(for: purpose)?.id ?? ""
+    }
+
+    func modelTitle(for id: String, purpose: ModelServicePurpose) -> String? {
+        guard let model = defaultModel(for: purpose), model.id == id else { return nil }
+        return model.title
+    }
+
+    private func defaultModel(for purpose: ModelServicePurpose) -> (id: String, title: String)? {
         if purpose == .transcription {
             switch self {
-            case .siliconFlow: return "Qwen/Qwen3-ASR-1.7B"
-            case .openAI: return "gpt-4o-mini-transcribe"
-            case .groq: return "whisper-large-v3-turbo"
-            default: return ""
+            case .siliconFlow: return ("Qwen/Qwen3-ASR-1.7B", "Qwen3 ASR 1.7B")
+            case .openAI: return ("gpt-4o-mini-transcribe", "GPT-4o mini Transcribe")
+            case .groq: return ("whisper-large-v3-turbo", "Whisper Large v3 Turbo")
+            default: return nil
             }
         }
         switch self {
-        case .siliconFlow: return "Qwen/Qwen3.5-122B-A10B"
-        case .openAI: return "gpt-4.1-mini"
-        case .deepSeek: return "deepseek-flash"
-        case .dashScope: return "qwen-plus"
-        case .zhipu: return "glm-5.3"
-        case .kimi: return "kimi-k3"
-        case .gemini: return "gemini-3.8-flash"
+        case .siliconFlow: return ("Qwen/Qwen3.5-122B-A10B", "Qwen3.5 122B-A10B")
+        case .openAI: return ("gpt-4.1-mini", "GPT-4.1 mini")
+        case .deepSeek: return ("deepseek-flash", "DeepSeek Flash")
+        case .dashScope: return ("qwen-plus", "Qwen Plus")
+        case .zhipu: return ("glm-5.3", "GLM-5.3")
+        case .kimi: return ("kimi-k3", "Kimi K3")
+        case .gemini: return ("gemini-3.8-flash", "Gemini 3.8 Flash")
+        case .volcengine: return ("doubao-seed-2-1-lite-260915", L("豆包 Seed 2.1 Lite"))
         // These catalogs or deployments vary by account; let the user choose a model.
-        case .volcengine, .groq, .openRouter, .custom: return ""
+        case .groq, .openRouter, .custom: return nil
         }
     }
 
@@ -156,6 +166,29 @@ extension ModelConnection {
 }
 
 extension ModelServiceSettings {
+    struct ProviderOption: Identifiable {
+        let provider: ModelProviderPreset
+        let connection: ModelConnection?
+        let title: String
+        var id: String { connection?.id.uuidString ?? provider.rawValue }
+    }
+
+    func providerOptions(for purpose: ModelServicePurpose) -> [ProviderOption] {
+        let saved = Dictionary(grouping: connections.filter { $0.purpose == purpose },
+                               by: ModelProviderPreset.matching)
+        return ModelProviderPreset.available(for: purpose).flatMap { provider in
+            let accounts = saved[provider] ?? []
+            var options = accounts.map { connection in
+                ProviderOption(provider: provider, connection: connection,
+                               title: provider == .custom || accounts.count > 1 ? connection.name : provider.title)
+            }
+            if accounts.isEmpty || provider == .custom {
+                options.append(ProviderOption(provider: provider, connection: nil, title: provider == .custom ? provider.title + "…" : provider.title))
+            }
+            return options
+        }
+    }
+
     func credentialSource(for connection: ModelConnection) -> ModelConnection? {
         let provider = ModelProviderPreset.matching(connection)
         guard provider != .custom else { return nil }

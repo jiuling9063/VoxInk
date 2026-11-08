@@ -3,6 +3,40 @@ import Testing
 @testable import VoxInkUI
 
 struct ModelProviderPresetTests {
+    @Test func providerOptionsAreReadyBeforeSetupAndReuseSavedAccountsByPurpose() {
+        var settings = ModelServiceSettings()
+        #expect(settings.providerOptions(for: .polishing).map(\.provider) == ModelProviderPreset.available(for: .polishing))
+        let ark = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        var first = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
+        first.name = "Work"
+        var second = first
+        second.id = UUID()
+        second.name = "Personal"
+        var custom = ModelConnection()
+        custom.name = "Private server"
+        custom.baseURL = "https://models.example/v1"
+        settings.connections = [first, second, ark, custom]
+        let polish = settings.providerOptions(for: .polishing)
+        let speech = settings.providerOptions(for: .transcription)
+        #expect(polish.filter { $0.provider == .volcengine }.map(\.connection) == [ark])
+        #expect(polish.first { $0.provider == .volcengine }?.title == ModelProviderPreset.volcengine.title)
+        #expect(polish.filter { $0.provider == .custom }.map(\.connection) == [custom, nil])
+        #expect(speech.filter { $0.provider == .siliconFlow }.map(\.title) == ["Work", "Personal"])
+        #expect(speech.filter { $0.provider == .siliconFlow }.map(\.connection) == [first, second])
+        #expect(!speech.contains { $0.provider == .volcengine })
+        #expect(ark.model == "doubao-seed-2-1-lite-260915")
+    }
+
+    @Test func modelDisplayNamesRequireAnExactPresetMatch() {
+        let ark = ModelProviderPreset.volcengine
+        let id = ark.model(for: .polishing)
+        #expect(ark.modelTitle(for: id, purpose: .polishing) != nil)
+        #expect(ark.modelTitle(for: id, purpose: .transcription) == nil)
+        #expect(ark.modelTitle(for: id + "-other", purpose: .polishing) == nil)
+        #expect(ark.modelTitle(for: "ep-personal", purpose: .polishing) == nil)
+        #expect(ModelProviderPreset.custom.modelTitle(for: id, purpose: .polishing) == nil)
+    }
+
     @Test func siliconFlowDefaultsUseVerifiedQwenModels() throws {
         let speech = ModelProviderPreset.siliconFlow.makeConnection(for: .transcription)
         let polish = ModelProviderPreset.siliconFlow.makeConnection(for: .polishing)

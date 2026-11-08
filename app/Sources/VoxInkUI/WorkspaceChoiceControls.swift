@@ -31,9 +31,30 @@ struct WorkspaceMenu<Options: View>: View {
     }
 }
 
+/// Shared label for the two adjacent service and model selectors.
+struct ServiceChoiceLabel: View {
+    let value: String
+    var modelID = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(value)
+                .font(modelID ? .system(size: 12.5, design: .monospaced) : .body.weight(.medium))
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary).accessibilityHidden(true)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 36)
+        .contentShape(Rectangle())
+    }
+}
+
 /// Choices keep a faint resting fill and a half-visible chevron so they read as clickable
 /// without hovering; hover and focus strengthen the same surface instead of revealing it.
-private struct WorkspaceChoiceSurface: ViewModifier {
+struct WorkspaceChoiceSurface: ViewModifier {
     let hovering: Bool
     let focused: Bool
     let enabled: Bool
@@ -53,67 +74,5 @@ private struct WorkspaceChoiceSurface: ViewModifier {
                     .strokeBorder(stroke, lineWidth: 1)
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
-    }
-}
-
-struct WorkspaceModelField<Accessory: View>: View {
-    let title: String
-    @Binding var text: String
-    var commit: () -> Void = {}
-    var cancel: () -> Void = {}
-    let accessory: Accessory
-
-    init(title: String, text: Binding<String>, commit: @escaping () -> Void = {},
-         cancel: @escaping () -> Void = {}, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
-        self.title = title; _text = text; self.commit = commit; self.cancel = cancel
-        self.accessory = accessory()
-    }
-
-    var body: some View {
-        WorkspaceRow(L("模型")) { field }
-    }
-
-    private var field: some View {
-        WorkspaceModelInput(title: title, text: $text, commit: commit, cancel: cancel, accessory: accessory)
-    }
-}
-
-/// Model IDs are free text: a resting underline marks the field, the hint is a placeholder,
-/// and the catalogue button sits inline at the trailing end.
-private struct WorkspaceModelInput<Accessory: View>: View {
-    let title: String
-    @Binding var text: String
-    let commit: () -> Void
-    let cancel: () -> Void
-    let accessory: Accessory
-    @State private var hovering = false
-    @FocusState private var focused: Bool
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.isEnabled) private var enabled
-
-    var body: some View {
-        let theme = VoxInkTheme(scheme: scheme)
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            TextField(title, text: $text, prompt: Text(L("可输入自定义 ID")))
-                .textFieldStyle(.plain).font(.system(size: 12, design: .monospaced))
-                .multilineTextAlignment(.leading)
-                .focused($focused)
-                .onTapGesture { focused = true }
-                .onSubmit { commit(); focused = false }
-                .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
-                .onExitCommand { cancel(); focused = false }
-                .accessibilityLabel(title).accessibilityHint(L("可输入自定义 ID"))
-                .help(text)
-            accessory.font(.caption)
-        }
-        .padding(.vertical, 5)
-        .frame(minWidth: 200, maxWidth: 360, alignment: .leading)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(focused ? theme.accent : theme.ink.opacity(!enabled ? 0.08 : (hovering ? 0.32 : 0.18)))
-                .frame(height: focused ? 2 : 1)
-                .allowsHitTesting(false).accessibilityHidden(true)
-        }
-        .onHover { hovering = $0 }
     }
 }

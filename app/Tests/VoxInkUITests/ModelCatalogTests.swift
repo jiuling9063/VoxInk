@@ -74,6 +74,20 @@ struct ModelCatalogTests {
         #expect(speech.unclassified == ["opaque-deployment"])
     }
 
+    @Test func arkPolishingCatalogUsesNestedModalitiesAndExcludesSpecializedModels() throws {
+        let body = """
+            {"data":[
+              {"id":"doubao-seed-2-1-lite-260915","domain":"VLM","task_type":["TextGeneration"],"modalities":{"input_modalities":["image","text"],"output_modalities":["text"]}},
+              {"id":"three-d","domain":"3DGeneration","task_type":["ImageTo3D"]},
+              {"id":"image","type":"chat","modalities":{"input_modalities":["text"],"output_modalities":["image"]}},
+              {"id":"audio-only","modalities":{"input_modalities":["audio"],"output_modalities":["text"]}},
+              {"id":"doubao-seed3d-2-0-260328"},{"id":"doubao-seedream-5-0-pro"},{"id":"doubao-seedance-2-0"},{"id":"ep-opaque"}]}
+            """
+        let result = try ModelCatalog.decode(Data(body.utf8), purpose: .polishing, serverFiltered: false).result
+        #expect(result.models == ["doubao-seed-2-1-lite-260915"])
+        #expect(result.unclassified == ["ep-opaque"])
+    }
+
     @Test func commonSpecializedIDsDoNotCrowdThePolishingList() throws {
         let ids = ["gpt-4.1-mini", "whisper-1", "gpt-4o-mini-transcribe", "Qwen/Qwen3-ASR-1.7B",
                    "FunAudioLLM/SenseVoiceSmall", "text-embedding-3-small", "tts-1", "dall-e-3", "bge-m3", "reranker-v1"]

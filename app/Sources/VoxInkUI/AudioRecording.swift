@@ -4,10 +4,15 @@ import VoxInkCore
 @MainActor public protocol AudioRecording: AnyObject {
     var isRecording: Bool { get }
     func requestPermission() async -> Bool
-    func start() throws
-    func stop() throws -> URL
+    func start() async throws
+    func stop() async throws -> URL
     func sample() -> AudioCaptureSample
     func cancel()
+    func finishPendingCleanup() async
+}
+
+extension AudioRecording {
+    public func finishPendingCleanup() async {}
 }
 
 extension AudioCapture: AudioRecording {}

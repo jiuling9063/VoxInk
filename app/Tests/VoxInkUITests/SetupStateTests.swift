@@ -267,7 +267,7 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(!store.canCompleteSetup)
         store.confirmSetupTrial(true)
         #expect(store.canCompleteSetup)
-        store.advanceSetup()
+        store.leaveSetupTrial()
         #expect(store.setupCompleted)
         #expect(!store.isShowingSetup)
         let restored = AppStore(preferences: preferences)
@@ -279,6 +279,26 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.isShowingSetup)
         #expect(store.setupProgress.step == .usage)
         #expect(!store.setupProgress.verified)
+    }
+
+    @Test(arguments: SetupUsage.allCases)
+    func canEnterWorkspaceWithoutTrialAndResumeOnlyOnRequest(usage: SetupUsage) async throws {
+        let name = "VoxInk.SkipTrial.\(UUID())"
+        let preferences = try #require(UserDefaults(suiteName: name))
+        defer { preferences.removePersistentDomain(forName: name) }
+        let store = try await readyStore(SetupPaste(), preferences: preferences)
+        store.setSetupUsage(usage)
+        reachTrialStep(store, remote: usage.needsRemote)
+        #expect(store.setupBlockingHint == nil)
+        store.startSetupTextTest()
+        store.leaveSetupTrial()
+        #expect(!store.isShowingSetup && !store.fixedTextTestArmed)
+        #expect(!store.setupCompleted && !store.setupProgress.verified)
+        #expect(store.canRecord)
+        let reopened = AppStore(preferences: preferences)
+        #expect(!reopened.isShowingSetup)
+        reopened.showSetup()
+        #expect(reopened.isShowingSetup && reopened.setupProgress.step == .trial)
     }
 
     @Test func deferredGuidePersistsProgressWithoutClaimingCompletion() async throws {
@@ -390,7 +410,8 @@ private actor SetupTranscriber: TranscriptionService {
         #expect(store.setupProgress.textConfirmed == !usage.needsRemote && !store.setupProgress.speechConfirmed)
         #expect(!store.setupTrialCanConfirm && !store.canAdvanceSetup)
         #expect(store.setupProgress.step == (usage.needsRemote ? .remote : .trial))
-        #expect(store.setupBlockingHint != nil)
+        #expect(store.setupNotice != nil)
+        #expect((store.setupBlockingHint != nil) == usage.needsRemote)
         if usage.needsRemote {
             #expect(!store.setupProgress.clipboardSyncConfirmed)
             store.confirmSetupClipboardSync(true)

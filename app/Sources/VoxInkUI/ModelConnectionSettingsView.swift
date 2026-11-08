@@ -8,106 +8,151 @@ struct ModelServicePicker: View {
     let purpose: ModelServicePurpose
     @State private var error = ""
     @State private var editing: ModelConnection?
-    @State private var choosingProvider = false
-    @State private var pendingProvider: ModelProviderPreset?
-
-    private var selected: ModelConnection? {
-        saved.first { $0.id == store.modelServices.selectedID(for: purpose) }
-    }
     private var enabled: Bool { purpose == .transcription || store.polishingEnabled }
-    private var saved: [ModelConnection] { store.modelServices.connections.filter { $0.purpose == purpose } }
-    private var available: [ModelProviderPreset] {
-        ModelProviderPreset.available(for: purpose).filter { provider in
-            provider == .custom || !saved.contains { ModelProviderPreset.matching($0) == provider }
-        }
-    }
+    @State private var compact = false
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            WorkspaceRow(L("处理方式")) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) { serviceMenu; testButton }
-                    VStack(alignment: .leading, spacing: 8) { serviceMenu; testButton }
+        let options = store.modelServices.providerOptions(for: purpose)
+        let selectedID = store.modelServices.selectedID(for: purpose)
+        let current = selectedID.flatMap { id in options.first { $0.connection?.id == id } }
+        VStack(alignment: .leading, spacing: 18) {
+            header(connection: current?.connection)
+            if enabled {
+                let layout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                                     : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+                layout {
+                    field(L("服务商")) { providerMenu(options, current: current, local: selectedID == nil) }
+                        .frame(width: compact ? nil : 178)
+                    field(L("模型")) { modelField(connection: current?.connection, local: selectedID == nil) }
                 }
-            }
-            if enabled, let selected {
-                Divider()
-                ModelIDSettingsField(store: store, connection: selected).id(selected.id)
-                if store.connectionTestConnectionID == selected.id, !store.connectionTestMessage.isEmpty {
-                    Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
+                if let id = current?.connection?.id, store.connectionTestConnectionID == id, !store.connectionTestMessage.isEmpty {
+                    Text(store.connectionTestMessage).font(.callout).textSelection(.enabled)
                     if !store.canStart && store.canCancel {
                         Button(L("取消测试")) { Task { await store.cancel() } }
                     }
                 }
+                if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
             }
-            if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: Bool.self) { $0.size.width < 440 } action: { compact = $0 }
         .sheet(item: $editing) { ModelConnectionEditor(store: store, connection: $0) }
-        .sheet(isPresented: $choosingProvider, onDismiss: { openPendingProvider() }) {
-            ProviderPickerSheet(purpose: purpose, providers: available) { provider in
-                pendingProvider = provider
-                choosingProvider = false
-            }
-        }
     }
 
-    @ViewBuilder private var testButton: some View {
-        if let selected, enabled {
-            Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
-                .disabled(!store.canEditModelServices)
-        }
-    }
-
-    private var serviceMenu: some View {
-        WorkspaceMenu(title: purpose == .transcription ? L("识别服务") : L("润色服务"), value: selectionTitle) {
+    private func header(connection: ModelConnection?) -> some View {
+        HStack(spacing: 12) {
+            WorkspaceSectionHeader(title: purpose.title, icon: purpose == .transcription ? "waveform" : "pencil.line")
+                .font(.system(size: 17, weight: .semibold))
+                .accessibilityAddTraits(.isHeader)
+                .fixedSize()
             if purpose == .polishing {
-                serviceOption(L("不润色"), selected: !enabled) { store.setPolishingEnabled(false) }
+                Toggle(L("启用润色"), isOn: Binding(get: { store.polishingEnabled }, set: store.setPolishingEnabled))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                    .disabled(!store.canEditModelServices)
             }
-            serviceOption(L("本地模型"), selected: enabled && store.modelServices.selectedID(for: purpose) == nil) { select(nil) }
+            Spacer(minLength: 4)
+            if enabled, let connection {
+                let title = purpose == .transcription ? L("选音频测试") : L("测试连接")
+                Button { test(connection) } label: {
+                    ViewThatFits(in: .horizontal) {
+                        Text(title).fixedSize()
+                        Image(systemName: "play.circle")
+                    }
+                }
+                .buttonStyle(.plain).font(.callout)
+                .foregroundStyle(VoxInkTheme(scheme: scheme).accent)
+                .accessibilityLabel(title).help(title)
+                .disabled(!store.canEditModelServices)
+                Button { editing = connection } label: {
+                    Image(systemName: "gearshape").frame(width: 24, height: 24).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel(L("连接设置…")).help(L("连接设置…"))
+                .disabled(!store.canEditModelServices)
+            }
+        }
+    }
+
+    private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.callout.weight(.medium)).foregroundStyle(.secondary)
+            content()
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func providerMenu(_ options: [ModelServiceSettings.ProviderOption],
+                              current: ModelServiceSettings.ProviderOption?, local: Bool) -> some View {
+        let saved = options.filter { $0.connection != nil }
+        let presets = options.filter { $0.connection == nil && $0.provider != .custom }
+        let title = current?.title ?? (local ? L("本地模型") : L("连接配置不可用"))
+        return ServiceFieldMenu(title: purpose == .transcription ? L("识别服务") : L("润色服务"), value: title) {
+            optionButton(L("本地模型"), selected: local) { select(nil) }
             if !saved.isEmpty {
                 Section(L("已配置")) {
-                    ForEach(saved) { connection in
-                        serviceOption(connection.name, selected: enabled && selected?.id == connection.id) {
-                            if (try? connection.validate()) == nil { editing = connection }
-                            else { select(connection.id) }
-                        }
+                    ForEach(saved) { item in
+                        optionButton(item.title, selected: current?.id == item.id) { choose(item) }
                     }
                 }
             }
-            if let selected, enabled {
-                Section {
-                    Button(L("设置…")) { editing = selected }
-                    Button(purpose == .transcription ? L("选音频测试") : L("测试连接")) { test(selected) }
+            if !presets.isEmpty {
+                Section(L("添加服务商")) {
+                    ForEach(presets) { item in Button(item.title) { choose(item) } }
                 }
             }
-            Divider()
-            Button(L("添加服务…")) { choosingProvider = true }
+            if let custom = options.first(where: { $0.provider == .custom && $0.connection == nil }) {
+                Divider()
+                Button(custom.title) { choose(custom) }
+            }
+        }.disabled(!store.canEditModelServices)
+    }
+
+    @ViewBuilder private func modelField(connection: ModelConnection?, local: Bool) -> some View {
+        if let connection {
+            ModelCatalogButton(connection: connection, fillsField: true, load: { try await store.fetchModels(for: connection) }) { model in
+                do {
+                    try store.updateModelID(connection.id, model: model)
+                    error = ""
+                } catch { self.error = error.localizedDescription }
+            }
+            .id(connection.id).disabled(!store.canEditModelServices)
+        } else if local && purpose == .polishing {
+            ServiceFieldMenu(title: L("模型选择"), value: store.automaticPolishModel ? L("自动（推荐）") : store.polishModel.title) {
+                optionButton(L("自动（推荐）"), selected: store.automaticPolishModel) { store.setAutomaticPolishModel(true) }
+                ForEach(PolishModel.allCases, id: \.self) { model in
+                    optionButton(model.title, selected: !store.automaticPolishModel && store.polishModel == model) { store.setPolishModel(model) }
+                }
+            }.disabled(!store.canEditModelServices)
+        } else if local {
+            Text(verbatim: ModelPackage.repository.components(separatedBy: "/").last ?? ModelPackage.repository)
+                .font(.system(size: 12.5, design: .monospaced))
+                .lineLimit(1).truncationMode(.middle).frame(minHeight: 36)
+        } else {
+            Text(L("连接配置不可用")).foregroundStyle(.secondary).frame(minHeight: 36)
         }
-        .disabled(!store.canEditModelServices)
     }
 
-    /// The editor opens only after the picker sheet is gone; two sheets can't share one presentation.
-    private func openPendingProvider() {
-        guard let provider = pendingProvider else { return }
-        pendingProvider = nil
-        var connection = provider.makeConnection(for: purpose)
-        if connection.name.isEmpty { connection.name = "\(provider.title) · \(purpose.title)" }
-        editing = connection
-    }
-
-    private var selectionTitle: String {
-        !enabled ? L("不润色") : (selected?.name ?? (store.modelServices.selectedID(for: purpose) == nil
-            ? L("本地模型") : L("连接配置不可用")))
-    }
-
-    private func serviceOption(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func optionButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             if selected { Label(title, systemImage: "checkmark") }
             else { Text(title) }
         }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func choose(_ option: ModelServiceSettings.ProviderOption) {
+        error = ""
+        if let saved = option.connection {
+            if (try? saved.validate()) == nil { editing = saved } else { select(saved.id) }
+        } else {
+            var draft = option.provider.makeConnection(for: purpose)
+            if draft.name.isEmpty { draft.name = option.provider.title }
+            editing = draft
+        }
     }
 
     private func select(_ id: UUID?) {
+        guard !enabled || store.modelServices.selectedID(for: purpose) != id else { return }
         do {
             try store.selectModelService(id, for: purpose)
             if purpose == .polishing { store.setPolishingEnabled(true) }
@@ -132,119 +177,19 @@ struct ModelServicePicker: View {
     }
 }
 
-private struct ModelIDSettingsField: View {
-    @ObservedObject var store: AppStore
-    let connection: ModelConnection
-    @State private var draft: String
-    @State private var error = ""
-
-    init(store: AppStore, connection: ModelConnection) {
-        self.store = store; self.connection = connection
-        _draft = State(initialValue: connection.model)
-    }
+private struct ServiceFieldMenu<Items: View>: View {
+    let title: String
+    let value: String
+    @ViewBuilder var items: Items
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            WorkspaceModelField(title: connection.purpose == .transcription ? L("识别模型 ID") : L("润色模型 ID"),
-                                text: $draft, commit: save, cancel: { draft = connection.model; error = "" }, accessory: {
-                ModelCatalogButton(connection: connection, load: { try await store.fetchModels(for: connection) }) {
-                    draft = $0
-                    save()
-                }
-            })
-                .disabled(!store.canEditModelServices)
-            if !error.isEmpty { Text(error).font(.caption).foregroundStyle(.orange) }
-        }
-        .onChange(of: connection.model) { _, model in draft = model }
-        .onDisappear(perform: save)
-    }
-
-    private func save() {
-        guard draft != connection.model else { return }
-        do {
-            try store.updateModelID(connection.id, model: draft)
-            draft = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-            error = ""
-        } catch {
-            draft = connection.model
-            self.error = error.localizedDescription
-        }
-    }
-}
-
-/// Searchable grid of providers, replacing the long provider list that used to sit inside the menu.
-struct ProviderPickerSheet: View {
-    let purpose: ModelServicePurpose
-    let providers: [ModelProviderPreset]
-    let choose: (ModelProviderPreset) -> Void
-    @State private var query = ""
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme
-
-    private var presets: [ModelProviderPreset] {
-        let text = query.trimmingCharacters(in: .whitespaces)
-        return providers.filter { provider in
-            provider != .custom && (text.isEmpty
-                || provider.title.localizedCaseInsensitiveContains(text)
-                || provider.rawValue.localizedCaseInsensitiveContains(text))
-        }
-    }
-
-    var body: some View {
-        let theme = VoxInkTheme(scheme: scheme)
-        VStack(alignment: .leading, spacing: 16) {
-            Text(purpose == .transcription ? L("识别服务") : L("润色服务")).font(.title3.weight(.semibold))
-            TextField(L("搜索服务商"), text: $query).textFieldStyle(.roundedBorder)
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
-                    ForEach(presets) { provider in
-                        Button { choose(provider) } label: { card(provider, theme: theme) }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(provider.title)
-                    }
-                }
-                if presets.isEmpty {
-                    Text(L("没有匹配的服务商，可使用自定义接口。")).font(.callout).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
-                }
-            }
-            .frame(maxHeight: 300)
-            Divider()
-            HStack {
-                if providers.contains(.custom) {
-                    Button(L("自定义接口")) { choose(.custom) }
-                }
-                Spacer()
-                Button(L("取消")) { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-        }
-        .padding(24)
-        .frame(width: 480)
-        .tint(theme.accent)
-    }
-
-    private func card(_ provider: ModelProviderPreset, theme: VoxInkTheme) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(provider.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.ink)
-                .lineLimit(1)
-            HStack(spacing: 4) {
-                if provider.supports(.transcription) { tag(L("转写"), theme: theme) }
-                if provider.supports(.polishing) { tag(L("润色"), theme: theme) }
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.fieldFill, in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.control + 2, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: VoxInkTheme.Radius.control + 2, style: .continuous)
-                .strokeBorder(theme.ink.opacity(0.08), lineWidth: 1)
-        }
-        .contentShape(Rectangle())
-    }
-
-    private func tag(_ title: String, theme: VoxInkTheme) -> some View {
-        Text(title).font(.system(size: 10, weight: .medium)).foregroundStyle(theme.accent)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(theme.accent.opacity(0.1), in: Capsule())
+        Menu { items } label: { ServiceChoiceLabel(value: value) }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            .modifier(WorkspaceChoiceSurface(hovering: hovering, focused: focused, enabled: enabled))
+            .onHover { hovering = $0 }.focused($focused)
+            .accessibilityLabel(title).accessibilityValue(value).help(value)
     }
 }

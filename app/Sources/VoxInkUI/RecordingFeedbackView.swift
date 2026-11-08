@@ -99,6 +99,7 @@ public struct RecordingFeedbackPresentation {
 public struct RecordingFeedbackView: View {
     /// Amber that stays legible on the HUD's dark surface in both appearances.
     static let caution = Color(red: 0.902, green: 0.690, blue: 0.333)
+    private let outline = RoundedRectangle(cornerRadius: 22)
     private let presentation: RecordingFeedbackPresentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     public init(presentation: RecordingFeedbackPresentation) { self.presentation = presentation }
@@ -147,20 +148,19 @@ public struct RecordingFeedbackView: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(presentation.accessibilityStatus)
         .accessibilityHint(presentation.hint)
-        .background(Color(red: 0.106, green: 0.133, blue: 0.137), in: RoundedRectangle(cornerRadius: 22))
+        .background(Color(red: 0.106, green: 0.133, blue: 0.137), in: outline)
         .overlay {
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(presentation.countdown != nil ? Self.caution.opacity(0.85)
+            outline
+                .strokeBorder(presentation.countdown != nil ? Self.caution.opacity(0.85)
                         : Color(red: 0.522, green: 0.808, blue: 0.780).opacity(0.3),
                         lineWidth: presentation.countdown != nil ? 1.5 : 1)
         }
-        .shadow(color: Color.black.opacity(0.22), radius: 8, y: 4)
         .overlay {
             if presentation.phase == .ready && !reduceMotion {
-                RoundedRectangle(cornerRadius: 22)
-                    .stroke(Color(red: 0.49, green: 0.68, blue: 0.61).opacity(0.55), lineWidth: 1.2)
+                outline.strokeBorder(Color(red: 0.49, green: 0.68, blue: 0.61).opacity(0.55), lineWidth: 1.2)
             }
         }
+        .clipShape(outline)
     }
 }
 
@@ -203,10 +203,21 @@ private struct OutwardPulse: View {
 private struct ProcessingDots: View {
     let reduceMotion: Bool
     var body: some View {
+        if reduceMotion {
+            dots(time: nil)
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 24)) { context in
+                dots(time: context.date.timeIntervalSinceReferenceDate)
+            }
+        }
+    }
+
+    private func dots(time: TimeInterval?) -> some View {
         HStack(spacing: 5) {
             ForEach(0..<5, id: \.self) { index in
+                let pulse = time.map { (1 + cos($0 * 5 - Double(index) * 0.8)) / 2 } ?? 1
                 Circle().fill(Color(red: 96 / 255, green: 224 / 255, blue: 202 / 255)
-                    .opacity(reduceMotion ? 0.9 : 0.65 + Double(index) * 0.08))
+                    .opacity(0.35 + 0.55 * pulse))
                     .frame(width: 5, height: 5)
             }
         }

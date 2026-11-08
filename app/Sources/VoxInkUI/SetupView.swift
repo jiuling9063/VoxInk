@@ -24,7 +24,6 @@ struct SetupView: View {
                     VStack { scenarioCards }
                 }
                 Button(L("两台都用")) { store.chooseSetupUsage(.remote) }.buttonStyle(.link)
-                Text(L("随时可以稍后设置；已完成的步骤会保存，可从“首次准备”继续。")).font(.caption)
             case .preparation: preparation
             case .remote: remote
             case .trial: trial
@@ -211,13 +210,18 @@ struct SetupNavigationView: View {
         if store.setupProgress.step != .usage {
             Button(L("上一步")) { store.previousSetupStep() }.disabled(!store.canStart)
         }
-        Button(L("稍后设置")) { store.deferSetup() }.disabled(!store.canStart)
-        Spacer(minLength: 0)
-        if store.setupProgress.step != .usage {
-            Button(store.canStartSetupDownload ? L("下载并继续") : (store.setupProgress.step == .trial ? L("完成引导") : L("下一步")),
-                   systemImage: "arrow.right") {
-                store.prepareAndAdvanceSetup()
-            }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canAdvanceSetup && !store.canStartSetupDownload)
+        if store.setupProgress.step == .trial {
+            Spacer(minLength: 0)
+            Button(L("进入工作台"), systemImage: "arrow.right") { store.leaveSetupTrial() }
+                .buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canStart)
+        } else {
+            Button(L("跳过引导")) { store.deferSetup() }.disabled(!store.canStart)
+            Spacer(minLength: 0)
+            if store.setupProgress.step != .usage {
+                Button(store.canStartSetupDownload ? L("下载并继续") : L("下一步"), systemImage: "arrow.right") {
+                    store.prepareAndAdvanceSetup()
+                }.buttonStyle(VoxInkButtonStyle(prominent: true)).disabled(!store.canAdvanceSetup && !store.canStartSetupDownload)
+            }
         }
     }
 }

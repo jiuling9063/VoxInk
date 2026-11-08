@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 import VoxInkCore
 @testable import VoxInkUI
@@ -15,8 +16,22 @@ import VoxInkCore
         if waitForPermission { return await withCheckedContinuation { permission = $0 } }
         return permissionAllowed
     }
-    func start() throws { starts += 1; isRecording = true }
-    func stop() throws -> URL { stops += 1; isRecording = false; return URL(fileURLWithPath: "/hold-fixture.wav") }
+    var delayStart = false
+    var pendingStart: CheckedContinuation<Void, Never>?
+    func start() async throws {
+        starts += 1
+        if delayStart { await withCheckedContinuation { pendingStart = $0 } }
+        try Task.checkCancellation()
+        isRecording = true
+    }
+    var delayStop = false
+    var pendingStop: CheckedContinuation<Void, Never>?
+    func stop() async throws -> URL {
+        stops += 1
+        isRecording = false
+        if delayStop { await withCheckedContinuation { pendingStop = $0 } }
+        return URL(fileURLWithPath: "/hold-fixture.wav")
+    }
     func sample() -> AudioCaptureSample { .init(elapsed: duration, level: 0.5) }
     func cancel() { isRecording = false }
 }
@@ -266,6 +281,54 @@ private actor HoldTranscriber: TranscriptionService {
         recorder.waitForPermission = false
         try await recordAndRelease(store)
         #expect(recorder.starts == 1 && paste.texts.count == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func delayedMicStartupCanBeInterruptedAndRetried(sleeping: Bool) async throws {
+        let recorder = HoldRecorder(), paste = HoldPaste()
+        recorder.delayStart = true
+        let store = make(recorder, paste)
+        store.handleShortcutPressed()
+        try await waitUntil { recorder.pendingStart != nil }
+        #expect(store.phase == .loading)
+        if sleeping {
+            store.handleSystemSleepChange(sleeping: true)
+            store.handleSystemSleepChange(sleeping: false)
+        } else {
+            store.handleShortcutReleased()
+        }
+        recorder.delayStart = false
+        store.handleShortcutPressed()
+        try await waitUntil { store.phase == .recording }
+        recorder.pendingStart?.resume()
+        recorder.pendingStart = nil
+        await Task.yield()
+        #expect(store.phase == .recording)
+        #expect(paste.texts.isEmpty)
+        store.handleShortcutReleased()
+        try await waitUntil { store.canStart }
+        #expect(paste.texts.count == 1 && recorder.stops == 1)
+    }
+
+    @Test func releaseUpdatesFeedbackAndAllowsCancellationWhileInputCloses() async throws {
+        let recorder = HoldRecorder(), paste = HoldPaste()
+        recorder.delayStop = true
+        let cleaned = Mutex<[URL]>([])
+        let store = AppStore(service: HoldTranscriber(), pasteService: paste, recorder: recorder,
+                             preferences: nil, audioCleaner: { url in cleaned.withLock { $0.append(url) } })
+        store.handleShortcutPressed()
+        try await waitUntil { store.phase == .recording }
+        store.handleShortcutReleased()
+        #expect(store.phase == .transcribing)
+        try await waitUntil { recorder.pendingStop != nil }
+        let cancel = Task { await store.cancel() }
+        try await waitUntil { store.phase == .cancelling }
+        recorder.pendingStop?.resume()
+        await cancel.value
+        #expect(recorder.stops == 1)
+        #expect(cleaned.withLock { $0 } == [URL(fileURLWithPath: "/hold-fixture.wav")])
+        #expect(paste.texts.isEmpty)
+        #expect(store.canStart)
     }
 
     @Test func shortTapDoesNotSendEmptyRecording() async {

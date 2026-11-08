@@ -39,15 +39,7 @@ struct WorkspaceSettingsView: View {
                 WorkspaceHeading(title: page.title, subtitle: subtitle)
                 switch page {
                 case .engine, .polish:
-                    WorkspaceForm {
-                        Section { ModelSettingsContent(store: store) } header: {
-                            SettingsSectionTitle(title: L("语音识别"), summary: transcriptionSummary,
-                                                 attention: !store.transcriptionReady)
-                        }
-                        Section { PolishSettingsContent(store: store) } header: {
-                            SettingsSectionTitle(title: L("文字润色"), summary: polishSummary, attention: false)
-                        }
-                    }
+                    ModelSettingsCards(store: store)
                     Text(L("云端处理会将音频或文字发送到所选服务。"))
                         .font(.caption).foregroundStyle(.secondary)
                 case .shortcut:
@@ -77,39 +69,6 @@ struct WorkspaceSettingsView: View {
         .onAppear { store.refreshPermissions() }
     }
 
-    private var transcriptionSummary: String {
-        if let connection = try? store.modelServices.connection(for: .transcription),
-           store.modelServices.transcriptionID != nil { return connection.name }
-        if store.modelServices.transcriptionID != nil { return L("连接配置不可用") }
-        return store.modelState == .ready ? L("本地就绪") : store.modelState.title
-    }
-
-    private var polishSummary: String {
-        guard store.polishingEnabled else { return L("关闭") }
-        if store.modelServices.polishingID != nil,
-           let connection = try? store.modelServices.connection(for: .polishing) { return connection.name }
-        return L("本地模型")
-    }
-}
-
-/// Section header with a one-glance status, e.g. "语音识别 · 本地就绪".
-struct SettingsSectionTitle: View {
-    let title: String
-    let summary: String
-    let attention: Bool
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-            if !summary.isEmpty {
-                Text("·").foregroundStyle(.tertiary)
-                Text(summary).lineLimit(1).truncationMode(.middle)
-                    .foregroundStyle(attention ? VoxInkTheme(scheme: scheme).caution : .secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
 }
 
 struct InputSettingsContent: View {
@@ -137,24 +96,41 @@ struct TextProcessingContent: View {
     }
 }
 
+struct ModelSettingsCards: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) { ModelSettingsContent(store: store) }
+                .padding(20).writingSurface()
+            VStack(alignment: .leading, spacing: 16) { PolishSettingsContent(store: store) }
+                .padding(20).writingSurface()
+        }
+    }
+}
+
 struct PolishSettingsContent: View {
     @ObservedObject var store: AppStore
     private var installed: Bool { store.installedPolishModels.contains(store.polishDownloadTarget) }
     var body: some View {
         ModelServicePicker(store: store, purpose: .polishing)
         if store.polishingEnabled {
-            WorkspacePicker(L("润色方式"), value: store.polishStyle.title, selection: Binding(get: { store.polishStyle }, set: { store.setPolishStyle($0) }), options: PolishStyle.allCases.map { ($0.title, $0) })
-            .disabled(!store.canEditModelServices)
-
+            Divider()
+            HStack(spacing: 12) {
+                Text(L("润色方式")).font(.callout).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Picker(L("润色方式"), selection: Binding(get: { store.polishStyle }, set: store.setPolishStyle)) {
+                    ForEach(PolishStyle.allCases, id: \.self) { style in
+                        Text(style.title).tag(style).help(style.detail)
+                    }
+                }.labelsHidden().pickerStyle(.segmented).fixedSize()
+                    .disabled(!store.canEditModelServices)
+            }
+            if store.modelServices.polishingID == nil { localSettings }
         }
-        if store.polishingEnabled && store.modelServices.polishingID == nil { localSettings }
     }
 
     @ViewBuilder private var localSettings: some View {
-        WorkspacePicker(L("模型选择"), value: store.automaticPolishModel ? L("自动（推荐）") : store.polishModel.title, selection: Binding(get: { store.automaticPolishModel ? "auto" : store.polishModel.rawValue }, set: {
-            if $0 == "auto" { store.setAutomaticPolishModel(true) }
-            else if let model = PolishModel(rawValue: $0) { store.setPolishModel(model) }
-        }), options: [(L("自动（推荐）"), "auto")] + PolishModel.allCases.map { ($0.title, $0.rawValue) }).disabled(!store.canStart || store.isInstallingPolishModel)
         WorkspacePicker(L("使用偏好"), value: store.polishPreference.title, selection: Binding(get: { store.polishPreference }, set: { store.setPolishPreference($0) }), options: PolishPreference.allCases.map { ($0.title, $0) }).disabled(!store.canStart || store.isInstallingPolishModel)
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -265,9 +241,13 @@ struct ModelSettingsContent: View {
     }
 
     @ViewBuilder private var localSettings: some View {
-        WorkspaceRow(L("状态")) {
+        Divider()
+        HStack(spacing: 12) {
             StatusBadge(title: store.modelState.title,
                         tone: store.modelState == .ready ? .good : (store.modelState == .failed ? .warning : .quiet))
+            Spacer()
+            Button(store.modelState == .needsDownload ? L("下载或继续安装") : L("检查并修复模型")) { store.installModel() }
+                .disabled(!store.canStart)
         }
         Text(L("识别在本机完成。首次下载约 713 MB，支持中断后继续。"))
             .font(.callout).foregroundStyle(.secondary)
@@ -280,8 +260,6 @@ struct ModelSettingsContent: View {
         if store.modelState == .loading && store.canCancel {
             Button(L("取消准备")) { Task { await store.cancel() } }
         }
-        Button(store.modelState == .needsDownload ? L("下载或继续安装") : L("检查并修复模型")) { store.installModel() }
-            .disabled(!store.canStart)
     }
 }
 

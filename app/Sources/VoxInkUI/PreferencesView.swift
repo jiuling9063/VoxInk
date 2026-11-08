@@ -61,10 +61,7 @@ public struct PreferencesView: View {
                 Section(L("系统权限")) { PermissionSettingsContent(store: store) }
             }
             } else if tab == 3 {
-                WorkspaceForm {
-                    Section(L("语音识别")) { ModelSettingsContent(store: store) }
-                    Section(L("文字润色")) { PolishSettingsContent(store: store) }
-                }
+                ModelSettingsCards(store: store)
             } else if let dictionary = store.dictionary {
                 DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
             }

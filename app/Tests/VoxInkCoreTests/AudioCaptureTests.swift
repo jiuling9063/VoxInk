@@ -64,6 +64,28 @@ import Testing
     #expect(!capture.isRecording)
 }
 
+// Opt in with a dedicated test input. This exercises AudioToolbox's real callback drain.
+@Test(.enabled(if: ProcessInfo.processInfo.environment["VOXINK_TEST_AUDIO_INPUT_UID"] != nil))
+@MainActor func stoppingRealAudioQueueDrainsCallbacksWithoutTimingOut() async throws {
+    let uid = try #require(ProcessInfo.processInfo.environment["VOXINK_TEST_AUDIO_INPUT_UID"])
+    let devices = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+    try #require(devices.contains { $0.uniqueID == uid } && AVCaptureDevice.authorizationStatus(for: .audio) == .authorized)
+    let capture = AudioCapture()
+    capture.deviceUID = uid
+    defer { capture.cancel() }
+    for _ in 0..<2 {
+        try await capture.start()
+        try await Task.sleep(for: .seconds(1))
+        let start = ContinuousClock.now
+        let url = try await capture.stop()
+        defer { AudioFilePreparation.cleanup(url: url) }
+        #expect(start.duration(to: .now) < .seconds(5))
+        let file = try AVAudioFile(forReading: url)
+        #expect(file.length > 0)
+        #expect(file.fileFormat.sampleRate == 16_000)
+    }
+}
+
 private func makePCMFixture(sampleRate: Double, channels: AVAudioChannelCount, duration: Double) throws -> URL {
     let directory = try makePrivateFixtureDirectory()
     let url = directory.appendingPathComponent("fixture.wav")

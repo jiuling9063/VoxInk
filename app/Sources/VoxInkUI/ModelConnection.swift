@@ -96,10 +96,25 @@ public struct ModelServiceSettings: Codable, Equatable, Sendable {
     }
 }
 
+public enum ArkModelAccessError: String, Decodable, Sendable {
+    case notActivated = "ModelNotOpen"
+    case notFound = "InvalidEndpointOrModel.NotFound"
+    case endpointRequired = "InvalidEndpointOrModel.ModelIDAccessDisabled"
+
+    var explanation: String {
+        switch self {
+        case .notActivated: L("方舟账号尚未开通这个模型，请在方舟控制台的「开通管理」中开通。")
+        case .notFound: L("方舟找不到此模型或接入点，或当前密钥无权访问。请核对 ID 和所属项目。")
+        case .endpointRequired: L("该方舟账号需要使用推理接入点。请填写当前项目有权访问的 ep- 接入点 ID。")
+        }
+    }
+}
+
 public enum CloudServiceError: Error, LocalizedError, Equatable {
     case invalidURL, invalidConfiguration, invalidParameters, missingConnection, keychain
     case busy, connectionInUse, addressChanged, authentication, rateLimited, timeout, network
     case http(Int), invalidResponse, emptyResponse, audioTooLarge, audioUnreadable
+    case arkModelAccess(Int, ArkModelAccessError)
 
     public var errorDescription: String? {
         switch self {
@@ -116,6 +131,7 @@ public enum CloudServiceError: Error, LocalizedError, Equatable {
         case .timeout: L("服务请求超时，请重试或调整连接的超时设置。")
         case .network: L("无法连接模型服务，请检查网络和服务地址。")
         case .http(let code): L("模型服务返回 HTTP \(code)，请检查接口类型、模型 ID 和服务状态。")
+        case .arkModelAccess(let status, let error): "\(error.explanation) (HTTP \(status) · \(error.rawValue))"
         case .invalidResponse: L("服务返回格式不兼容或内容不完整，请检查接口和模型。")
         case .emptyResponse: L("服务未返回有效文字。")
         case .audioTooLarge: L("音频文件超过 25 MB，请使用较短的录音。")

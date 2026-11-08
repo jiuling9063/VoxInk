@@ -372,11 +372,6 @@ import VoxInkCore
         return "\(progress.title) \(progress.fraction.formatted(.percent.precision(.fractionLength(0))))"
     }
 
-    var setupResumeSummary: String {
-        if let summary = setupDownloadSummary { return summary }
-        if setupProgress.step == .trial && transcriptionReady { return L("模型已就绪 · 试一句") }
-        return setupProgress.step.title
-    }
     var canStartSetupDownload: Bool {
         setupProgress.step == .preparation && canStart && microphoneAuthorization == .authorized &&
         pastePermissionGranted && shortcutAvailable && modelServices.transcriptionID == nil &&
@@ -436,7 +431,7 @@ import VoxInkCore
     @Published public private(set) var isRecordingShortcut = false
     private var suspendShortcut: (() -> Void)?
     private var holdRecording = false
-    private var recordingPermissionGeneration: UUID?
+    private var recordingStartupGeneration: UUID?
     private var systemSleeping = false
     private let service: any TranscriptionService
     public let dictionary: UserDictionaryController?
@@ -521,8 +516,6 @@ import VoxInkCore
         switch setupProgress.step {
         case .remote:
             return remoteApplications.isEmpty ? L("先添加本机安装的远程工具。") : L("请先核对远程工具设置，并确认剪贴板可以同步。")
-        case .trial:
-            return L("完成本步测试，确认目标输入框出现正确文字后继续。")
         default: return nil
         }
     }
@@ -758,6 +751,7 @@ import VoxInkCore
         await polishWarmTask?.value
         polishWarmTask = nil
         await polishInstallationTask?.value
+        await recorder.finishPendingCleanup()
         await dictionary?.waitForPendingChanges()
         await pasteService.finishPendingCleanup()
     }
@@ -888,9 +882,18 @@ import VoxInkCore
         saveSetupProgress()
     }
 
+    func leaveSetupTrial() {
+        guard setupProgress.step == .trial, canStart else { return }
+        if canAdvanceSetup {
+            completeSetup()
+        } else {
+            deferSetup()
+        }
+    }
+
     public func deferSetup() {
         guard canStart else { return }
-        clearSetupTrial()
+        if fixedTextTestArmed { stopSetupTextTest() } else { clearSetupTrial() }
         setupDeferred = true
         saveSetupProgress()
     }
@@ -990,20 +993,21 @@ import VoxInkCore
         activeTarget = target; lastTarget = nil; pasteOutcome = nil; recovery = nil
         shortcutTargetName = target?.name
         let token = UUID(); generation = token
-        recordingPermissionGeneration = token
+        recordingStartupGeneration = token
         phase = .loading; status = L("正在检查麦克风权限…")
         operation = Task {
             guard generation == token, !Task.isCancelled else { return }
             let allowed = await recorder.requestPermission()
             guard generation == token else { return }
-            recordingPermissionGeneration = nil
+            defer { if recordingStartupGeneration == token { recordingStartupGeneration = nil } }
             microphoneAuthorization = allowed ? .authorized : microphoneStatus()
             guard allowed else { fail(L("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。"), recovery: .microphone); return }
             do {
-                try recorder.start()
+                try await recorder.start()
+                guard generation == token, !Task.isCancelled else { return }
                 setupHandoffVisible = false
                 elapsed = 0; level = 0; recordingLimitReached = false
-                refreshPolishDevice(); schedulePolishWarmup()
+                if polishingEnabled && modelServices.polishingID == nil { refreshPolishDevice(); schedulePolishWarmup() }
                 phase = .recording
                 status = holdRecording ? L("正在录音 · 松开快捷键后识别并写入")
                     : (target != nil ? L("正在录音 · 再按快捷键结束并写入") : L("正在录音 · 最长 60 秒"))
@@ -1020,7 +1024,10 @@ import VoxInkCore
                         try? await Task.sleep(for: .milliseconds(100))
                     }
                 }
-            } catch { fail(L("无法开始录音，请检查麦克风是否可用。"), recovery: .recordAgain) }
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                fail(L("无法开始录音，请检查麦克风是否可用。"), recovery: .recordAgain)
+            }
         }
     }
 
@@ -1028,8 +1035,9 @@ import VoxInkCore
         systemSleeping = sleeping
         shortcutIsHeld = false
         holdRecording = false
-        if phase == .loading, recordingPermissionGeneration == generation {
-            recordingPermissionGeneration = nil
+        if phase == .loading, recordingStartupGeneration == generation {
+            recordingStartupGeneration = nil
+            recorder.cancel()
             generation = UUID()
             operation?.cancel(); operation = nil
             activeTarget = nil
@@ -1057,12 +1065,35 @@ import VoxInkCore
         localRetryAvailable = false
         activeTarget = nil
         lastTarget = nil
+        closeRecording(interrupted: true)
+    }
+
+    public func finishRecording() {
+        guard phase == .recording else { return }
+        guard recorder.isRecording || recordingLimitReached else { interruptRecording(); return }
+        holdRecording = false
+        meterTask?.cancel(); meterTask = nil
+        closeRecording(interrupted: false)
+    }
+
+    private func closeRecording(interrupted: Bool) {
         let token = generation
-        do {
-            // stop closes even a suspended queue and transfers the file; cancel would delete it.
-            let url = try recorder.stop()
-            phase = .loading
-            let task = Task {
+        phase = interrupted ? .loading : .transcribing
+        if !interrupted { status = L("正在识别…") }
+        let task = Task {
+            guard generation == token, !Task.isCancelled else { return }
+            let url: URL
+            do {
+                // stop transfers the file after all input buffers are drained, even on device loss.
+                url = try await recorder.stop()
+            } catch {
+                guard generation == token, !Task.isCancelled else { return }
+                recorder.cancel()
+                fail(L("录音未保存成功，请重试。"), recovery: interrupted ? .deviceDisconnected : .recordAgain)
+                return
+            }
+            guard generation == token, !Task.isCancelled else { audioCleaner(url); return }
+            if interrupted {
                 defer { audioCleaner(url) }
                 do {
                     if let audioRecovery {
@@ -1079,34 +1110,12 @@ import VoxInkCore
                 }
                 guard token == generation else { return }
                 fail(L("录音设备已断开"), recovery: .deviceDisconnected)
-            }
-            operation = task
-            audioOperation = task
-        } catch {
-            recorder.cancel()
-            fail(L("录音未保存成功，请重试。"), recovery: .deviceDisconnected)
-        }
-    }
-
-    public func finishRecording() {
-        guard phase == .recording else { return }
-        guard recorder.isRecording || recordingLimitReached else { interruptRecording(); return }
-        holdRecording = false
-        meterTask?.cancel(); meterTask = nil
-        do {
-            let url = try recorder.stop()
-            let token = generation
-            phase = .transcribing; status = L("正在识别…")
-            let task = Task {
-                guard generation == token, !Task.isCancelled else { audioCleaner(url); return }
+            } else {
                 await transcribePrepared(url)
             }
-            operation = task
-            audioOperation = task
-        } catch {
-            recorder.cancel()
-            fail(L("录音未保存成功，请重试。"), recovery: .recordAgain)
         }
+        operation = task
+        audioOperation = task
     }
 
     public func importAudio(_ url: URL) {

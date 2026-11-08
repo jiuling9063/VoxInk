@@ -4,6 +4,20 @@ import Testing
 @testable import VoxInkUI
 
 @MainActor struct RecordingFeedbackTests {
+    @Test func panelCornersAreTransparentInAllHeights() throws {
+        for phase in [AppStore.Phase.recording, .transcribing, .failed] {
+            let presentation = RecordingFeedbackPresentation(phase: phase, status: "", target: "Fixture")
+            let renderer = ImageRenderer(content: RecordingFeedbackView(presentation: presentation).frame(width: 180))
+            let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            for x in [1, bitmap.pixelsWide - 2] {
+                for y in [1, bitmap.pixelsHigh - 2] {
+                    #expect(bitmap.colorAt(x: x, y: y)?.alphaComponent == 0)
+                }
+            }
+            #expect(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.alphaComponent == 1)
+        }
+    }
+
     @Test func cancellationHintReflectsActualRegistrationAndPasteBoundary() {
         let store = AppStore(preferences: nil)
         #expect(!store.cancellationShortcutAvailable)

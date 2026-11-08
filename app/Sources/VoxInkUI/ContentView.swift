@@ -118,56 +118,25 @@ public struct ContentView: View {
         "VoxInk \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版"))"
     }
 
-    /// Setup progress (until finished), help and version — kept small and out of the main navigation.
     private var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !store.setupCompleted && !(page == .input && store.isShowingSetup) { setupCard }
-            VStack(alignment: .leading, spacing: 6) {
-                Button { page = .help } label: {
-                    Label(L("使用方法"), systemImage: "questionmark.circle")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(page == .help ? theme.accent : Color.secondary)
-                .accessibilityAddTraits(page == .help ? .isSelected : [])
-                HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { page = .help } label: {
+                Label(L("使用方法"), systemImage: "questionmark.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(page == .help ? theme.accent : Color.secondary)
+            .accessibilityAddTraits(page == .help ? .isSelected : [])
+            HStack(spacing: 6) {
                 if let version = store.availableVersion {
                     Button { page = .help } label: { Image(systemName: "arrow.up.circle.fill") }
                         .buttonStyle(.plain).help(L("有新版本 \(version)")).accessibilityLabel(L("有新版本 \(version)"))
                 }
                 Text(appVersion).font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                }
             }
-            .font(.system(size: 11))
-            .padding(.horizontal, 4)
         }
-        .padding(12)
-    }
-
-    private var setupCard: some View {
-        let steps = store.setupProgress.steps
-        let index = (steps.firstIndex(of: store.setupProgress.step) ?? 0) + 1
-        return Button { store.showSetup(); page = .input } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label(L("首次准备"), systemImage: "checklist").font(.system(size: 12, weight: .semibold))
-                    Spacer(minLength: 4)
-                    Text("\(index)/\(steps.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                ProgressView(value: Double(index - 1), total: Double(max(steps.count, 1)))
-                    .progressViewStyle(.linear).tint(theme.accent)
-                Text(store.setupResumeSummary).font(.caption)
-                    .foregroundStyle(store.transcriptionReady && store.setupProgress.step == .trial ? theme.accent : .secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(L("继续")).font(.caption).foregroundStyle(theme.accent)
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.icon))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
+        .font(.system(size: 11))
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     private func navigation(_ title: String, icon: String, destination: WorkspacePage,

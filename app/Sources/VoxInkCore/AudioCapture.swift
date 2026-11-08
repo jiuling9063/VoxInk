@@ -25,32 +25,101 @@ public struct AudioCaptureSample: Equatable, Sendable {
 @MainActor
 public final class AudioCapture {
     public var deviceUID: String?
+    private let worker = DispatchQueue(label: "local.voxink.audio-capture", qos: .userInitiated)
+    private var session: CaptureSession?
+    private var started = false
+
+    public init() {}
+
+    public func requestPermission() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return true
+        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
+        default: return false
+        }
+    }
+
+    public var isRecording: Bool {
+        guard started, let session else { return false }
+        return worker.sync { session.isRecording }
+    }
+
+    public func start() async throws {
+        guard session == nil else { throw AudioCaptureError.alreadyRecording }
+        try Task.checkCancellation()
+        let next = CaptureSession()
+        let device = deviceUID
+        session = next
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                worker.async { [worker] in
+                    continuation.resume(with: Result { try next.start(deviceUID: device) })
+                }
+            }
+            try Task.checkCancellation()
+            guard session === next else { throw CancellationError() }
+            started = true
+        } catch {
+            if session === next { cancel() }
+            throw error
+        }
+    }
+
+    public func sample() -> AudioCaptureSample {
+        guard started, let session else { return .init(elapsed: 0, level: 0) }
+        return worker.sync { session.sample() }
+    }
+
+    public func stop() async throws -> URL {
+        guard started, let session else { throw AudioCaptureError.notRecording }
+        self.session = nil
+        started = false
+        return try await withCheckedThrowingContinuation { continuation in
+            worker.async {
+                continuation.resume(with: Result { try session.stop() })
+            }
+        }
+    }
+
+    public func cancel() {
+        guard let session else { return }
+        self.session = nil
+        started = false
+        // FIFO teardown runs before any subsequent start, including after a quick key release.
+        worker.async { session.cancel() }
+    }
+
+    public func finishPendingCleanup() async {
+        await withCheckedContinuation { continuation in
+            worker.async { continuation.resume() }
+        }
+    }
+}
+
+// The capture worker owns the AudioQueue lifecycle. Disposal waits for Core Audio's callbacks,
+// so those callbacks must run independently of the worker that disposes the queue.
+private final class CaptureSession: @unchecked Sendable {
     private var queue: AudioQueueRef?
     private var file: AudioFileID?
     private var recordingURL: URL?
+    private let callbacks = DispatchQueue(label: "local.voxink.audio-input-buffers", qos: .userInitiated)
+    // Accessed on callbacks. The file is opened before callback registration and closed after disposal.
+    private var shouldReenqueue = true
     private var bytes: Int64 = 0
     private var writeFailed = false
     private static let maximumBytes: Int64 = 60 * 16_000 * 2
 
-    public var isRecording: Bool {
-        guard let queue, !writeFailed else { return false }
+    var isRecording: Bool {
+        guard let queue, !callbacks.sync(execute: { writeFailed }) else { return false }
         var running: UInt32 = 0
         var size = UInt32(MemoryLayout.size(ofValue: running))
         return AudioQueueGetProperty(queue, kAudioQueueProperty_IsRunning, &running, &size) == noErr && running != 0
     }
 
-    public init() {}
-
-    public func requestPermission() async -> Bool {
-        await AVCaptureDevice.requestAccess(for: .audio)
-    }
-
-    public func start() throws {
+    func start(deviceUID: String?) throws {
         guard queue == nil else { throw AudioCaptureError.alreadyRecording }
         let url = try AudioTemporaryStorage.makeOutputURL()
         recordingURL = url
-        bytes = 0
-        writeFailed = false
         var format = AudioStreamBasicDescription(mSampleRate: 16_000, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
             mBytesPerPacket: 2, mFramesPerPacket: 1, mBytesPerFrame: 2, mChannelsPerFrame: 1,
@@ -58,8 +127,8 @@ public final class AudioCapture {
         do {
             try check(AudioFileCreateWithURL(url as CFURL, kAudioFileWAVEType, &format, .eraseFile, &file))
             try AudioTemporaryStorage.secureFile(at: url)
-            try check(AudioQueueNewInputWithDispatchQueue(&queue, &format, 0, .main) { [weak self] queue, buffer, _, _, _ in
-                guard let self, self.queue == queue, let file = self.file else { return }
+            try check(AudioQueueNewInputWithDispatchQueue(&queue, &format, 0, callbacks) { [weak self] queue, buffer, _, _, _ in
+                guard let self, let file = self.file else { return }
                 var count = min(buffer.pointee.mAudioDataByteSize, UInt32(Self.maximumBytes - self.bytes))
                 if count > 0 {
                     guard AudioFileWriteBytes(file, false, self.bytes, &count, buffer.pointee.mAudioData) == noErr else {
@@ -68,7 +137,7 @@ public final class AudioCapture {
                     }
                     self.bytes += Int64(count)
                 }
-                if self.bytes < Self.maximumBytes, AudioQueueEnqueueBuffer(queue, buffer, 0, nil) != noErr {
+                if self.shouldReenqueue, self.bytes < Self.maximumBytes, AudioQueueEnqueueBuffer(queue, buffer, 0, nil) != noErr {
                     self.writeFailed = true
                 }
             })
@@ -95,21 +164,21 @@ public final class AudioCapture {
         }
     }
 
-    public func sample() -> AudioCaptureSample {
+    func sample() -> AudioCaptureSample {
         var meter = AudioQueueLevelMeterState()
         var size = UInt32(MemoryLayout.size(ofValue: meter))
         if let queue { AudioQueueGetProperty(queue, kAudioQueueProperty_CurrentLevelMeter, &meter, &size) }
-        return .init(elapsed: Double(bytes) / 32_000, level: min(1, max(0, meter.mPeakPower)))
+        return .init(elapsed: callbacks.sync { Double(bytes) / 32_000 }, level: min(1, max(0, meter.mPeakPower)))
     }
 
-    public func stop() throws -> URL {
+    func stop() throws -> URL {
         guard let url = recordingURL else { throw AudioCaptureError.notRecording }
         close()
         recordingURL = nil
         return url
     }
 
-    public func cancel() {
+    func cancel() {
         close()
         if let recordingURL { AudioFilePreparation.cleanup(url: recordingURL) }
         recordingURL = nil
@@ -117,10 +186,13 @@ public final class AudioCapture {
 
     private func close() {
         if let queue {
-            self.queue = nil
+            callbacks.sync { shouldReenqueue = false }
             AudioQueueDispose(queue, true)
+            self.queue = nil
         }
-        if let file { AudioFileClose(file); self.file = nil }
+        callbacks.sync {
+            if let file { AudioFileClose(file); self.file = nil }
+        }
     }
 
     private func check(_ status: OSStatus) throws {

@@ -6,6 +6,7 @@ struct ModelConnectionEditor: View {
     @ObservedObject var store: AppStore
     @State private var draft: ModelConnectionDraft
     @State private var error = ""
+    @State private var showsDraftTest = false
     @State private var advanced = false
     @State private var reuseKey: Bool
     @State private var confirmingDeletion = false
@@ -39,6 +40,7 @@ struct ModelConnectionEditor: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     keySection
+                    if draft.provider == .custom { addressField }
                     modelField
                     if ModelProviderPreset.matching(draft.connection) == .volcengine {
                         Picker("API", selection: Binding(get: { draft.connection.polishingProtocol ?? .openai },
@@ -48,7 +50,6 @@ struct ModelConnectionEditor: View {
                         }
                         .pickerStyle(.menu)
                     }
-                    if draft.provider == .custom { addressField }
                     if (try? draft.connection.endpointURL())?.scheme == "http" {
                         Label(L("未加密连接，仅在可信的局域网中使用。"), systemImage: "exclamationmark.triangle")
                             .font(.callout).foregroundStyle(VoxInkTheme(scheme: scheme).caution)
@@ -60,7 +61,7 @@ struct ModelConnectionEditor: View {
             }.frame(height: advanced ? 450 : (draft.provider == .custom ? 430 : 330))
             Divider()
             VStack(alignment: .leading, spacing: 10) {
-                if store.connectionTestConnectionID == draft.connection.id {
+                if showsDraftTest, store.connectionTestConnectionID == draft.connection.id {
                     Text(store.connectionTestMessage).font(.caption).textSelection(.enabled)
                 }
                 if !error.isEmpty {
@@ -71,6 +72,7 @@ struct ModelConnectionEditor: View {
                     Button(draft.connection.purpose == .transcription ? L("选音频测试") : L("测试连接")) {
                         let audio = draft.connection.purpose == .transcription ? ModelServicePicker.chooseTestAudio() : nil
                         guard audio != nil || draft.connection.purpose == .polishing else { return }
+                        showsDraftTest = true
                         store.testModelConnection(draft.connection, audioURL: audio, apiKey: usesSavedKey ? nil : draft.apiKey,
                                                   clearKey: draft.clearKey, reuseKeyFrom: usesSavedKey ? credentialSource?.id : nil)
                     }.disabled(!canSave || !store.canEditModelServices)
@@ -82,7 +84,13 @@ struct ModelConnectionEditor: View {
                 }
             }.padding(20)
         }.frame(width: 520)
-        .onChange(of: usesSavedKey) { _, reuse in if reuse { draft.apiKey = "" } }
+        .onChange(of: draft.connection) { showsDraftTest = false }
+        .onChange(of: draft.apiKey) { showsDraftTest = false }
+        .onChange(of: draft.clearKey) { showsDraftTest = false }
+        .onChange(of: usesSavedKey) { _, reuse in
+            showsDraftTest = false
+            if reuse { draft.apiKey = "" }
+        }
         .confirmationDialog(L("删除此连接？正在使用时会切换回本地模型。"), isPresented: $confirmingDeletion) {
             Button(L("删除连接"), role: .destructive) {
                 do {
@@ -130,17 +138,16 @@ struct ModelConnectionEditor: View {
 
     private var modelField: some View {
         VStack(alignment: .leading, spacing: 7) {
-            WorkspaceModelField(title: L("模型"), text: Binding(
-                get: { draft.connection.model }, set: { draft.updateModel($0) }), accessory: {
-                ModelCatalogButton(connection: draft.connection, apiKey: draft.apiKey, clearKey: draft.clearKey,
+            WorkspaceRow(L("模型")) {
+                ModelCatalogButton(connection: draft.connection, apiKey: draft.apiKey,
+                                   canLoad: !draft.clearKey && (!draft.needsKey || usesSavedKey) && (try? draft.connection.endpointURL()) != nil,
                                    sourceID: usesSavedKey ? credentialSource?.id : nil, load: {
                     try await store.fetchModels(for: draft.connection, apiKey: usesSavedKey ? nil : draft.apiKey,
-                                                clearKey: draft.clearKey,
-                                                reuseKeyFrom: usesSavedKey ? credentialSource?.id : nil)
+                                                clearKey: draft.clearKey, reuseKeyFrom: usesSavedKey ? credentialSource?.id : nil)
                 }) { draft.updateModel($0) }
-            })
                 .disabled(!store.canEditModelServices)
                 .accessibilityIdentifier("connectionModel")
+            }
             if draft.provider == .volcengine {
                 Text(L("火山方舟可填写模型 ID 或已创建的推理接入点 ID。"))
                     .font(.caption).foregroundStyle(.secondary)

@@ -36,7 +36,7 @@ struct WorkspaceHelpView: View {
                 Section(L("遇到问题")) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("第一次使用，要准备什么？")).font(.subheadline.weight(.medium))
-                        Text(L("允许麦克风，并选择本地模型或配置 API 连接。自动写入还需要辅助功能权限和可用的快捷键，可通过上方“首次准备”逐项完成。"))
+                        Text(L("允许麦克风，并选择本地模型或配置 API 连接。自动写入还需要辅助功能权限和可用的快捷键。"))
                             .helpText()
                     }
                     Divider()
@@ -78,7 +78,7 @@ struct WorkspaceHelpView: View {
     @ViewBuilder private var actions: some View {
         Button(L("去工作台试试"), systemImage: "mic") { showDashboard() }
             .buttonStyle(VoxInkButtonStyle(prominent: true))
-        Button(L("重新运行首次引导"), systemImage: "checklist") { store.showSetup(); showDashboard() }
+        Button(L("查看使用引导"), systemImage: "checklist") { store.showSetup(); showDashboard() }
         SettingsLink { Label(L("偏好设置"), systemImage: "slider.horizontal.3") }
     }
 
