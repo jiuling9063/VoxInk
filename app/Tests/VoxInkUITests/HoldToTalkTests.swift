@@ -173,9 +173,13 @@ private actor HoldTranscriber: TranscriptionService {
         try await waitUntil { store.modelState == .ready }
         store.handleShortcutPressed()
         try await waitUntil { store.phase == .recording }
-        await store.cancel()
+        store.handleShortcutCancelled()
+        store.handleShortcutReleased()
+        try await waitUntil { store.phase == .ready }
         #expect(store.modelState == .ready)
         #expect(service.shutdownCount == 0)
+        await store.shutdown()
+        #expect(service.shutdownCount == 1)
     }
 
     @Test func busyKeysAndLateCancelledInferenceCannotLeakIntoNextSession() async throws {
@@ -249,6 +253,19 @@ private actor HoldTranscriber: TranscriptionService {
         #expect(store.phase == .ready)
         #expect(recorder.starts == 0)
         #expect(paste.texts.isEmpty)
+    }
+
+    @Test func sleepWhileWaitingForPermissionCannotStartRecordingOnWake() async throws {
+        let recorder = HoldRecorder(); recorder.waitForPermission = true
+        let paste = HoldPaste(); let store = make(recorder, paste)
+        store.handleShortcutPressed()
+        try await waitUntil { recorder.permission != nil }
+        store.handleSystemSleepChange(sleeping: true)
+        store.handleSystemSleepChange(sleeping: false)
+        recorder.permission?.resume(returning: true)
+        recorder.waitForPermission = false
+        try await recordAndRelease(store)
+        #expect(recorder.starts == 1 && paste.texts.count == 1)
     }
 
     @Test func shortTapDoesNotSendEmptyRecording() async {

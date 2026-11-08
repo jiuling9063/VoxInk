@@ -207,7 +207,7 @@ struct PolishSettingsContent: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(L("开启后先识别、再润色，最后写入一次。识别原文始终保留；Esc 取消整次输入。"))
                 Text(L("运行组件已内置，无需配置。模型按需下载，下载完成后可离线使用；高档位需要更多内存和等待时间。"))
-                Text(L("自动模式只选择已安装的模型。响应更快、兼顾、效果优先分别最多等待 6、12、30 秒；超时或结果不合格时使用未润色文字。"))
+                Text(L("自动模式只选择已安装的模型。模型加载最多等待 30 秒。就绪后，三个档位的推理时限分别为 6、12、30 秒。超时或结果不合格时保留原文。"))
                 Text(L("运行耗时只保存在本机，不包含输入文字。"))
             }.font(.caption).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)

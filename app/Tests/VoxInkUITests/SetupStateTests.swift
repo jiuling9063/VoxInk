@@ -96,6 +96,47 @@ private actor SetupTranscriber: TranscriptionService {
         try await waitUntil { store.canStart }
     }
 
+    private func sendSpeech(_ store: AppStore) async throws {
+        store.handleShortcutPressed()
+        try await waitUntil { store.phase == .recording }
+        store.handleShortcutReleased()
+        try await waitUntil { store.canStart }
+    }
+
+    @Test func fixedTextShortcutCanOnlyConfirmTextAndIsConsumedOnce() async throws {
+        let paste = SetupPaste(); paste.outcome = .sent
+        let store = try await readyStore(paste)
+        reachTrialStep(store, remote: false)
+        store.startSetupTextTest()
+        store.handleShortcutPressed()
+        store.handleShortcutReleased()
+        try await waitUntil { store.setupTrialCanConfirm }
+        #expect(store.isConfirmingFixedText && !store.fixedTextTestArmed)
+        store.confirmSetupTrial(true)
+        #expect(store.setupProgress.textConfirmed && !store.setupProgress.speechConfirmed)
+        #expect(!store.canCompleteSetup)
+        try await sendSpeech(store)
+        #expect(!store.isConfirmingFixedText)
+        store.confirmSetupTrial(true)
+        #expect(store.canCompleteSetup)
+    }
+
+    @Test func anotherOperationExpiresTheArmedTextShortcutAndPendingConfirmation() async throws {
+        let paste = SetupPaste(); paste.outcome = .sent
+        let store = try await readyStore(paste)
+        reachTrialStep(store, remote: false)
+        store.startSetupTextTest()
+        store.warmUp()
+        try await waitUntil { store.canStart }
+        #expect(!store.fixedTextTestArmed)
+        try await sendSpeech(store)
+        #expect(store.setupTrialCanConfirm && !store.isConfirmingFixedText)
+        store.warmUp()
+        try await waitUntil { store.canStart }
+        store.confirmSetupTrial(true)
+        #expect(!store.setupProgress.speechConfirmed)
+    }
+
     private final class MicrophoneProbe {
         var status: MicrophoneAuthorization = .authorized
     }
@@ -342,13 +383,24 @@ private actor SetupTranscriber: TranscriptionService {
         reachTrialStep(store, remote: usage.needsRemote)
         try await sendTestText(store)
         store.confirmSetupTrial(true)
-        store.advanceSetup()
+        try await sendSpeech(store)
+        store.confirmSetupTrial(true)
+        try #require(store.setupProgress.textConfirmed && store.canCompleteSetup)
         #expect(store.setShortcutCombination(.controlOptionSpace))
         #expect(store.setupProgress.textConfirmed == !usage.needsRemote && !store.setupProgress.speechConfirmed)
         #expect(!store.setupTrialCanConfirm && !store.canAdvanceSetup)
         #expect(store.setupProgress.step == (usage.needsRemote ? .remote : .trial))
         #expect(store.setupBlockingHint != nil)
-        if usage.needsRemote { #expect(!store.setupProgress.clipboardSyncConfirmed) }
+        if usage.needsRemote {
+            #expect(!store.setupProgress.clipboardSyncConfirmed)
+            store.confirmSetupClipboardSync(true)
+            store.advanceSetup()
+            store.confirmSetupTrial(true)
+            #expect(store.setupProgress.step == .trial && !store.canCompleteSetup)
+            try await sendSpeech(store)
+            store.confirmSetupTrial(true)
+            #expect(store.canCompleteSetup)
+        }
     }
 
     @Test func unchangedOrRejectedShortcutPreservesInputEvidence() async throws {

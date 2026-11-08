@@ -34,6 +34,9 @@ struct SetupView: View {
             }
         }
         .onChange(of: progress.step) { troubleshooting = false }
+        .onDisappear {
+            if store.fixedTextTestArmed { store.stopSetupTextTest() }
+        }
     }
 
     @ViewBuilder private var scenarioCards: some View {
@@ -118,20 +121,27 @@ struct SetupView: View {
                 HStack(spacing: 6) { channelNodes }
                 VStack(alignment: .leading, spacing: 5) { channelNodes }
             }
-            if store.transcriptionReady {
+            if store.fixedTextTestArmed {
+                Text(L("本次快捷键只写入测试文字。要试说一句，请先取消测试。"))
+                fixedTest
+            } else if store.transcriptionReady && !store.isConfirmingFixedText {
                 Text(progress.usage.needsRemote ? L("切到远端的记事本，说“明天下午开会”。") : L("切到任意输入框，说“明天下午开会”。")).font(.title3)
                 ViewThatFits(in: .horizontal) {
                     HStack { keyInstruction }
                     VStack(alignment: .leading) { keyInstruction }
                 }
-            } else {
+            } else if !store.transcriptionReady {
                 Text(store.setupDownloadSummary ?? store.transcriptionStatus)
                 fixedTest
             }
             if store.setupTrialCanConfirm {
                 Text(store.transcript).font(.transcriptBody(size: 17)).textSelection(.enabled)
                 Text(L("已发送到 \(store.shortcutTargetName ?? L("目标应用"))")).font(.caption)
-                Text(progress.usage.needsRemote ? L("远端出现这句话了吗？") : L("\(store.shortcutTargetName ?? L("目标应用"))里出现这句话了吗？"))
+                if store.isConfirmingFixedText {
+                    Text(L("目标输入框出现固定测试文字了吗？"))
+                } else {
+                    Text(progress.usage.needsRemote ? L("远端出现这句话了吗？") : L("\(store.shortcutTargetName ?? L("目标应用"))里出现这句话了吗？"))
+                }
                 Button(L("出现了")) { store.confirmSetupTrial(true); troubleshooting = false }
                     .buttonStyle(VoxInkButtonStyle(prominent: true))
             }
@@ -141,7 +151,7 @@ struct SetupView: View {
             }
             if troubleshooting || store.phase == .failed {
                 Divider()
-                if store.transcriptionReady { fixedTest }
+                if store.transcriptionReady && !store.fixedTextTestArmed { fixedTest }
                 Text(L("1. 复制测试文字，切换到同一个输入框，手动粘贴。此操作会替换当前剪贴板。"))
                 Button(L("复制测试文字")) { store.copySetupTestText() }
                 if progress.usage.needsRemote {

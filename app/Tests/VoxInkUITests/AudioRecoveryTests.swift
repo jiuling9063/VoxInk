@@ -134,6 +134,30 @@ private actor RecoveryStorageStub: AudioRecoveryStorage {
         #expect(service.urls.isEmpty && paste.calls == 0)
     }
 
+    @Test(arguments: [false, true])
+    func wakeRecoversSuspendedRecordingOnceEvenIfSleepNotificationWasMissed(missedSleep: Bool) async throws {
+        let recorder = RecoveryRecorder(), paste = RecoveryPaste(), service = RecoveryTranscriber()
+        let storage = RecoveryStorageStub()
+        let store = AppStore(service: service, pasteService: paste, recorder: recorder, preferences: nil,
+                             audioCleaner: { _ in }, audioRecovery: storage)
+        store.handleShortcutPressed()
+        try await wait { store.phase == .recording && store.level > 0 }
+        if !missedSleep {
+            recorder.isRecording = false
+            store.handleSystemSleepChange(sleeping: true)
+        }
+        store.handleSystemSleepChange(sleeping: false)
+        store.handleShortcutReleased()
+        try await wait { store.phase == .failed }
+        #expect(store.level == 0 && !recorder.isRecording)
+        #expect(store.recovery == .deviceDisconnected && store.retainedAudio != nil)
+        #expect(await storage.saves == 1)
+        #expect(service.urls.isEmpty && paste.calls == 0)
+        store.handleShortcutPressed()
+        try await wait { store.phase == .recording }
+        await store.cancel()
+    }
+
     @Test func failureRetryKeepsDeadlineAndNeverAutomaticallyPastes() async throws {
         let service = RecoveryTranscriber(); service.failure = RecoveryStorageStub.Failure.disk
         let storage = RecoveryStorageStub(); let paste = RecoveryPaste(); let store = make(service, storage, paste: paste)

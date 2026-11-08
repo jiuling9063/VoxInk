@@ -105,12 +105,18 @@ private actor QuickTranscriber: TranscriptionService {
         #expect(!store.transcript.isEmpty)
     }
 
-    @Test func permissionFailurePreservesTestAndDoesNotStartCapture() {
+    @Test func permissionFailurePreservesTestAndDoesNotStartCapture() async throws {
         let paste = StubPaste(); paste.accessibilityGranted = false
         let store = AppStore(service: QuickTranscriber(), pasteService: paste)
         store.armFixedTextTest(); store.handleGlobalShortcut()
         #expect(store.phase == .failed)
-        #expect(store.fixedTextTestArmed)
+        try #require(store.fixedTextTestArmed)
         #expect(paste.requests.isEmpty)
+        paste.accessibilityGranted = true
+        store.handleGlobalShortcut()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while !store.canStart && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(!store.fixedTextTestArmed)
+        #expect(paste.requests.map { $0.0 } == [L("语落固定文字测试：中文、English、123。")])
     }
 }

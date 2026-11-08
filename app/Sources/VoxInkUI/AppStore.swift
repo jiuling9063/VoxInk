@@ -283,7 +283,8 @@ import VoxInkCore
     @Published public private(set) var recordingLimitReached = false
     @Published public private(set) var shortcutTargetName: String?
     @Published public private(set) var shortcutStatus = L("快捷键尚未注册")
-    @Published public private(set) var fixedTextTestArmed = false
+    @Published private var fixedTextGeneration: UUID?
+    public var fixedTextTestArmed: Bool { fixedTextGeneration == generation }
     @Published public private(set) var shortcutMode: ShortcutMode
     @Published public private(set) var shortcutCombination: ShortcutCombination
     @Published public private(set) var remotePasteTiming: RemotePasteTiming = .stable
@@ -345,9 +346,11 @@ import VoxInkCore
     @Published public private(set) var setupCompleted: Bool
     @Published public private(set) var setupDeferred: Bool
     @Published public private(set) var setupProgress: SetupProgress
-    @Published public private(set) var setupTrialCanConfirm = false
+    @Published private var confirmedDeliveryGeneration: UUID?
+    public var setupTrialCanConfirm: Bool { confirmedDeliveryGeneration == generation }
     private enum TrialKind { case text, speech }
     private var setupTrialKind: TrialKind?
+    var isConfirmingFixedText: Bool { setupTrialCanConfirm && setupTrialKind == .text }
     @Published private(set) var setupNotice: String?
     @Published var setupHandoffVisible = false
     private var setupDownload: Task<Void, Never>?
@@ -421,6 +424,8 @@ import VoxInkCore
     @Published public private(set) var isRecordingShortcut = false
     private var suspendShortcut: (() -> Void)?
     private var holdRecording = false
+    private var recordingPermissionGeneration: UUID?
+    private var systemSleeping = false
     private let service: any TranscriptionService
     public let dictionary: UserDictionaryController?
     private let pasteService: any PasteService
@@ -616,7 +621,7 @@ import VoxInkCore
         refreshInputDevices()
         (recorder as? AudioCapture)?.deviceUID = selectedDeviceUID
         deviceMonitor.start(changed: { [weak self] in self?.refreshInputDevices() },
-                            sleeping: { [weak self] in self?.interruptRecording() })
+                            sleepChanged: { [weak self] in self?.handleSystemSleepChange(sleeping: $0) })
         startPolishPressureMonitoring()
         refreshPolishDevice(); schedulePolishWarmup()
         guard canStart else { return }
@@ -762,8 +767,8 @@ import VoxInkCore
     }
 
     private func clearSetupTrial() {
-        fixedTextTestArmed = false
-        setupTrialCanConfirm = false
+        fixedTextGeneration = nil
+        confirmedDeliveryGeneration = nil
         setupTrialKind = nil
     }
 
@@ -784,18 +789,21 @@ import VoxInkCore
         saveSetupProgress()
     }
 
-    private func invalidateRemoteSetup() {
+    private func invalidateRemoteSetup(notice: String = L("远程设置已更改，请重新确认")) {
         guard setupProgress.usage.needsRemote else { return }
         setupProgress.clipboardSyncConfirmed = false
         setupProgress.invalidateTrials()
         clearSetupTrial()
         if setupProgress.step == .trial { setupProgress.step = .remote }
-        if setupProgress.step == .remote { setupNotice = L("远程设置已更改，请重新确认") }
+        if setupProgress.step == .remote { setupNotice = notice }
         saveSetupProgress()
     }
 
     private func invalidateShortcutSetup() {
-        if setupProgress.usage.needsRemote { invalidateRemoteSetup(); return }
+        if setupProgress.usage.needsRemote {
+            invalidateRemoteSetup(notice: L("快捷键已更改，请重新确认远程设置并再试一句。"))
+            return
+        }
         setupProgress.speechConfirmed = false
         clearSetupTrial()
         setupNotice = L("快捷键已更改，请再试一句。")
@@ -821,6 +829,7 @@ import VoxInkCore
         saveSetupProgress()
     }
 
+    /// Fixed text can be sent while the speech model downloads and never requires the microphone.
     public func startSetupTextTest() {
         guard isShowingSetup, setupProgress.step == .trial, canStart, pastePermissionGranted, shortcutAvailable else { return }
         clearSetupTrial()
@@ -965,15 +974,17 @@ import VoxInkCore
     }
 
     private func beginRecording(target: PasteTarget?) {
-        guard canStart, setupDownload == nil else { return }
+        guard canStart, setupDownload == nil, !systemSleeping else { return }
         activeTarget = target; lastTarget = nil; pasteOutcome = nil; recovery = nil
         shortcutTargetName = target?.name
         let token = UUID(); generation = token
+        recordingPermissionGeneration = token
         phase = .loading; status = L("正在检查麦克风权限…")
         operation = Task {
             guard generation == token, !Task.isCancelled else { return }
             let allowed = await recorder.requestPermission()
             guard generation == token else { return }
+            recordingPermissionGeneration = nil
             microphoneAuthorization = allowed ? .authorized : microphoneStatus()
             guard allowed else { fail(L("请在系统设置 → 隐私与安全 → 麦克风中允许语落 VoxInk。"), recovery: .microphone); return }
             do {
@@ -1001,16 +1012,42 @@ import VoxInkCore
         }
     }
 
+    func handleSystemSleepChange(sleeping: Bool) {
+        systemSleeping = sleeping
+        shortcutIsHeld = false
+        holdRecording = false
+        if phase == .loading, recordingPermissionGeneration == generation {
+            recordingPermissionGeneration = nil
+            generation = UUID()
+            operation?.cancel(); operation = nil
+            activeTarget = nil
+            clearSetupTrial()
+            fail(L("录音设备已断开"), recovery: .deviceDisconnected)
+        } else {
+            // Wake also covers a missed sleep notification or a missing key-up event.
+            interruptRecording()
+        }
+        if !sleeping {
+            refreshInputDevices()
+            if !isRecordingShortcut, let registerShortcut {
+                suspendShortcut?()
+                configureShortcutRegistration(registerShortcut)
+            }
+        }
+    }
+
     private func interruptRecording() {
         guard phase == .recording else { return }
         meterTask?.cancel(); meterTask = nil
         holdRecording = false
+        level = 0
         clearSetupTrial()
         localRetryAvailable = false
         activeTarget = nil
         lastTarget = nil
         let token = generation
         do {
+            // stop closes even a suspended queue and transfers the file; cancel would delete it.
             let url = try recorder.stop()
             phase = .loading
             let task = Task {
@@ -1319,7 +1356,7 @@ import VoxInkCore
     }
 
     private func fail(_ message: String, recovery: RecoveryAction) {
-        setupTrialKind = nil; setupTrialCanConfirm = false
+        setupTrialKind = nil; confirmedDeliveryGeneration = nil
         self.recovery = recovery; phase = .failed; status = message
     }
 
@@ -1411,7 +1448,7 @@ import VoxInkCore
     }
 
     public func handleShortcutPressed() {
-        guard !isRecordingShortcut, !shortcutIsHeld else { return }
+        guard !systemSleeping, !isRecordingShortcut, !shortcutIsHeld else { return }
         shortcutIsHeld = true
         if fixedTextTestArmed { handleGlobalShortcut(); return }
         if shortcutMode == .holdToTalk {
@@ -1452,9 +1489,10 @@ import VoxInkCore
         refreshPermissions()
     }
 
+    /// A new session invalidates the one-shot paste intent even if no shortcut was pressed.
     public func armFixedTextTest() {
         guard canStart else { return }
-        fixedTextTestArmed.toggle()
+        fixedTextGeneration = fixedTextTestArmed ? nil : generation
         recovery = nil
         status = fixedTextTestArmed ? L("固定文字测试已就绪：切换到输入框按 \(shortcutCombination.title)") : L("已关闭固定文字测试")
     }
@@ -1462,14 +1500,14 @@ import VoxInkCore
     public func scheduleFixedTextTest(after delay: Duration = .seconds(3)) {
         guard canStart else { return }
         let token = UUID(); generation = token
-        fixedTextTestArmed = false; pasteOutcome = nil; recovery = nil; recordingLimitReached = false
+        fixedTextGeneration = nil; pasteOutcome = nil; recovery = nil; recordingLimitReached = false
         activeTarget = nil; lastTarget = nil; shortcutTargetName = nil
         phase = .loading; status = L("请切换到输入框，3 秒后写入固定测试文字…")
         operation = Task {
             do { try await Task.sleep(for: delay) } catch { return }
             guard generation == token, !Task.isCancelled else { return }
             phase = .ready
-            fixedTextTestArmed = true
+            fixedTextGeneration = token
             handleGlobalShortcut()
         }
     }
@@ -1477,7 +1515,6 @@ import VoxInkCore
     public func handleGlobalShortcut() {
         if phase == .recording { finishRecording(); return }
         guard canStart else { return }
-        setupTrialKind = nil; setupTrialCanConfirm = false
         guard let target = pasteService.captureTarget() else {
             fail(L("请先切换到目标应用的输入框，再按 \(shortcutCombination.title)"), recovery: .checkTarget)
             return
@@ -1488,19 +1525,12 @@ import VoxInkCore
             fail(L("文字写入需要辅助功能权限，请在语落窗口点击“允许文字写入”"), recovery: .pastePermission)
             return
         }
-        if isShowingSetup {
-            let isRemoteTarget = remoteApplications.contains { $0.bundleID == target.bundleID }
-            if setupProgress.usage.needsRemote == isRemoteTarget {
-                if fixedTextTestArmed && setupProgress.step == .trial { setupTrialKind = .text }
-                else if !fixedTextTestArmed && setupProgress.step == .trial {
-                    setupTrialKind = .speech
-                    setupProgress.speechConfirmed = false
-                    saveSetupProgress()
-                }
-            }
-        }
-        if fixedTextTestArmed {
-            fixedTextTestArmed = false
+        let sendFixedText = fixedTextTestArmed
+        clearSetupTrial()
+        let isRemoteTarget = remoteApplications.contains { $0.bundleID == target.bundleID }
+        let isTrialTarget = isShowingSetup && setupProgress.step == .trial && setupProgress.usage.needsRemote == isRemoteTarget
+        if sendFixedText {
+            if isTrialTarget { setupTrialKind = .text }
             let token = UUID(); generation = token
             activeTarget = target; lastTarget = target; pasteOutcome = nil; recovery = nil
             transcriptAudioID = nil
@@ -1513,7 +1543,15 @@ import VoxInkCore
                 await deliver(text, to: target, token: token)
             }
             operation = task; audioOperation = task
-        } else { beginRecording(target: target) }
+        } else {
+            guard setupDownload == nil else { return }
+            if isTrialTarget {
+                setupTrialKind = .speech
+                setupProgress.speechConfirmed = false
+                saveSetupProgress()
+            }
+            beginRecording(target: target)
+        }
     }
 
     public func pasteAgain() {
@@ -1750,7 +1788,7 @@ import VoxInkCore
         default: phase = .ready; recovery = nil
         }
         if outcome == .sent, isShowingSetup, setupProgress.step == .trial, setupTrialKind != nil {
-            setupTrialCanConfirm = true
+            confirmedDeliveryGeneration = token
         } else { setupTrialKind = nil }
         status = outcome.message
     }

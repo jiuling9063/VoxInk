@@ -3,7 +3,8 @@ import Testing
 @testable import VoxInkUI
 
 struct ResidentPolishingTests {
-    private func fixture(idle: Duration = .seconds(120), loadSeconds: Double = 0.05) throws -> (URL, LocalPolishingService) {
+    private func fixture(idle: Duration = .seconds(120), loadSeconds: Double = 0.05,
+                         loadingTimeout: Duration = .seconds(30)) throws -> (URL, LocalPolishingService) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let scripts = root.appendingPathComponent("Polish")
         try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: true)
@@ -26,7 +27,7 @@ struct ResidentPolishingTests {
         try Data(worker.utf8).write(to: scripts.appendingPathComponent("polish_worker.py"))
         try JSONEncoder().encode(["python": "/usr/bin/python3", "worker": "/missing", "model": "/missing"])
             .write(to: root.appendingPathComponent("runtime.json"))
-        return (root, LocalPolishingService(resources: root, root: root, idleTimeout: idle))
+        return (root, LocalPolishingService(resources: root, root: root, idleTimeout: idle, loadingTimeout: loadingTimeout))
     }
 
     @Test func prewarmAndRepeatedRequestsReuseSameProcessThenSwitch() async throws {
@@ -51,14 +52,23 @@ struct ResidentPolishingTests {
         await service.release()
     }
 
-    @Test func loadingDoesNotConsumeInferenceDeadline() async throws {
+    @Test(arguments: [false, true]) func loadingDoesNotConsumeInferenceDeadline(prewarm: Bool) async throws {
         let (root, service) = try fixture(loadSeconds: 1)
         defer { try? FileManager.default.removeItem(at: root) }
-        let warm = Task { try await service.prepare(model: .light) }
-        try await Task.sleep(for: .milliseconds(20))
-        let result = try await service.polish("测试", model: .light, timeout: .milliseconds(80))
+        let warm = prewarm ? Task { try await service.prepare(model: .light) } : nil
+        if prewarm { try await Task.sleep(for: .milliseconds(20)) }
+        let result = try await service.polish("测试", model: .light, timeout: .milliseconds(250))
         #expect(result.accepted)
-        try await warm.value
+        try await warm?.value
+        await service.release()
+    }
+
+    @Test func stalledColdStartReportsLoadingTimeout() async throws {
+        let (root, service) = try fixture(loadSeconds: 5, loadingTimeout: .milliseconds(150))
+        defer { try? FileManager.default.removeItem(at: root) }
+        await #expect(throws: LocalPolishingService.Failure.loadingTimeout) {
+            try await service.polish("测试", model: .light, timeout: .seconds(2))
+        }
         await service.release()
     }
 

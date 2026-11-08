@@ -10,14 +10,14 @@ struct InputDevice: Identifiable, Equatable {
 @MainActor final class InputDeviceMonitor {
     private let selectors = [kAudioHardwarePropertyDefaultInputDevice, kAudioHardwarePropertyDevices]
     private var listener: AudioObjectPropertyListenerBlock?
-    private var sleepObserver: NSObjectProtocol?
+    private var powerObservers: [NSObjectProtocol] = []
 
     static var devices: [InputDevice] {
         AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified)
             .devices.map { InputDevice(id: $0.uniqueID, name: $0.localizedName) }
     }
 
-    func start(changed: @escaping @MainActor () -> Void, sleeping: @escaping @MainActor () -> Void) {
+    func start(changed: @escaping @MainActor () -> Void, sleepChanged: @escaping @MainActor (Bool) -> Void) {
         guard listener == nil else { return }
         let block: AudioObjectPropertyListenerBlock = { _, _ in Task { @MainActor in changed() } }
         listener = block
@@ -26,8 +26,12 @@ struct InputDevice: Identifiable, Equatable {
                                                      mElement: kAudioObjectPropertyElementMain)
             AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, block)
         }
-        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification,
-            object: nil, queue: .main) { _ in MainActor.assumeIsolated { sleeping() } }
+        let center = NSWorkspace.shared.notificationCenter
+        powerObservers = [NSWorkspace.willSleepNotification, NSWorkspace.didWakeNotification].map { name in
+            center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { sleepChanged(name == NSWorkspace.willSleepNotification) }
+            }
+        }
     }
 
     func stop() {
@@ -38,7 +42,7 @@ struct InputDevice: Identifiable, Equatable {
             AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener)
         }
         self.listener = nil
-        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
-        sleepObserver = nil
+        for observer in powerObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+        powerObservers.removeAll()
     }
 }

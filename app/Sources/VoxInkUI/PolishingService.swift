@@ -43,11 +43,12 @@ public actor LocalPolishingService: PolishingService {
     }
 
     public enum Failure: Error, LocalizedError {
-        case unavailable, tooLong, timeout, failed
+        case unavailable, tooLong, loadingTimeout, timeout, failed
         public var errorDescription: String? {
             switch self {
             case .unavailable: L("本地润色模型或运行环境尚未安装，原文已保留。")
             case .tooLong: L("单次润色最多支持 2000 字，原文已保留。")
+            case .loadingTimeout: L("润色模型加载超时。")
             case .timeout: L("润色超过等待上限，已停止并保留原文。")
             case .failed: L("本地润色失败，原文已保留。")
             }
@@ -63,15 +64,15 @@ public actor LocalPolishingService: PolishingService {
     private var loading: (id: UUID, model: PolishModel, task: Task<Void, Error>)?
     private var idleTask: Task<Void, Never>?
     private var activeRequest: UUID?
-    private static let loadingTimeout: Duration = .seconds(30)
+    private let loadingTimeout: Duration
     private var epoch = UUID()
 
     public init(resources: URL? = Bundle.main.resourceURL,
                 root: URL = URL.applicationSupportDirectory.appendingPathComponent("VoxInk/Polish"),
-                idleTimeout: Duration = .seconds(120)) {
+                idleTimeout: Duration = .seconds(120), loadingTimeout: Duration = .seconds(30)) {
         self.resources = resources
         bundledWorker = resources?.appendingPathComponent("Polish/polish_worker.py")
-        self.root = root; self.idleTimeout = idleTimeout
+        self.root = root; self.idleTimeout = idleTimeout; self.loadingTimeout = loadingTimeout
     }
 
     static func modelDirectory(_ model: PolishModel, root: URL, config: Configuration) -> URL? {
@@ -92,11 +93,12 @@ public actor LocalPolishingService: PolishingService {
 
     public func prepare(model: PolishModel) async throws {
         guard activeRequest == nil else { return }
-        try await ensureReady(model: model, timeout: Self.loadingTimeout)
+        try await ensureReady(model: model)
         scheduleIdleRelease()
     }
 
-    private func ensureReady(model: PolishModel, timeout: Duration) async throws {
+    private func ensureReady(model: PolishModel) async throws {
+        let deadline = ContinuousClock.now.advanced(by: loadingTimeout)
         idleTask?.cancel()
         if let pending = loading {
             try await pending.task.value
@@ -114,9 +116,16 @@ public actor LocalPolishingService: PolishingService {
         let task = Task { [client] in
             await client.shutdown()
             try Task.checkCancellation()
-            _ = try await client.start(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
-                arguments: ["-p", "(version 1)(allow default)(deny network*)", config.python, "-B", "-E", "-s", worker,
-                            directory.path, "--resident"], readyTimeout: timeout)
+            // Waiting for another prewarm and replacing its worker use the same loading budget.
+            let remaining = ContinuousClock.now.duration(to: deadline)
+            guard remaining > .zero else { throw Failure.loadingTimeout }
+            do {
+                _ = try await client.start(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+                    arguments: ["-p", "(version 1)(allow default)(deny network*)", config.python, "-B", "-E", "-s", worker,
+                                directory.path, "--resident"], readyTimeout: remaining)
+            } catch ResidentWorkerError.timeout {
+                throw Failure.loadingTimeout
+            }
         }
         loading = (id, model, task)
         do {
@@ -157,7 +166,7 @@ public actor LocalPolishingService: PolishingService {
         }
         do {
             return try await withTaskCancellationHandler {
-                try await ensureReady(model: model, timeout: Self.loadingTimeout)
+                try await ensureReady(model: model)
                 try Task.checkCancellation()
                 struct Request: Encodable { let request_id: UUID; let text: String; let max_tokens: Int; let language: SpeechLanguage; let system_prompt: String? }
                 struct Response: Decodable { let result: PolishResult }
