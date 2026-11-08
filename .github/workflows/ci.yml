@@ -10,6 +10,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       VOXINK_UI_LANGUAGE: zh-Hans
     steps:
       - uses: actions/checkout@v6
