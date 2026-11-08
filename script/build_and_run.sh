@@ -81,6 +81,7 @@ BUNDLE="$STAGE/VoxInk.app"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/Worker"
 cp "$APP_BIN/VoxInk" "$BUNDLE/Contents/MacOS/VoxInk"
 for resource in "$APP_BIN/"*.bundle; do
+  [[ "$resource" == *Tests.bundle ]] && continue
   /usr/bin/ditto --norsrc --noextattr "$resource" "$BUNDLE/Contents/Resources/$(basename "$resource")"
 done
 ICONSET="$STAGE/VoxInk.iconset"
@@ -126,6 +127,12 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
+<key>SUFeedURL</key><string>https://github.com/jiuling9063/VoxInk/releases/latest/download/appcast.xml</string>
+<key>SUPublicEDKey</key><string>to96OjjneqewteCgjFHaWAI/QnkPuvKKx5CuBMg/jKY=</string>
+<key>SURequireSignedFeed</key><true/>
+<key>SUVerifyUpdateBeforeExtraction</key><true/>
+<key>SUEnableAutomaticChecks</key><false/>
+<key>SUAllowsAutomaticUpdates</key><false/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>VoxInk Workspace</string><key>CFBundleURLSchemes</key><array><string>voxink</string></array></dict></array>
 <key>NSLocalNetworkUsageDescription</key><string>语落会连接你选择的局域网识别或润色服务。</string>
 <key>NSAppTransportSecurity</key><dict>
@@ -154,6 +161,15 @@ sign_options=(--force --sign "$SIGN_IDENTITY")
 if [[ "$SIGN_IDENTITY" != - ]]; then
   sign_options+=(--options runtime --timestamp)
 fi
+mkdir -p "$BUNDLE/Contents/Frameworks"
+SPARKLE="$BUNDLE/Contents/Frameworks/Sparkle.framework"
+ditto --norsrc --noextattr "$APP_BIN/Sparkle.framework" "$SPARKLE"
+cp "$APP_BUILD/artifacts/sparkle/Sparkle/LICENSE" "$BUNDLE/Contents/Resources/Sparkle-LICENSE.txt"
+# The direct-distribution app is unsandboxed and uses Sparkle's bundled installer.
+rm -rf "$SPARKLE/Versions/B/XPCServices" "$SPARKLE/XPCServices"
+for helper in "$SPARKLE/Versions/B/Autoupdate" "$SPARKLE/Versions/B/Updater.app" "$SPARKLE"; do
+  /usr/bin/codesign "${sign_options[@]}" "$helper"
+done
 /usr/bin/codesign "${sign_options[@]}" "$BUNDLE/Contents/Resources/Worker/voxink-qwen-smoke"
 /usr/bin/codesign "${sign_options[@]}" --entitlements "$ROOT/app/VoxInk.entitlements" "$BUNDLE"
 /usr/bin/codesign --verify --deep --strict "$BUNDLE"

@@ -773,5 +773,7 @@
   "自动模式只选择已安装的模型。模型加载最多等待 30 秒。就绪后，三个档位的推理时限分别为 6、12、30 秒。超时或结果不合格时保留原文。": "Automatic mode uses installed models. Loading can take up to 30 seconds. Once ready, the three presets allow 6, 12, or 30 seconds for inference. A timeout or a rejected result keeps the original text.",
   "本次快捷键只写入测试文字。要试说一句，请先取消测试。": "The next shortcut press pastes the test text. Cancel this test to try dictation.",
   "目标输入框出现固定测试文字了吗？": "Did the fixed test text appear in the target field?",
-  "快捷键已更改，请重新确认远程设置并再试一句。": "The shortcut changed. Confirm the remote settings and try dictation again."
+  "快捷键已更改，请重新确认远程设置并再试一句。": "The shortcut changed. Confirm the remote settings and try dictation again.",
+  "检查更新…": "Check for Updates…",
+  "更新到 {0}…": "Update to {0}…"
 }

@@ -35,3 +35,5 @@ Hugging Face Hub, Transformers and Tokenizers: https://github.com/huggingface
 (Apache License 2.0)
 Model weights are downloaded separately; their repository license files are
 retained alongside the downloaded model.
+
+Sparkle provides in-app software updates. Its license and bundled component notices are included in Sparkle-LICENSE.txt.

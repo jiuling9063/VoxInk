@@ -18,6 +18,18 @@ import VoxInkCore
     @Published public private(set) var connectionTestConnectionID: UUID?
     @Published private(set) var checksForUpdates = true
     @Published private(set) var availableVersion: String?
+    private var showUpdateWindow: (() -> Void)?
+
+    public func configureUpdateWindow(_ action: @escaping () -> Void) {
+        showUpdateWindow = action
+    }
+
+    public var canRequestUpdate: Bool { showUpdateWindow != nil && canEditModelServices }
+
+    public func requestUpdate() {
+        guard canRequestUpdate else { return }
+        showUpdateWindow?()
+    }
 
     func setChecksForUpdates(_ enabled: Bool) {
         checksForUpdates = enabled

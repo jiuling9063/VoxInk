@@ -57,9 +57,9 @@ struct WorkspaceHelpView: View {
                 }
             }
             Toggle(L("启动时检查更新"), isOn: Binding(get: { store.checksForUpdates }, set: { store.setChecksForUpdates($0) }))
-            if let version = store.availableVersion {
-                Link(L("有新版本 \(version)"), destination: URL(string: "https://github.com/jiuling9063/VoxInk/releases/latest")!)
-            }
+            Button(store.availableVersion.map { L("更新到 \($0)…") } ?? L("检查更新…")) {
+                store.requestUpdate()
+            }.disabled(!store.canRequestUpdate)
             Button(L("导出诊断信息…")) {
                 let panel = NSSavePanel()
                 panel.allowedContentTypes = [.plainText]

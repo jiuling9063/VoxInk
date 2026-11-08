@@ -13,6 +13,19 @@ private actor ReleaseFixture: ModelHTTPTransport {
 }
 
 @MainActor struct UpdateCheckTests {
+    @Test func explicitUpdateOpensInstallerEvenWhenLaunchChecksAreOff() {
+        let store = AppStore(preferences: nil)
+        var checks = 0
+        store.configureUpdateWindow { checks += 1 }
+        store.setChecksForUpdates(false)
+        store.requestUpdate()
+        #expect(checks == 1)
+        store.configureShortcutRegistration { _ in true }
+        #expect(store.beginShortcutRecording())
+        store.requestUpdate()
+        #expect(checks == 1)
+    }
+
     @Test func checksAtMostDailyAcrossLaunchesAndHonorsPreference() async throws {
         let name = "release-check-\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: name))

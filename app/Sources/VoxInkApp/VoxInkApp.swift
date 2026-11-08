@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Combine
 import SwiftUI
+import Sparkle
 import VoxInkUI
 import VoxInkCore
 
@@ -13,7 +14,7 @@ import VoxInkCore
     static let loginItem = LoginItemController()
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     var store: AppStore?
     private var quitting = false
     private var terminationSignalSource: DispatchSourceSignal?
@@ -22,6 +23,7 @@ import VoxInkCore
     private var observation: AnyCancellable?
     private var feedbackUpdate: Task<Void, Never>?
     private var mainWindow: WorkspaceWindowController?
+    private var updateController: SPUStandardUpdaterController?
 
     func showMainWindow() {
         guard let store else { return }
@@ -80,6 +82,9 @@ import VoxInkCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         connect(ApplicationState.store)
+        let controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
+        updateController = controller
+        store?.configureUpdateWindow { [weak controller] in controller?.checkForUpdates(nil) }
         showMainWindow()
         Darwin.signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
@@ -90,6 +95,18 @@ import VoxInkCore
         }
         source.resume()
         terminationSignalSource = source
+    }
+
+    func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+                 untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        guard let store, !store.canEditModelServices else { return false }
+        Task { @MainActor in
+            while !store.canEditModelServices && !quitting {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            if !quitting { installHandler() }
+        }
+        return true
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateLater }
@@ -117,6 +134,7 @@ import VoxInkCore
             Button(L("复制结果")) { store.copyResult() }.disabled(store.transcript.isEmpty || !store.canStart)
             Divider()
             SettingsLink { Text(L("设置…")) }.keyboardShortcut(",")
+            Button(L("检查更新…")) { store.requestUpdate() }.disabled(!store.canRequestUpdate)
             Button(L("退出语落")) { NSApp.terminate(nil) }.keyboardShortcut("q")
         }
         Settings {

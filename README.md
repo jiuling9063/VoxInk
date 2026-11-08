@@ -67,6 +67,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 ## 安装与开始使用
 
 1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.22-macOS-arm64.dmg`。
+   已安装 0.1.22 或更高版本时，也可在语落菜单或“使用方法”中点击“检查更新…”，按提示安装并重新启动。
 2. 打开安装盘，将 **VoxInk** 拖入 **应用程序**；更新前先退出旧版。
 3. 打开 App，按首次引导选择本机或远程输入，允许麦克风和文字写入权限，下载识别模型或配置 API 转写。
 4. 远程输入需添加远程工具，确认远端系统对应的粘贴方式及剪贴板同步。使用 UU 时，按页面提示将当前语落快捷键加入 UU“设置 → 键盘 → 仅控制端响应的快捷键”。
@@ -161,3 +162,7 @@ plans/                  阶段性方案与历史计划
 仓库尚未指定项目级开源许可证；源码可访问不代表已授予开源再分发授权。对外再分发或商业授权请先与维护者确认。
 
 感谢 Qwen、MLX、speech-swift、OpenCCSwift 等上游项目。第三方组件和模型适用各自许可，声明见 [ThirdPartyNotices](app/ThirdPartyNotices.txt)；随包运行时与下载模型保留各自许可文件。
+
+### 发布应用内更新
+
+签名、公证并装订最终 DMG 后，运行 `script/create_update_feed.sh /路径/VoxInk-版本号-macOS-arm64.dmg`。使用自定义 Swift 构建目录时，传入与打包一致的 `VOXINK_APP_BUILD`。脚本使用 Sparkle 工具和钥匙串中的 `local.voxink.preview` 更新签名账户，生成绑定该安装包的签名清单。将同目录的 `appcast.xml`、DMG 和 `SHA256SUMS.txt` 一起上传到对应版本的 GitHub Release，再发布为 Latest。后续版本沿用更新公钥并递增构建号。

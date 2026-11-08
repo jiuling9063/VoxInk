@@ -1,5 +1,5 @@
 {
-  "originHash" : "ac709b5791bb0fbf949082f164ea1dd05ff9763f1c82f5cd549519c2fbb3ddff",
+  "originHash" : "2ade7f99fcbd6a9025bbc40f9f64221a0d4c2e2ee8858e3110231b129dca86d7",
   "pins" : [
     {
       "identity" : "opencc-swift",
@@ -7,6 +7,15 @@
       "location" : "https://github.com/doggy8088/opencc-swift.git",
       "state" : {
         "revision" : "69fdd9601a7bee4485ea60847910e40744608012"
+      }
+    },
+    {
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle.git",
+      "state" : {
+        "revision" : "ab7d71291238df6e0492143b120c9b696a35f603",
+        "version" : "2.10.1"
       }
     }
   ],
