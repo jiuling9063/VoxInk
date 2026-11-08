@@ -103,7 +103,7 @@ struct SetupView: View {
                 Text(L("连接远端后，确认本机复制的文字能手动粘贴到远端。有“剪贴板同步”或“共享剪贴板”开关时，请在两端开启；默认同步的工具可直接验证。"))
                 Text(L("语落会临时替换剪贴板以发送文字。")).font(.caption)
                 Toggle(L("我已确认本机复制的文字可以粘贴到远端"), isOn: Binding(
-                    get: { progress.clipboardSyncConfirmed }, set: store.confirmSetupClipboardSync))
+                    get: { progress.clipboardSyncConfirmed }, set: { store.confirmSetupClipboardSync($0) }))
                     .disabled(store.remoteApplications.isEmpty)
                 DisclosureGroup(L("为什么需要确认")) {
                     Text(L("语落无法读取或代开这个开关；下一步会实际测试文字能否传过去。"))

@@ -116,7 +116,7 @@ struct InputSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
         WorkspacePicker(L("麦克风"), value: store.selectedDeviceUID == nil ? L("系统默认") : store.inputDeviceName,
-                        selection: Binding(get: { store.selectedDeviceUID }, set: store.selectDevice),
+                        selection: Binding(get: { store.selectedDeviceUID }, set: { store.selectDevice($0) }),
                         options: [(L("系统默认"), nil)] + store.inputDevices.map { ($0.name, Optional($0.id)) })
             .disabled(!store.canStart)
         ShortcutSettingsControl(store: store)

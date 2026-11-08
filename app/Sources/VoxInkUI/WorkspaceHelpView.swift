@@ -56,7 +56,7 @@ struct WorkspaceHelpView: View {
                     }
                 }
             }
-            Toggle(L("启动时检查更新"), isOn: Binding(get: { store.checksForUpdates }, set: store.setChecksForUpdates))
+            Toggle(L("启动时检查更新"), isOn: Binding(get: { store.checksForUpdates }, set: { store.setChecksForUpdates($0) }))
             if let version = store.availableVersion {
                 Link(L("有新版本 \(version)"), destination: URL(string: "https://github.com/jiuling9063/VoxInk/releases/latest")!)
             }
