@@ -14,7 +14,19 @@ jobs:
       VOXINK_UI_LANGUAGE: zh-Hans
     steps:
       - uses: actions/checkout@v6
+      - name: Fetch pinned Sparkle binary from the GitHub Releases API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(jq -er '.pins[] | select(.identity == "sparkle") | .state.version' app/Package.resolved)"
+          archive=Sparkle-for-Swift-Package-Manager.zip
+          url="https://github.com/sparkle-project/Sparkle/releases/download/$version/$archive"
+          # SwiftPM keys binary artifacts by their URL and verifies the package checksum.
+          key="$(printf '%s' "$url" | tr -c '[:alnum:]' '_')"
+          cache="$RUNNER_TEMP/voxink-swiftpm/artifacts"
+          mkdir -p "$cache"
+          gh release download "$version" -R sparkle-project/Sparkle -p "$archive" -O "$cache/$key"
       - name: Test Swift package
-        run: swift test --package-path app --no-parallel
+        run: swift test --package-path app --cache-path "$RUNNER_TEMP/voxink-swiftpm" --no-parallel
       - name: Check translations
         run: python3 script/check_localizations.py
