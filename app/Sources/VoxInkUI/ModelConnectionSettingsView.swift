@@ -36,7 +36,10 @@ struct ModelServicePicker: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onGeometryChange(for: Bool.self) { $0.size.width < 440 } action: { compact = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            let narrow = size.width < 440
+            if compact != narrow { compact = narrow }
+        }
         .sheet(item: $editing) { ModelConnectionEditor(store: store, connection: $0) }
     }
 
@@ -47,7 +50,7 @@ struct ModelServicePicker: View {
                 .accessibilityAddTraits(.isHeader)
                 .fixedSize()
             if purpose == .polishing {
-                Toggle(L("启用润色"), isOn: Binding(get: { store.polishingEnabled }, set: store.setPolishingEnabled))
+                Toggle(L("启用润色"), isOn: Binding(get: { store.polishingEnabled }, set: { store.setPolishingEnabled($0) }))
                     .toggleStyle(.switch).controlSize(.small).labelsHidden()
                     .disabled(!store.canEditModelServices)
             }

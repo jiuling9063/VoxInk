@@ -119,7 +119,7 @@ struct PolishSettingsContent: View {
             HStack(spacing: 12) {
                 Text(L("润色方式")).font(.callout).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Picker(L("润色方式"), selection: Binding(get: { store.polishStyle }, set: store.setPolishStyle)) {
+                Picker(L("润色方式"), selection: Binding(get: { store.polishStyle }, set: { store.setPolishStyle($0) })) {
                     ForEach(PolishStyle.allCases, id: \.self) { style in
                         Text(style.title).tag(style).help(style.detail)
                     }
