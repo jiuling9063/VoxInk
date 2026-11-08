@@ -14,6 +14,7 @@ benchmark/corpus/manifest.jsonl
 benchmark/results/
 benchmark/models/
 *.wav
+!app/Tests/VoxInkCoreTests/Fixtures/synthetic-white-noise.wav
 *.pcm
 *.m4a
 *.log

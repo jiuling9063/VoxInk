@@ -28,8 +28,19 @@ struct SpeechActivityTests {
         #expect(throws: SpeechActivityError.analysisFailed) { try evidence.assessment() }
     }
 
-    @Test func reproducedNoiseIsRejectedWithoutChangingTheFile() async throws {
-        let url = try #require(Bundle.module.url(forResource: "noise-regression", withExtension: "wav", subdirectory: "Fixtures"))
+    @Test func syntheticNoiseIsRejectedWithoutChangingTheFile() async throws {
+        let url = try #require(Bundle.module.url(forResource: "synthetic-white-noise", withExtension: "wav", subdirectory: "Fixtures"))
+        try await checkNoise(at: url)
+    }
+
+    private static let localRecording = Bundle.module.url(forResource: "noise-regression", withExtension: "wav", subdirectory: "Fixtures")
+
+    @Test(.enabled(if: localRecording != nil))
+    func reproducedNoiseIsRejectedWithoutChangingTheFile() async throws {
+        try await checkNoise(at: #require(Self.localRecording))
+    }
+
+    private func checkNoise(at url: URL) async throws {
         let before = try Data(contentsOf: url)
         #expect(try AudioFilePreparation.containsSignal(url: url))
         let result = try await SpeechActivityDetector.assess(url: url)
