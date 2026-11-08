@@ -1,6 +1,6 @@
-# API 连接（0.1.22）
+# API 连接（0.1.23）
 
-本页对应 0.1.22 的「识别与润色」界面。旧版用户升级后会保留已有服务与密钥。
+本页对应 0.1.23 的「识别与润色」界面。旧版用户升级后会保留已有服务与密钥。
 
 语音识别和文字润色可以独立选择本地模型或 API 连接。默认仍为本地识别、关闭润色；升级不会自动上传音频或文字。
 
@@ -37,6 +37,8 @@
 
 模型 ID 平时显示为文字，移入或聚焦后显示浅底与边框，可直接输入。API Key 支持系统粘贴和「粘贴」按钮，保持掩码显示；编辑时留空保留已有密钥。超时、额外 JSON 参数和清除密钥放在「高级设置」。
 
+旧方舟连接可在「识别与润色 → 文字润色 → 处理方式 → 设置…」中将 API 改为 Responses API，点「测试连接」验证后选择「保存并使用」。也可以切回 Chat Completions。
+
 ## 获取模型
 
 所有平台（包括自定义接口）的模型 ID 旁均提供“获取模型”，设置页与连接编辑窗口使用相同入口。点击后，按当前连接地址和密钥请求模型列表；无需认证的本机服务可以不填密钥。获取列表不发送音频或待润色文字。
@@ -60,6 +62,7 @@
 
 | 用途 | 协议和要求 |
 | --- | --- |
+| 火山方舟润色 | 新连接默认向 `responses` 发送模型 ID 和输入消息，从助手消息的 `output_text` 读取正文。单次请求默认设置 `store: false`。 |
 | 润色 | OpenAI Chat Completions：向 `chat/completions` 发送 JSON `model`、`messages`、`stream: false`；读取 `choices[0].message.content`，接受 `stop` 和 `length`，后者会提示结果可能被截断 |
 | 文件转写 | OpenAI Audio Transcriptions：向 `audio/transcriptions` 发送 multipart 的 `file`、`model`、`response_format: json`；读取 JSON `text` |
 | 认证 | 可选 `Authorization: Bearer <API Key>`；无需认证的本机服务可不填 |

@@ -147,6 +147,14 @@ enum ModelProviderPreset: String, CaseIterable, Identifiable {
     }
 }
 
+extension ModelConnection {
+    func sharesCredentialEndpoint(with other: Self) throws -> Bool {
+        if try endpointURL() == other.endpointURL() { return true }
+        // Ark accepts the same inference key at both of its built-in polishing endpoints.
+        return ModelProviderPreset.matching(self) == .volcengine && ModelProviderPreset.matching(other) == .volcengine
+    }
+}
+
 extension ModelServiceSettings {
     func credentialSource(for connection: ModelConnection) -> ModelConnection? {
         let provider = ModelProviderPreset.matching(connection)
@@ -223,9 +231,15 @@ struct ModelConnectionDraft {
         connection.model = model
     }
 
+    mutating func selectArkProtocol(_ value: PolishingProtocol) {
+        guard ModelProviderPreset.matching(connection) == .volcengine else { return }
+        connection.baseURL = ModelProviderPreset.volcengine.baseURL
+        connection.polishingProtocol = value
+    }
+
     var endpointChanged: Bool {
         guard let original else { return false }
-        return (try? original.endpointURL()) != (try? connection.endpointURL())
+        return (try? original.sharesCredentialEndpoint(with: connection)) != true
     }
 
     var needsKey: Bool {

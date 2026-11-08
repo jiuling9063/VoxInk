@@ -284,6 +284,29 @@ struct ModelCatalogTests {
         #expect(await transport.requests.isEmpty)
     }
 
+    @MainActor @Test func legacyArkConnectionCanTestAndSaveEitherOfficialProtocol() async throws {
+        let keys = CatalogCredentials(), transport = CatalogTransport()
+        let store = AppStore(preferences: nil, modelCredentials: keys, modelTransport: transport)
+        var legacy = ModelProviderPreset.volcengine.makeConnection(for: .polishing)
+        legacy.polishingProtocol = nil
+        legacy.model = "test-model"
+        legacy.baseURL += "/chat/completions"
+        try store.saveModelConnection(legacy, apiKey: "fixture")
+        var draft = ModelConnectionDraft(connection: legacy, isExisting: true)
+        draft.selectArkProtocol(.volcengine)
+        #expect(!draft.endpointChanged)
+        #expect(try draft.connection.endpointURL().path == "/api/v3/responses")
+        _ = try await store.fetchModels(for: draft.connection)
+        try store.saveModelConnection(draft.connection, apiKey: nil)
+        #expect(keys.writes == 1)
+        #expect(await transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer fixture")
+        draft.selectArkProtocol(.openai)
+        #expect(try draft.connection.endpointURL().path == "/api/v3/chat/completions")
+        draft.connection.baseURL += "/other"
+        #expect(draft.endpointChanged)
+        await #expect(throws: CloudServiceError.addressChanged) { try await store.fetchModels(for: draft.connection) }
+    }
+
     @MainActor @Test func customKeysStayAtTheirSavedAddressUnlessANewKeyIsProvided() async throws {
         let keys = CatalogCredentials(), transport = CatalogTransport()
         let store = AppStore(preferences: nil, modelCredentials: keys, modelTransport: transport)

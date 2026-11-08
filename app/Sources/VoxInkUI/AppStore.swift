@@ -1650,7 +1650,7 @@ import VoxInkCore
             key = try modelCredentials.read(sourceID)
         } else if key?.isEmpty != false,
                   let saved = modelServices.connections.first(where: { $0.id == connection.id }) {
-            guard try saved.endpointURL() == connection.endpointURL() else { throw CloudServiceError.addressChanged }
+            guard try saved.sharesCredentialEndpoint(with: connection) else { throw CloudServiceError.addressChanged }
             key = try modelCredentials.read(saved.id)
         }
         return CloudModelClient(connection: connection, apiKey: key, transport: modelTransport)
@@ -1670,7 +1670,7 @@ import VoxInkCore
             let previous = next.connections[index]
             if previous.purpose != connection.purpose,
                next.transcriptionID == connection.id || next.polishingID == connection.id { throw CloudServiceError.connectionInUse }
-            if try previous.endpointURL() != connection.endpointURL(), key?.isEmpty != false, !clearKey,
+            if try !previous.sharesCredentialEndpoint(with: connection), key?.isEmpty != false, !clearKey,
                try modelCredentials.read(connection.id) != nil { throw CloudServiceError.addressChanged }
             next.connections[index] = connection
         } else { next.connections.append(connection) }

@@ -40,6 +40,14 @@ struct ModelConnectionEditor: View {
                 VStack(alignment: .leading, spacing: 18) {
                     keySection
                     modelField
+                    if ModelProviderPreset.matching(draft.connection) == .volcengine {
+                        Picker("API", selection: Binding(get: { draft.connection.polishingProtocol ?? .openai },
+                                                         set: { draft.selectArkProtocol($0) })) {
+                            Text(verbatim: "Responses API").tag(PolishingProtocol.volcengine)
+                            Text(verbatim: "Chat Completions").tag(PolishingProtocol.openai)
+                        }
+                        .pickerStyle(.menu)
+                    }
                     if draft.provider == .custom { addressField }
                     if (try? draft.connection.endpointURL())?.scheme == "http" {
                         Label(L("未加密连接，仅在可信的局域网中使用。"), systemImage: "exclamationmark.triangle")
