@@ -22,6 +22,7 @@ import SwiftUI
     private let store: AppStore
     let navigation = WorkspaceNavigation()
     private var selectionObservation: AnyCancellable?
+    private var remoteSystemObservation: AnyCancellable?
 
     public init(store: AppStore, restoresFrame: Bool = true) {
         self.store = store
@@ -50,8 +51,24 @@ import SwiftUI
         } else {
             window.center()
         }
+        remoteSystemObservation = store.$remoteSystemRequest.compactMap { $0 }.receive(on: RunLoop.main).sink { [weak self] tool in
+            self?.presentRemoteSystemChoice(tool)
+        }
         selectionObservation = navigation.$page.sink { [weak self] page in
             self?.window?.title = L("\(page.title) — 语落 VoxInk")
+        }
+    }
+
+    private func presentRemoteSystemChoice(_ tool: RemoteToolChoice) {
+        guard let window, store.remoteSystemRequest?.id == tool.id else { return }
+        present()
+        let panel = NSPanel()
+        let view = RemoteSystemChoiceView(store: store, tool: tool) { [weak window, weak panel] in
+            if let panel { window?.endSheet(panel) }
+        }
+        panel.contentViewController = NSHostingController(rootView: view)
+        window.beginSheet(panel) { [weak self] _ in
+            self?.store.remoteSystemRequest = nil
         }
     }
 

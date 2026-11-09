@@ -17,6 +17,8 @@ private final class FakePasteEnvironment: PasteEnvironment {
     var writeResult: Result<Int, Error> = .success(2)
     var changeCount = 2
     var restoreSucceeds = true
+    var applicationPasteCount = 0
+    var applicationPasteEnabled = true
     var postedPasteCount = 0
     var postedTarget: PasteTarget?
     var postedUsingControl = false
@@ -42,7 +44,7 @@ private final class FakePasteEnvironment: PasteEnvironment {
     func requestAccessibility() -> Bool { accessibility }
     func isTargetValid(_ target: PasteTarget) -> Bool { targetIsValid }
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool { focused }
-    func focusedFieldSafety() -> FocusedFieldSafety {
+    func focusedFieldSafety(for target: PasteTarget) -> FocusedFieldSafety {
         fieldQueryCount += 1
         onFieldQuery?(fieldQueryCount)
         return fieldSafety ?? (secure ? .secure : .ordinary)
@@ -72,6 +74,11 @@ private final class FakePasteEnvironment: PasteEnvironment {
         return restoreSucceeds ? .restored : .failed
     }
     func areCommandModifiersReleased() -> Bool { modifiersReleased }
+    func performApplicationPaste(to target: PasteTarget, expectedChangeCount: Int) -> Bool {
+        guard applicationPasteEnabled, changeCount == expectedChangeCount else { return false }
+        applicationPasteCount += 1
+        return true
+    }
     func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool {
         postedPasteCount += 1
         postedTarget = target
@@ -102,6 +109,34 @@ private final class FakePasteEnvironment: PasteEnvironment {
 
 private struct FakeError: Error {}
 
+@Test @MainActor func nativeApplicationPasteIssuesOneCommandAndNeverRetriesWithKeys() async {
+    for enabled in [true, false] {
+        let environment = FakePasteEnvironment()
+        environment.applicationPasteEnabled = enabled
+        environment.fieldSafety = .applicationPasteCommand
+        let coordinator = PasteCoordinator(environment: environment)
+        let result = await coordinator.paste(text: "draft", to: target, sessionID: UUID())
+        await coordinator.finishPendingCleanup()
+        #expect(result == (enabled ? .sent : .fieldUnavailable))
+        #expect(environment.applicationPasteCount == (enabled ? 1 : 0))
+        #expect(environment.postedPasteCount == 0)
+        #expect(environment.restored != nil)
+    }
+}
+
+@Test @MainActor func lostWindowOrSecureInputBlocksPendingApplicationPaste() async {
+    for safety in [FocusedFieldSafety.unavailable, .secure] {
+        let environment = FakePasteEnvironment()
+        environment.fieldSafety = .applicationPasteCommand
+        environment.onFieldQuery = { check in if check == 3 { environment.fieldSafety = safety } }
+        let coordinator = PasteCoordinator(environment: environment)
+        let result = await coordinator.paste(text: "draft", to: target, sessionID: UUID())
+        #expect(!result.wasIssued)
+        #expect(environment.applicationPasteCount == 0 && environment.postedPasteCount == 0)
+        #expect(environment.restored != nil)
+    }
+}
+
 @Test @MainActor func failedFieldQueriesNeverIssuePaste() async {
     for failedCheck in 1...3 {
         let environment = FakePasteEnvironment()
@@ -110,7 +145,7 @@ private struct FakeError: Error {}
         }
         let coordinator = PasteCoordinator(environment: environment)
         let result = await coordinator.paste(text: "test", to: target, sessionID: UUID())
-        #expect(result == .failed(L("无法检查输入框，请稍后重试或手动复制")))
+        #expect(result == .fieldUnavailable)
         #expect(environment.postedPasteCount == 0)
         #expect(environment.snapshotCount == (failedCheck == 1 ? 0 : 1))
         #expect((environment.restored != nil) == (failedCheck > 1))
@@ -151,6 +186,16 @@ private struct FakeError: Error {}
     #expect(AppKitPasteEnvironment.classifyFieldQueryFailure(.cannotComplete, queryingSubrole: true) == .unavailable)
 }
 
+@Test @MainActor func appScopedFallbackRequiresAnInspectableTextControl() {
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXTextAreaRole, subrole: .ordinary) == .ordinary)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXTextAreaRole, subrole: .unsupported) == .ordinary)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXTextAreaRole, subrole: .unavailable) == .unavailable)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXTextFieldRole, subrole: .secure) == .secure)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXWindowRole, subrole: .ordinary) == .unavailable)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: kAXTextFieldRole, subrole: .unsupported) == .unavailable)
+    #expect(AppKitPasteEnvironment.appScopedSafety(role: nil, subrole: .ordinary) == .unavailable)
+}
+
 @Test func remoteProfilesMatchExactlyAndRejectAmbiguity() {
     let profiles = RemoteDeviceProfiles.make(mac: " Mini ， Shared,Mini", windows: "PC\nShared")
     #expect(profiles == ["Mini": false, "PC": true])
@@ -171,6 +216,28 @@ private struct FakeError: Error {}
         #expect(await coordinator.paste(text: "test", to: captured, sessionID: UUID()) == .sent)
         await coordinator.finishPendingCleanup()
         #expect(environment.postedUsingControl == (device == "PC"))
+    }
+}
+
+@Test(arguments: RemotePasteSystem.allCases)
+@MainActor func anonymousUUWindowUsesChosenSystemAndNamedDeviceOverridesIt(system: RemotePasteSystem) async throws {
+    let client = RemoteApplicationProfile.uuBundleID
+    let environment = FakePasteEnvironment()
+    environment.capturedTarget = .init(pid: 43, bundleID: client, name: "UU")
+    let coordinator = PasteCoordinator(environment: environment)
+    var profile = RemoteApplicationProfile(bundleID: client, name: "UU")
+    profile.defaultSystem = system
+    coordinator.setRemoteApplications([profile])
+    coordinator.setRemoteDevices(["Mini": false, "PC": true])
+    for device in ["", "Mini", "PC"] {
+        environment.currentDevice = device
+        let target = try #require(coordinator.captureTarget())
+        #expect(target.remoteDeviceName == (device.isEmpty ? nil : device))
+        let expectedControl = device.isEmpty ? system == .windowsLinux : device == "PC"
+        #expect(target.remoteUsesControl == expectedControl)
+        #expect(await coordinator.paste(text: "test", to: target, sessionID: UUID()) == .sent)
+        #expect(environment.postedUsingControl == expectedControl)
+        await coordinator.finishPendingCleanup()
     }
 }
 

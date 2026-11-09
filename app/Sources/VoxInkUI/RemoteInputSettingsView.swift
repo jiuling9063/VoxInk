@@ -5,6 +5,7 @@ import VoxInkCore
 struct RemoteInputSettingsView: View {
     @ObservedObject var store: AppStore
     @State private var choosingApplication = false
+    @State private var newTool: RemoteToolChoice?
     @State private var errorMessage: String?
     @State private var expanded: Bool
 
@@ -16,16 +17,21 @@ struct RemoteInputSettingsView: View {
     var body: some View {
         DisclosureGroup(L("远程工具"), isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 16) {
-                Text(L("为远程工具选择粘贴方式，并在该工具中开启剪贴板同步。"))
+                Text(L("请选择远端电脑的默认系统，并在远程工具中开启剪贴板同步。"))
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(store.remoteApplications) { profile in
                     VStack(alignment: .leading, spacing: 8) {
-                        WorkspacePicker(profile.name, value: profile.usesControl ? "Ctrl V · Windows / Linux" : "⌘ V · Mac", selection: Binding(get: { profile.usesControl }, set: {
-                            store.setRemoteApplication(.init(bundleID: profile.bundleID, name: profile.name, usesControl: $0))
-                        }), options: [("⌘ V · Mac", false), ("Ctrl V · Windows / Linux", true)])
+                        WorkspacePicker(profile.bundleID == RemoteApplicationProfile.uuBundleID ? L("UU 远程") : profile.name,
+                                        value: profile.defaultSystem.menuTitle, selection: Binding(get: { profile.defaultSystem }, set: { system in
+                            var updated = profile
+                            updated.defaultSystem = system
+                            store.setRemoteApplication(updated)
+                        }), options: RemotePasteSystem.allCases.map { ($0.menuTitle, $0) })
                         Button(L("移除此配置"), role: .destructive) { store.removeRemoteApplication(profile.bundleID) }
                             .font(.caption)
-                        if profile.bundleID == "com.netease.uuremote" {
+                        if profile.bundleID == RemoteApplicationProfile.uuBundleID {
+                            Text(L("窗口未显示设备名时使用默认系统。连接另一种系统时，可在语落菜单栏切换。"))
+                                .font(.caption).foregroundStyle(.secondary)
                             uuShortcutGuide
                         }
                     }
@@ -64,8 +70,11 @@ struct RemoteInputSettingsView: View {
                 }
                 let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
                     ?? url.deletingPathExtension().lastPathComponent
-                store.setRemoteApplication(.init(bundleID: id, name: name))
+                newTool = RemoteToolChoice(id: id, name: name)
             } catch { errorMessage = error.localizedDescription }
+        }
+        .sheet(item: $newTool) { tool in
+            RemoteSystemChoiceView(store: store, tool: tool)
         }
         .alert(L("远程工具"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button(L("好"), role: .cancel) { errorMessage = nil }
@@ -91,5 +100,50 @@ struct RemoteInputSettingsView: View {
             WorkspaceTextField(title: title, text: value, prompt: L("完整设备名"))
                 .accessibilityLabel(title)
         }
+    }
+}
+
+struct RemoteToolChoice: Identifiable {
+    let id: String
+    let name: String
+
+    func profile(for system: RemotePasteSystem) -> RemoteApplicationProfile {
+        RemoteApplicationProfile(bundleID: id, name: name, usesControl: system == .windowsLinux)
+    }
+}
+
+struct RemoteSystemChoiceView: View {
+    @ObservedObject var store: AppStore
+    let tool: RemoteToolChoice
+    var finishShortcutSetup: (() -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L("用\(tool.name)连接的电脑是什么系统？")).font(.headline)
+            Text(L("无法识别设备名时，将使用这里选择的粘贴键。"))
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                ForEach(RemotePasteSystem.allCases, id: \.self) { system in
+                    Button(system.menuTitle) {
+                        store.setRemoteApplication(tool.profile(for: system))
+                        finish()
+                    }.disabled(!store.canStart)
+                }
+            }
+            if finishShortcutSetup != nil {
+                Text(L("选好后，回到远程输入框再按语音快捷键。"))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                Button(L("取消")) { finish() }.keyboardShortcut(.cancelAction)
+            }
+        }.padding(20).frame(minWidth: 340, idealWidth: 400)
+    }
+
+    private func finish() {
+        if let finishShortcutSetup { finishShortcutSetup() }
+        else { dismiss() }
     }
 }

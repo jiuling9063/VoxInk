@@ -304,6 +304,10 @@ import VoxInkCore
     @Published public private(set) var uuMacDevices = ""
     @Published public private(set) var uuWindowsDevices = ""
     @Published public private(set) var remoteApplications: [RemoteApplicationProfile] = []
+    @Published var remoteSystemRequest: RemoteToolChoice?
+    public var uuRemoteApplication: RemoteApplicationProfile? {
+        remoteApplications.first { $0.bundleID == RemoteApplicationProfile.uuBundleID }
+    }
     public func setRemoteApplication(_ profile: RemoteApplicationProfile) {
         guard canStart, !profile.bundleID.isEmpty else { return }
         var changed = remoteApplications
@@ -1342,6 +1346,10 @@ import VoxInkCore
         cancellationTask = nil
         activeTarget = nil
         switch pasteOutcome {
+        case .fieldUnavailable:
+            recovery = .fieldUnavailable
+            phase = .failed
+            status = PasteOutcome.fieldUnavailable.message
         case .failed(let message):
             recovery = .checkTarget
             phase = .failed
@@ -1365,6 +1373,7 @@ import VoxInkCore
         recordingLimitReached = false
         guard clipboardWriter(transcript) else { status = L("复制失败，请重试"); return }
         status = L("已复制")
+        if recovery == .fieldUnavailable { recovery = nil; phase = .ready }
         guard let id = transcriptAudioID else { return }
         let token = UUID(); generation = token
         phase = .loading
@@ -1469,7 +1478,7 @@ import VoxInkCore
     }
 
     public func handleShortcutPressed() {
-        guard !systemSleeping, !isRecordingShortcut, !shortcutIsHeld else { return }
+        guard !systemSleeping, !isRecordingShortcut, !shortcutIsHeld, remoteSystemRequest == nil else { return }
         shortcutIsHeld = true
         if fixedTextTestArmed { handleGlobalShortcut(); return }
         if shortcutMode == .holdToTalk {
@@ -1535,7 +1544,7 @@ import VoxInkCore
 
     public func handleGlobalShortcut() {
         if phase == .recording { finishRecording(); return }
-        guard canStart else { return }
+        guard canStart, remoteSystemRequest == nil else { return }
         guard let target = pasteService.captureTarget() else {
             fail(L("请先切换到目标应用的输入框，再按 \(shortcutCombination.title)"), recovery: .checkTarget)
             return
@@ -1544,6 +1553,12 @@ import VoxInkCore
         pastePermissionGranted = pasteService.accessibilityGranted
         guard pastePermissionGranted else {
             fail(L("文字写入需要辅助功能权限，请在语落窗口点击“允许文字写入”"), recovery: .pastePermission)
+            return
+        }
+        if target.bundleID == RemoteApplicationProfile.uuBundleID, uuRemoteApplication == nil {
+            holdRecording = false
+            clearSetupTrial()
+            remoteSystemRequest = RemoteToolChoice(id: target.bundleID, name: target.name)
             return
         }
         let sendFixedText = fixedTextTestArmed
@@ -1804,6 +1819,7 @@ import VoxInkCore
         }
         activeTarget = nil
         switch outcome {
+        case .fieldUnavailable: phase = .failed; recovery = .fieldUnavailable
         case .failed: phase = .failed; recovery = .checkTarget
         case .sentWithCleanupFailure: phase = .failed; recovery = .inspectClipboard
         default: phase = .ready; recovery = nil
@@ -1811,6 +1827,11 @@ import VoxInkCore
         if outcome == .sent, isShowingSetup, setupProgress.step == .trial, setupTrialKind != nil {
             confirmedDeliveryGeneration = token
         } else { setupTrialKind = nil }
-        status = outcome.message
+        if outcome == .sent, target.remoteDeviceName == nil, let usesControl = target.remoteUsesControl {
+            let system: RemotePasteSystem = usesControl ? .windowsLinux : .mac
+            status = L("已发送粘贴 · 默认 \(system.shortcut)")
+        } else {
+            status = outcome.message
+        }
     }
 }

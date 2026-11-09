@@ -133,6 +133,19 @@ import VoxInkCore
             }.disabled(!store.canStart && store.phase != .recording)
             Button(L("复制结果")) { store.copyResult() }.disabled(store.transcript.isEmpty || !store.canStart)
             Divider()
+            if let uu = store.uuRemoteApplication {
+                Menu(L("UU 默认系统：\(uu.defaultSystem.title)")) {
+                    Picker(L("默认远端系统"), selection: Binding(get: { uu.defaultSystem }, set: { system in
+                        var profile = uu
+                        profile.defaultSystem = system
+                        store.setRemoteApplication(profile)
+                    })) {
+                        ForEach(RemotePasteSystem.allCases, id: \.self) { system in
+                            Text(system.menuTitle).tag(system)
+                        }
+                    }.pickerStyle(.inline)
+                }.disabled(!store.canStart)
+            }
             SettingsLink { Text(L("设置…")) }.keyboardShortcut(",")
             Button(L("检查更新…")) { store.requestUpdate() }.disabled(!store.canRequestUpdate)
             Button(L("退出语落")) { NSApp.terminate(nil) }.keyboardShortcut("q")

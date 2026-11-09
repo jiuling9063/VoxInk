@@ -41,6 +41,7 @@ struct RecordingPanelPlacement {
     public func update(store: AppStore) {
         guard store.shortcutTargetName != nil else { hide(); return }
         let presentation = RecordingFeedbackPresentation(store: store)
+        panel.ignoresMouseEvents = !(store.phase == .failed && store.recovery == .fieldUnavailable && !store.transcript.isEmpty)
         let replaceContent = boundStore != ObjectIdentifier(store)
         boundStore = ObjectIdentifier(store)
         show(presentation: presentation, replaceContent: replaceContent) { width in
@@ -51,6 +52,7 @@ struct RecordingPanelPlacement {
     // The standalone visual checker uses the same panel and view without recording or pasting.
     public func showPreview(_ presentation: RecordingFeedbackPresentation) {
         boundStore = nil
+        panel.ignoresMouseEvents = true
         show(presentation: presentation) { width in
             AnyView(RecordingFeedbackView(presentation: presentation).frame(width: width))
         }
@@ -91,5 +93,5 @@ struct RecordingPanelPlacement {
 
 private struct LiveRecordingFeedback: View {
     @ObservedObject var store: AppStore
-    var body: some View { RecordingFeedbackView(presentation: RecordingFeedbackPresentation(store: store)) }
+    var body: some View { RecordingFeedbackView(presentation: RecordingFeedbackPresentation(store: store), copyUnwrittenText: store.copyResult) }
 }

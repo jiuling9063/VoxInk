@@ -63,7 +63,8 @@ public struct RecordingFeedbackPresentation {
 
     var failureReason: String {
         switch recovery {
-        case .checkTarget: L("目标已切换")
+        case .checkTarget: L("请检查目标输入框")
+        case .fieldUnavailable: L("无法检查输入框")
         case .pastePermission: L("需要辅助功能权限")
         case .microphone: L("需要麦克风权限")
         case .installModel, .reloadModel, .checkInstallation: L("模型未就绪")
@@ -101,8 +102,12 @@ public struct RecordingFeedbackView: View {
     static let caution = Color(red: 0.902, green: 0.690, blue: 0.333)
     private let outline = RoundedRectangle(cornerRadius: 22)
     private let presentation: RecordingFeedbackPresentation
+    private let copyUnwrittenText: (() -> Void)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    public init(presentation: RecordingFeedbackPresentation) { self.presentation = presentation }
+    public init(presentation: RecordingFeedbackPresentation, copyUnwrittenText: (() -> Void)? = nil) {
+        self.presentation = presentation
+        self.copyUnwrittenText = copyUnwrittenText
+    }
 
     public var body: some View {
         ZStack {
@@ -131,11 +136,17 @@ public struct RecordingFeedbackView: View {
                 }
             } else if presentation.phase == .failed {
                 VStack(spacing: 5) {
-                    Label(presentation.failureTitle, systemImage: presentation.symbol)
+                    Label(presentation.recovery == .fieldUnavailable && copyUnwrittenText != nil ? presentation.failureReason : presentation.failureTitle, systemImage: presentation.symbol)
                         .font(.caption.weight(.semibold)).foregroundStyle(Self.caution)
-                    Text(presentation.failureReason)
-                        .font(.system(size: 11)).foregroundStyle(Color.white)
-                        .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 12)
+                    if presentation.recovery == .fieldUnavailable, let copyUnwrittenText {
+                        Button(L("复制结果"), action: copyUnwrittenText)
+                            .font(.callout.weight(.medium)).buttonStyle(.bordered)
+                            .accessibilityHint(L("复制识别结果后，在目标输入框手动粘贴。"))
+                    } else {
+                        Text(presentation.failureReason)
+                            .font(.system(size: 11)).foregroundStyle(Color.white)
+                            .lineLimit(1).minimumScaleFactor(0.8).padding(.horizontal, 12)
+                    }
                 }
             } else {
                 Image(systemName: presentation.symbol)
@@ -145,7 +156,7 @@ public struct RecordingFeedbackView: View {
         }
         .frame(height: presentation.panelHeight)
         .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: presentation.recovery == .fieldUnavailable && copyUnwrittenText != nil ? .contain : .combine)
         .accessibilityValue(presentation.accessibilityStatus)
         .accessibilityHint(presentation.hint)
         .background(Color(red: 0.106, green: 0.133, blue: 0.137), in: outline)

@@ -8,6 +8,7 @@ import VoxInkCore
     var target: PasteTarget? = PasteTarget(pid: 123, bundleID: "test.fixture", name: "Test")
     var requests: [(String, UUID)] = []
     var blocked = false
+    var outcome: PasteOutcome = .sent
     var cancellationOutcome: PasteOutcome = .cancelledAfterSend
     var continuation: CheckedContinuation<PasteOutcome, Never>?
     func requestAccessibility() -> Bool { accessibilityGranted }
@@ -15,7 +16,7 @@ import VoxInkCore
     func paste(text: String, to target: PasteTarget, sessionID: UUID) async -> PasteOutcome {
         requests.append((text, sessionID))
         if blocked { return await withCheckedContinuation { continuation = $0 } }
-        return .sent
+        return outcome
     }
     func cancel() { continuation?.resume(returning: cancellationOutcome); continuation = nil }
 }
@@ -27,6 +28,57 @@ private actor QuickTranscriber: TranscriptionService {
 }
 
 @MainActor struct PasteIntegrationTests {
+    @Test(arguments: RemotePasteSystem.allCases)
+    func firstUUShortcutRequiresExplicitSystemAndRemembersChoice(system: RemotePasteSystem) async throws {
+        let domain = "VoxInk.UUFirstUse.\(UUID())"
+        let prefs = try #require(UserDefaults(suiteName: domain))
+        defer { prefs.removePersistentDomain(forName: domain) }
+        let paste = StubPaste()
+        paste.target = .init(pid: 42, bundleID: RemoteApplicationProfile.uuBundleID, name: "UU")
+        let store = AppStore(service: QuickTranscriber(), pasteService: paste, preferences: prefs)
+        store.handleShortcutPressed()
+        store.handleShortcutReleased()
+        #expect(store.remoteSystemRequest?.id == RemoteApplicationProfile.uuBundleID)
+        #expect(store.phase == .ready && paste.requests.isEmpty)
+        store.remoteSystemRequest = nil  // Dismiss without choosing.
+        #expect(store.remoteApplications.isEmpty)
+        store.armFixedTextTest()
+        store.handleShortcutPressed()
+        store.handleShortcutReleased()
+        let request = try #require(store.remoteSystemRequest)
+        #expect(!store.fixedTextTestArmed && paste.requests.isEmpty)
+        store.setRemoteApplication(request.profile(for: system))
+        store.remoteSystemRequest = nil
+        let reopened = AppStore(service: QuickTranscriber(), pasteService: paste, preferences: prefs)
+        #expect(reopened.uuRemoteApplication?.defaultSystem == system)
+        paste.target = .init(pid: 42, bundleID: request.id, name: request.name, remoteUsesControl: system == .windowsLinux)
+        reopened.armFixedTextTest()
+        reopened.handleGlobalShortcut()
+        while !reopened.canStart { await Task.yield() }
+        #expect(reopened.remoteSystemRequest == nil && paste.requests.count == 1)
+        #expect(reopened.status.contains(system.shortcut))
+    }
+
+    @Test func unavailableEditorAllowsExplicitCopyWithoutRepeatingPaste() async throws {
+        let paste = StubPaste()
+        paste.outcome = .fieldUnavailable
+        var copied: [String] = []
+        let store = AppStore(pasteService: paste, preferences: nil, clipboardWriter: { copied.append($0); return true })
+        store.armFixedTextTest()
+        store.handleGlobalShortcut()
+        while !store.canStart { await Task.yield() }
+        #expect(store.phase == .failed && store.recovery == .fieldUnavailable)
+        #expect(copied.isEmpty)
+        let panel = RecordingPanel()
+        panel.update(store: store)
+        defer { panel.hide() }
+        #expect(!panel.panel.ignoresMouseEvents && !panel.panel.canBecomeKey)
+        store.copyResult()
+        #expect(copied == [store.transcript])
+        #expect(store.phase == .ready && store.recovery == nil)
+        #expect(paste.requests.count == 1)
+    }
+
     @Test func delayedFixedTestPastesWithoutShortcut() async throws {
         let paste = StubPaste()
         let store = AppStore(service: QuickTranscriber(), pasteService: paste)

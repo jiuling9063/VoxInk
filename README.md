@@ -15,7 +15,7 @@
 
 运行组件已随 App 提供，本地模式首次使用只需授权和下载模型；也可自行配置 API 服务，无需自行安装 Python、MLX 或配置命令行环境。
 
-当前正式版本：**0.1.24（构建 26）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
+当前正式版本：**0.1.25（构建 27）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
 
 ## 60 秒了解语落
 
@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 
 ## 安装与开始使用
 
-1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.24-macOS-arm64.dmg`。
+1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.25-macOS-arm64.dmg`。
    已安装 0.1.22 或更高版本时，也可在语落菜单或“使用方法”中点击“检查更新…”，按提示安装并重新启动。
 2. 打开安装盘，将 **VoxInk** 拖入 **应用程序**；更新前先退出旧版。
 3. 打开 App，按首次引导选择本机或远程输入，允许麦克风和文字写入权限，下载识别模型或配置 API 转写。
@@ -107,7 +107,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 - 历史原文对照与清理、词库搜索和删除撤销尚待完善；闲置释放后的预热提示可能滞后。
 - 尚未完成所有机型、干净系统首次安装和长期设备切换测试。当前版本直接分发，未在 Mac App Store 发布。
 
-改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.24 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.24)。
+改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.25 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.25)。
 
 ## 从源码构建
 
@@ -131,6 +131,18 @@ VOXINK_UI_LANGUAGE=zh-Hans swift test --package-path app \
   --scratch-path /tmp/voxink-app-xcode-beta --no-parallel
 python3 -m unittest discover -s script/tests
 python3 script/check_localizations.py
+```
+
+真实本机写入可在有辅助功能权限的 Mac 上单独验证。以下测试会短暂使用剪贴板，在独立的「文本编辑」进程中创建临时文档，核对保存后的文字是否恰好出现一次。
+
+```sh
+VOXINK_TEST_TEXTEDIT_PASTE=1 swift test --package-path app --no-parallel --filter textEditReceivesExactlyOnePaste
+```
+
+本机微信的写入测试使用「文件传输助手」的空白草稿。运行命令后切回该草稿并保持焦点，测试会写入唯一标记、从草稿读回、核对一致后删除。远程桌面仍需在远端输入框单独核对。
+
+```sh
+VOXINK_TEST_WECHAT_SELF_DRAFT=1 swift test --package-path app --no-parallel --filter weChatDraftReceivesAutomaticPaste
 ```
 
 下载和真实模型测试单独运行，会下载模型或占用较多资源。更多约定见 [贡献指南](CONTRIBUTING.md)。

@@ -91,7 +91,7 @@ public enum ModelState: Equatable, Sendable {
 }
 
 public enum RecoveryAction: Equatable, Sendable {
-    case deviceDisconnected, microphone, reloadModel, recordAgain, chooseAudio, checkTarget, pastePermission, inspectClipboard, installModel, checkInstallation, configureService
+    case deviceDisconnected, microphone, reloadModel, recordAgain, chooseAudio, checkTarget, fieldUnavailable, pastePermission, inspectClipboard, installModel, checkInstallation, configureService
 
     public var guidance: String {
         switch self {
@@ -102,6 +102,7 @@ public enum RecoveryAction: Equatable, Sendable {
         case .checkInstallation: L("请检查 App 安装文件或模型目录，处理后再加载模型。当前文件不会用于识别。")
         case .deviceDisconnected, .recordAgain: L("检查输入设备后重新录音。已有识别文字会保留。")
         case .chooseAudio: L("请选择不超过 60 秒、可正常播放的音频文件。")
+        case .fieldUnavailable: L("复制识别结果后，在目标输入框手动粘贴。")
         case .checkTarget: L("确认目标输入框可编辑。文字已保留，可复制，或确认目标后重新粘贴。")
         case .pastePermission: L("允许辅助功能后返回语落；也可在主窗口录音并手动复制结果。")
         case .inspectClipboard: L("粘贴按键已经发出，请先检查目标文字和剪贴板，避免重复粘贴。")

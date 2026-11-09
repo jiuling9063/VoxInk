@@ -234,6 +234,7 @@ public struct ContentView: View {
         case .installModel: Button(L("下载或继续安装")) { store.installModel() }.disabled(!store.canStart)
         case .reloadModel: Button(L("重新加载模型")) { store.warmUp() }.disabled(!store.canStart)
         case .microphone: Button(L("打开系统设置")) { store.openSystemSettings() }
+        case .fieldUnavailable: Button(L("复制结果")) { store.copyResult() }
         case .pastePermission: Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
         case .chooseAudio: Button(L("选择音频…")) { importing = true }.disabled(!store.canStart)
         case .deviceDisconnected, .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation, .configureService: EmptyView()

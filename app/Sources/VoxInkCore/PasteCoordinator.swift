@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import ApplicationServices
 import Foundation
 
@@ -22,8 +23,22 @@ public enum RemotePasteTiming: String, CaseIterable, Sendable {
     }
 }
 
+public enum RemotePasteSystem: CaseIterable, Sendable {
+    case windowsLinux, mac
+
+    public var title: String { self == .mac ? "Mac" : "Windows / Linux" }
+    public var shortcut: String { self == .mac ? "⌘V" : "Ctrl+V" }
+    public var menuTitle: String { "\(title) · \(shortcut)" }
+}
+
 public struct RemoteApplicationProfile: Codable, Equatable, Identifiable, Sendable {
+    public static let uuBundleID = "com.netease.uuremote"
+
     public var id: String { bundleID }
+    public var defaultSystem: RemotePasteSystem {
+        get { usesControl ? .windowsLinux : .mac }
+        set { usesControl = newValue == .windowsLinux }
+    }
     public let bundleID: String
     public let name: String
     public var usesControl: Bool
@@ -36,6 +51,7 @@ public struct PasteTarget: Sendable, Equatable {
     public let pid: Int32
     public let bundleID: String
     public let name: String
+    var weChatWindowToken: UUID?
     public let remoteDeviceName: String?
     public let remoteUsesControl: Bool?
 
@@ -52,6 +68,7 @@ public enum PasteOutcome: Sendable, Equatable {
     case sent
     case sentWithCleanupFailure(String)
     case cancelledBeforeSend
+    case fieldUnavailable
     case cancelledAfterSend
     case failed(String)
 
@@ -59,7 +76,7 @@ public enum PasteOutcome: Sendable, Equatable {
         switch self {
         case .sent, .sentWithCleanupFailure, .cancelledAfterSend:
             true
-        case .cancelledBeforeSend, .failed:
+        case .cancelledBeforeSend, .fieldUnavailable, .failed:
             false
         }
     }
@@ -70,6 +87,8 @@ public enum PasteOutcome: Sendable, Equatable {
             L("已发送粘贴")
         case .sentWithCleanupFailure(let message), .failed(let message):
             message
+        case .fieldUnavailable:
+            L("无法检查输入框，请稍后重试或手动复制")
         case .cancelledBeforeSend:
             L("已取消，未发送粘贴")
         case .cancelledAfterSend:
@@ -98,13 +117,13 @@ enum PasteboardRestoreResult: Equatable {
 }
 
 enum FocusedFieldSafety: Equatable {
-    case ordinary, secure, unsupported, unavailable
+    case ordinary, secure, unsupported, unavailable, applicationPasteCommand
 
-    var failureMessage: String? {
+    var failure: PasteOutcome? {
         switch self {
-        case .ordinary, .unsupported: nil
-        case .secure: L("安全输入框不允许自动粘贴")
-        case .unavailable: L("无法检查输入框，请稍后重试或手动复制")
+        case .ordinary, .unsupported, .applicationPasteCommand: nil
+        case .secure: .failed(L("安全输入框不允许自动粘贴"))
+        case .unavailable: .fieldUnavailable
         }
     }
 }
@@ -117,13 +136,14 @@ protocol PasteEnvironment: AnyObject {
     func requestAccessibility() -> Bool
     func isTargetValid(_ target: PasteTarget) -> Bool
     func activateAndConfirm(_ target: PasteTarget, timeout: Duration) async -> Bool
-    func focusedFieldSafety() -> FocusedFieldSafety
+    func focusedFieldSafety(for target: PasteTarget) -> FocusedFieldSafety
     func pasteboardSnapshot() throws -> PasteboardSnapshot
     func writePlainText(_ text: String, transient: Bool) throws -> Int
     func currentPasteboardChangeCount() -> Int
     func restorePasteboard(_ snapshot: PasteboardSnapshot, expectedChangeCount: Int) -> PasteboardRestoreResult
     func areCommandModifiersReleased() -> Bool
     func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool
+    func performApplicationPaste(to target: PasteTarget, expectedChangeCount: Int) -> Bool
     func delay(for duration: Duration) async
     func delayIgnoringCancellation(for duration: Duration) async
 }
@@ -272,8 +292,8 @@ public final class PasteCoordinator {
             return .failed(L("无法确认粘贴目标"))
         }
         guard remoteTargetMatches(target) else { return .failed(L("远程设备已切换或无法识别，请回到原设备重试")) }
-        if let message = environment.focusedFieldSafety().failureMessage {
-            return .failed(message)
+        if let failure = environment.focusedFieldSafety(for: target).failure {
+            return failure
         }
         guard !cancellationRequested else {
             return .cancelledBeforeSend
@@ -316,22 +336,23 @@ public final class PasteCoordinator {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
-            return failBeforeSend(L("无法确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(.failed(L("无法确认粘贴目标")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        if let message = environment.focusedFieldSafety().failureMessage {
-            return failBeforeSend(message, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        if let failure = environment.focusedFieldSafety(for: target).failure {
+            return failBeforeSend(failure, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await waitForModifierRelease() else {
-            return failBeforeSend(L("修饰键未释放"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(.failed(L("修饰键未释放")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard await environment.activateAndConfirm(target, timeout: .milliseconds(600)) else {
-            return failBeforeSend(L("无法再次确认粘贴目标"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(.failed(L("无法再次确认粘贴目标")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        if let message = environment.focusedFieldSafety().failureMessage {
-            return failBeforeSend(message, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        let finalField = environment.focusedFieldSafety(for: target)
+        if let failure = finalField.failure {
+            return failBeforeSend(failure, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.accessibilityGranted else {
-            return failBeforeSend(L("辅助功能权限已失效"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(.failed(L("辅助功能权限已失效")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard environment.currentPasteboardChangeCount() == ownedChangeCount else {
             return .failed(L("剪贴板已被其他操作修改"))
@@ -340,10 +361,16 @@ public final class PasteCoordinator {
             return cleanupBeforeSend(snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
         guard remoteTargetMatches(target) else {
-            return failBeforeSend(L("远程设备已切换或无法识别，请回到原设备重试"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            return failBeforeSend(.failed(L("远程设备已切换或无法识别，请回到原设备重试")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
         }
-        guard environment.postPaste(to: target, usingControl: isRemote && (target.remoteUsesControl ?? remoteApplications.first(where: { $0.bundleID == target.bundleID })?.usesControl ?? (target.bundleID == "com.netease.uuremote" && uuWindowsPaste))) else {
-            return failBeforeSend(L("无法发送粘贴按键"), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+        if finalField == .applicationPasteCommand {
+            guard !isRemote, environment.performApplicationPaste(to: target, expectedChangeCount: ownedChangeCount) else {
+                return failBeforeSend(.fieldUnavailable, snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            }
+        } else {
+            guard environment.postPaste(to: target, usingControl: isRemote && (target.remoteUsesControl ?? remoteApplications.first(where: { $0.bundleID == target.bundleID })?.usesControl ?? (target.bundleID == "com.netease.uuremote" && uuWindowsPaste))) else {
+                return failBeforeSend(.failed(L("无法发送粘贴按键")), snapshot: snapshot, ownedChangeCount: ownedChangeCount)
+            }
         }
 
         // A successful key dispatch completes the visible operation. Clipboard retention
@@ -380,21 +407,22 @@ public final class PasteCoordinator {
     }
 
     private func failBeforeSend(
-        _ message: String,
+        _ failure: PasteOutcome,
         snapshot: PasteboardSnapshot,
         ownedChangeCount: Int
     ) -> PasteOutcome {
         if environment.currentPasteboardChangeCount() == ownedChangeCount,
            environment.restorePasteboard(snapshot, expectedChangeCount: ownedChangeCount) == .failed {
-            return .failed(L("\(message)，且剪贴板恢复失败"))
+            return .failed(L("\(failure.message)，且剪贴板恢复失败"))
         }
-        return .failed(message)
+        return failure
     }
 }
 
 @MainActor
 final class AppKitPasteEnvironment: PasteEnvironment {
     private enum ClipboardError: Error { case changedDuringRead, unreadableType }
+    private var weChatCommand: WeChatPasteCommand?
     private let pasteboard: any PasteboardAccess
 
     init(pasteboard: any PasteboardAccess = SystemPasteboardAccess()) {
@@ -408,11 +436,16 @@ final class AppKitPasteEnvironment: PasteEnvironment {
               let bundleID = application.bundleIdentifier else {
             return nil
         }
-        return PasteTarget(
+        var target = PasteTarget(
             pid: application.processIdentifier,
             bundleID: bundleID,
             name: application.localizedName ?? bundleID
         )
+        if bundleID == WeChatPasteCommand.bundleID {
+            weChatCommand = WeChatPasteCommand(application: application)
+            target.weChatWindowToken = weChatCommand?.token
+        }
+        return target
     }
 
     func remoteDeviceName(for target: PasteTarget, candidates: [String]) -> String? {
@@ -456,14 +489,38 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         return matchesFrontmost(target)
     }
 
-    func focusedFieldSafety() -> FocusedFieldSafety {
+    func focusedFieldSafety(for target: PasteTarget) -> FocusedFieldSafety {
+        if target.weChatWindowToken != nil {
+            if IsSecureEventInputEnabled() { return .secure }
+            guard weChatCommand?.matches(target) == true else { return .unavailable }
+        }
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.1)
         var focused: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused)
+        if result == .cannotComplete || result == .noValue {
+            guard matchesFrontmost(target) else { return .unavailable }
+            if IsSecureEventInputEnabled() { return .secure }
+            let app = AXUIElementCreateApplication(target.pid)
+            AXUIElementSetMessagingTimeout(app, 0.1)
+            let appResult = AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused)
+            if appResult == .noValue, target.weChatWindowToken != nil { return .applicationPasteCommand }
+            guard appResult == .success,
+                  let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unavailable }
+            let element = unsafeDowncast(focused, to: AXUIElement.self)
+            var pid: pid_t = 0
+            guard AXUIElementGetPid(element, &pid) == .success, pid == target.pid else { return .unavailable }
+            var role: CFTypeRef?
+            AXUIElementSetMessagingTimeout(element, 0.1)
+            guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success else { return .unavailable }
+            return Self.appScopedSafety(role: role as? String, subrole: subroleSafety(element))
+        }
         guard result == .success else { return Self.classifyFieldQueryFailure(result) }
         guard let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unavailable }
-        let element = unsafeDowncast(focused, to: AXUIElement.self)
+        return subroleSafety(unsafeDowncast(focused, to: AXUIElement.self))
+    }
+
+    private func subroleSafety(_ element: AXUIElement) -> FocusedFieldSafety {
         AXUIElementSetMessagingTimeout(element, 0.1)
         var subrole: CFTypeRef?
         let subroleResult = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
@@ -472,6 +529,14 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         }
         guard let value = subrole as? String else { return .unavailable }
         return value == "AXSecureTextField" ? .secure : .ordinary
+    }
+
+    static func appScopedSafety(role: String?, subrole: FocusedFieldSafety) -> FocusedFieldSafety {
+        if subrole == .secure { return .secure }
+        // NSTextView can expose a focused AXTextArea without implementing AXSubrole.
+        if role == kAXTextAreaRole && subrole == .unsupported { return .ordinary }
+        guard subrole == .ordinary, role == kAXTextFieldRole || role == kAXTextAreaRole else { return .unavailable }
+        return .ordinary
     }
 
     static func classifyFieldQueryFailure(_ result: AXError, queryingSubrole: Bool = false) -> FocusedFieldSafety {
@@ -554,6 +619,10 @@ final class AppKitPasteEnvironment: PasteEnvironment {
         down.flags = usingControl ? .maskControl : .maskCommand
         up.flags = down.flags
         return [down, up]
+    }
+
+    func performApplicationPaste(to target: PasteTarget, expectedChangeCount: Int) -> Bool {
+        weChatCommand?.perform(for: target, whileOwningClipboard: { pasteboard.changeCount == expectedChangeCount }) == true
     }
 
     func postPaste(to target: PasteTarget, usingControl: Bool) -> Bool {
