@@ -63,6 +63,7 @@ import Testing
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .inspectClipboard).failureTitle == "已发送粘贴")
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .deviceDisconnected).failureReason == "录音设备已断开")
         #expect(switched.failureReason == "请检查目标输入框")
+        #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "", recovery: .microphone).failureTitle == "未完成")
         #expect(switched.hint == "请检查目标输入框")
         #expect(RecordingFeedbackPresentation(phase: .failed, status: "", target: "").failureReason == "打开语落查看详情")
         let limit = NSHostingView(rootView: RecordingFeedbackView(presentation:

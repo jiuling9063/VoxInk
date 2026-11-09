@@ -1221,7 +1221,7 @@ import VoxInkCore
             transcript = text
             if shouldPolish, cloudPolishing || (selectedPolishModel != nil && polishDevice.pressure < 2) {
                 isPolishing = true
-                status = L("正在润色 · 完成后再写入，可按 Esc 取消…")
+                status = L("正在润色")
                 do {
                     let result: PolishResult
                     if cloudPolishing {
@@ -1367,11 +1367,14 @@ import VoxInkCore
         }
     }
 
-    public func copyResult() {
-        guard canStart, !transcript.isEmpty else { return }
+    public func copyResult() { copyResult(original: false) }
+
+    func copyResult(original: Bool) {
+        let text = original ? rawTranscript : transcript
+        guard canStart, !text.isEmpty else { return }
         // The status change re-renders the HUD; it must not repeat the 60-second notice.
         recordingLimitReached = false
-        guard clipboardWriter(transcript) else { status = L("复制失败，请重试"); return }
+        guard clipboardWriter(text) else { status = L("复制失败，请重试"); return }
         status = L("已复制")
         if recovery == .fieldUnavailable { recovery = nil; phase = .ready }
         guard let id = transcriptAudioID else { return }
@@ -1395,6 +1398,10 @@ import VoxInkCore
         let needsInspection = error == .invalidManifest || error == .unsafePath
         modelState = needsInspection ? .failed : .needsDownload
         fail(error.localizedDescription, recovery: needsInspection ? .checkInstallation : .installModel)
+    }
+
+    var recordingLimitInstruction: String {
+        cancellationShortcutAvailable ? L("最长 60 秒 · Esc 取消") : L("最长 60 秒 · 可在工作台取消")
     }
 
     public func setShortcutStatus(_ message: String) { shortcutStatus = message }
@@ -1590,14 +1597,14 @@ import VoxInkCore
         }
     }
 
-    public func pasteAgain() {
-        guard canPasteAgain, let target = lastTarget else { return }
+    public func pasteAgain(original: Bool = false) {
+        let text = original ? rawTranscript : transcript
+        guard canPasteAgain, !text.isEmpty, let target = lastTarget else { return }
         clearSetupTrial()
         let token = UUID(); generation = token
         activeTarget = target; shortcutTargetName = target.name; pasteOutcome = nil; recovery = nil
         recordingLimitReached = false
         phase = .pasting; status = L("正在准备写入 \(target.name)…")
-        let text = transcript
         let task = Task {
             guard generation == token, !Task.isCancelled else { return }
             await deliver(text, to: target, token: token)

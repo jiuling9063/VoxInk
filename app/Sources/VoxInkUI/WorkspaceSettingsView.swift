@@ -40,7 +40,7 @@ struct WorkspaceSettingsView: View {
                 switch page {
                 case .engine, .polish:
                     ModelSettingsCards(store: store)
-                    Text(L("云端处理会将音频或文字发送到所选服务。"))
+                    Text(store.processingPrivacyText)
                         .font(.caption).foregroundStyle(.secondary)
                 case .shortcut:
                     WorkspaceForm {
@@ -49,8 +49,6 @@ struct WorkspaceSettingsView: View {
                     }
                 case .postprocess:
                     WorkspaceForm { Section(L("语言")) { LanguageSettingsContent(store: store) } }
-                    VStack(alignment: .leading, spacing: 8) { TextProcessingContent(store: store) }
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(18).writingSurface()
                     if let dictionary = store.dictionary {
                         DictionaryPreferencesView(controller: dictionary, canEdit: store.canStart)
                     } else {
@@ -81,18 +79,9 @@ struct InputSettingsContent: View {
         ShortcutSettingsControl(store: store)
         WorkspacePicker(L("操作方式"), value: store.shortcutMode.title, selection: Binding(get: { store.shortcutMode }, set: { store.setShortcutMode($0) }), options: ShortcutMode.allCases.map { ($0.title, $0) }).disabled(!store.canChangeShortcut)
         Text(store.shortcutInstruction).font(.callout).foregroundStyle(.secondary)
-        LabeledContent(L("单次录音"), value: L("最长 60 秒 · Esc 取消"))
+        LabeledContent(L("单次录音"), value: store.recordingLimitInstruction)
         Divider()
         RemoteInputSettingsView(store: store)
-    }
-}
-
-struct TextProcessingContent: View {
-    @ObservedObject var store: AppStore
-    var body: some View {
-        LabeledContent(L("中文输出"), value: store.chineseOutput.title)
-        Text(L("中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；可在结果区切换查看识别原文。"))
-            .font(.caption).foregroundStyle(.secondary)
     }
 }
 
@@ -181,7 +170,7 @@ struct PolishSettingsContent: View {
         }
         DisclosureGroup(L("使用说明")) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(L("开启后先识别、再润色，最后写入一次。识别原文始终保留；Esc 取消整次输入。"))
+                Text(L("开启后先识别、再润色，最后写入一次。识别原文始终保留。"))
                 Text(L("运行组件已内置，无需配置。模型按需下载，下载完成后可离线使用；高档位需要更多内存和等待时间。"))
                 Text(L("自动模式只选择已安装的模型。模型加载最多等待 30 秒。就绪后，三个档位的推理时限分别为 6、12、30 秒。超时或结果不合格时保留原文。"))
                 Text(L("运行耗时只保存在本机，不包含输入文字。"))
@@ -225,9 +214,12 @@ struct PermissionSettingsContent: View {
 
     private var permissionButtons: some View {
         Group {
-            Button(L("允许麦克风")) { store.requestMicrophonePermission() }
-                .disabled(!store.canStart || store.microphoneAuthorization != .notDetermined)
-            Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
+            if store.microphoneAuthorization == .notDetermined {
+                Button(L("允许麦克风")) { store.requestMicrophonePermission() }.disabled(!store.canStart)
+            }
+            if !store.pastePermissionGranted {
+                Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
+            }
             Button(L("系统设置")) { store.openSystemSettings() }
         }
     }

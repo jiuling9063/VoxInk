@@ -58,8 +58,13 @@ public struct RecordingFeedbackPresentation {
         guard phase == .recording, safeElapsed >= 50 else { return nil }
         return max(1, 60 - safeElapsed)
     }
-    /// One short line under "未写入" saying why, instead of a generic "see details".
-    var failureTitle: String { recovery == .inspectClipboard ? L("已发送粘贴") : L("未写入") }
+    var failureTitle: String {
+        switch recovery {
+        case .inspectClipboard: L("已发送粘贴")
+        case .fieldUnavailable, .checkTarget, .pastePermission: L("未写入")
+        default: L("未完成")
+        }
+    }
 
     var failureReason: String {
         switch recovery {

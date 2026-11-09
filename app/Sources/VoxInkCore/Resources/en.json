@@ -801,5 +801,17 @@
   "目标输入框出现固定测试文字了吗？": "Did the fixed test text appear in the target field?",
   "快捷键已更改，请重新确认远程设置并再试一句。": "The shortcut changed. Confirm the remote settings and try dictation again.",
   "检查更新…": "Check for Updates…",
-  "更新到 {0}…": "Update to {0}…"
+  "更新到 {0}…": "Update to {0}…",
+  "排查写入问题": "Troubleshoot text insertion",
+  "返回本次结果": "Back to current result",
+  "跟随当前输入窗口": "Current input window",
+  "写入远程窗口时，文字会经远程工具的剪贴板同步到远端。": "When inserting into a remote window, text is sent through the remote tool’s clipboard.",
+  "音频发送到识别服务，识别后的文字发送到润色服务。": "Audio goes to the transcription service. The transcript goes to the cleanup service.",
+  "音频会发送到所选识别服务。": "Audio is sent to the selected transcription service.",
+  "音频在本机识别，识别后的文字发送到润色服务。": "Audio is transcribed on this Mac. The transcript goes to the cleanup service.",
+  "最长 60 秒 · 可在工作台取消": "Up to 60 seconds · Cancel in the workspace",
+  "开启后先识别、再润色，最后写入一次。识别原文始终保留。": "When enabled, text is transcribed, cleaned up, and inserted once. The original transcript is kept.",
+  "按住 ⌥ Space 录音，松开后识别并写入。": "Hold ⌥ Space to record. Release to transcribe and insert.",
+  "按 ⌥ Space 录音，再按结束并写入。": "Press ⌥ Space to record. Press again to finish and insert.",
+  "录音或导入音频后，可在这里查看文字。": "Record or import audio to see its transcript here."
 }

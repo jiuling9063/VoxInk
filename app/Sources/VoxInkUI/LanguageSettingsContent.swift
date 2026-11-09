@@ -5,6 +5,8 @@ struct LanguageSettingsContent: View {
     @ObservedObject var store: AppStore
     var body: some View {
         choices
+        Text(L("中文按所选字形整理，其他语言保留原样。数字、网址、路径和代码保持原样；可在结果区切换查看识别原文。"))
+            .font(.caption).foregroundStyle(.secondary)
         Text(L("界面语言在重新打开语落后生效。")).font(.caption).foregroundStyle(.secondary)
         Text(L("共用本地模型，无需分别下载语言包。短句识别不准时可指定语言；润色不会翻译原文。"))
             .font(.caption).foregroundStyle(.secondary)

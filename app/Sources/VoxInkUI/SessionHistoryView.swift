@@ -23,7 +23,7 @@ struct SessionHistoryView: View {
             Picker(L("历史"), selection: $statistics) {
                 Text(L("记录")).tag(false)
                 Text(L("统计")).tag(true)
-            }.pickerStyle(.segmented).frame(maxWidth: 260)
+            }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 260)
             if statistics {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 16) { metrics }
@@ -44,7 +44,6 @@ struct SessionHistoryView: View {
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }.frame(maxWidth: .infinity, minHeight: 270).writingSurface()
             } else {
-                // Statistics live here as a one-line summary instead of a separate page.
                 HStack(spacing: 6) {
                     Text(L("\(store.sessionHistory.count) 条转录")).font(.caption.weight(.medium))
                     Text("·").foregroundStyle(.tertiary)

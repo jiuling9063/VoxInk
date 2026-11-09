@@ -114,8 +114,7 @@ import SwiftUI
             item.label = L("语音识别")
             item.visibilityPriority = .high
             item.view = NSHostingView(rootView: ToolbarModelStatus(store: store) { [weak self, store] in
-                // Go where the first problem is; when everything is ready the workbench shows the pipeline.
-                self?.navigation.page = store.transcriptionReady ? .input : .engine
+                self?.navigation.page = store.readinessDestination
             })
             item.view?.widthAnchor.constraint(equalToConstant: 150).isActive = true
         default:
@@ -183,17 +182,23 @@ private struct ToolbarModelStatus: View {
         .buttonStyle(.plain)
         .help(store.readinessSummary)
         .accessibilityLabel(store.readinessSummary)
-        .accessibilityHint(L("查看识别与润色设置"))
+        .accessibilityHint(store.readinessDestination.title)
     }
 }
 
 extension AppStore {
+    var readinessDestination: WorkspacePage {
+        if !transcriptionReady && modelState != .loading { return .engine }
+        return microphoneAuthorization != .authorized || !pastePermissionGranted || !shortcutAvailable ? .shortcut : .engine
+    }
+
     /// Items the user has to act on before dictation works end to end.
     var readinessIssueCount: Int {
         var count = 0
         if microphoneAuthorization != .authorized { count += 1 }
         if !transcriptionReady && !(modelServices.transcriptionID == nil && modelState == .loading) { count += 1 }
         if !pastePermissionGranted { count += 1 }
+        if !shortcutAvailable { count += 1 }
         return count
     }
 
@@ -202,6 +207,7 @@ extension AppStore {
         var parts = [transcriptionStatus]
         if microphoneAuthorization != .authorized { parts.append(L("需要麦克风权限")) }
         if !pastePermissionGranted { parts.append(L("需要辅助功能权限")) }
+        if !shortcutAvailable { parts.append(shortcutStatus) }
         return parts.joined(separator: " · ")
     }
 }

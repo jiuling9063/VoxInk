@@ -73,11 +73,17 @@ private actor CompletionProbe {
 
     @Test func showsSimplifiedTextAndKeepsRawTranscript() async {
         let raw = "  軟體平台，今天的天氣很好。English 123。  "
-        let store = AppStore(service: StubTranscriber(text: raw), preferences: nil)
+        var copied = ""
+        let store = AppStore(service: StubTranscriber(text: raw), preferences: nil,
+                             clipboardWriter: { copied = $0; return true })
         store.setSpeechLanguage(.mandarin)
         await store.transcribePrepared(URL(fileURLWithPath: "/non-owned-fixture.wav"))
         #expect(store.rawTranscript == raw)
         #expect(store.transcript == "软件平台，今天的天气很好。English 123。")
+        store.copyResult(original: true)
+        #expect(copied == raw)
+        store.copyResult()
+        #expect(copied == store.transcript)
     }
     @Test func successfulTranscriptIsShown() async {
         let store = AppStore(service: StubTranscriber())

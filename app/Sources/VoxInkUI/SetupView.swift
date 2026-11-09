@@ -20,10 +20,10 @@ struct SetupView: View {
             case .usage:
                 Text(L("你在哪台电脑上打字？")).font(.title2.bold())
                 ViewThatFits(in: .horizontal) {
-                    HStack { scenarioCards }
+                    HStack(alignment: .top) { scenarioCards }
                     VStack { scenarioCards }
                 }
-                Button(L("两台都用")) { store.chooseSetupUsage(.remote) }.buttonStyle(.link)
+                Button(L("两台都用")) { store.chooseSetupUsage(.both) }.buttonStyle(.link).disabled(!store.canStart)
             case .preparation: preparation
             case .remote: remote
             case .trial: trial
@@ -144,7 +144,11 @@ struct SetupView: View {
                 Button(L("出现了")) { store.confirmSetupTrial(true); troubleshooting = false }
                     .buttonStyle(VoxInkButtonStyle(prominent: true))
             }
-            Button(L("没有 / 不对")) { store.confirmSetupTrial(false); troubleshooting = true }
+            if store.setupTrialCanConfirm {
+                Button(L("没有 / 不对")) { store.confirmSetupTrial(false); troubleshooting = true }
+            } else if !troubleshooting && store.phase != .failed {
+                Button(L("排查写入问题")) { troubleshooting = true }.buttonStyle(.link)
+            }
             if progress.usage.needsRemote {
                 Text(L("“已发送粘贴”不代表远端已收到，请查看目标输入框后确认。")).font(.caption)
             }

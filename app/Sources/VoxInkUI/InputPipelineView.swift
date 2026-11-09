@@ -40,9 +40,13 @@ struct InputPipelineView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L("输入通道"))
 
-            Label(privacyText, systemImage: usesNetwork ? "network" : "lock.shield")
+            Label(store.processingPrivacyText, systemImage: store.modelServices.transcriptionID != nil || (store.polishingEnabled && store.modelServices.polishingID != nil) ? "network" : "lock.shield")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if !store.remoteApplications.isEmpty {
+                Text(L("写入远程窗口时，文字会经远程工具的剪贴板同步到远端。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -94,13 +98,17 @@ struct InputPipelineView: View {
                         state: .off, hint: L("查看识别与润色设置")) { navigate(.polish) }
         }
         let detail: String
+        let available: Bool
         if store.modelServices.polishingID != nil {
-            detail = (try? store.modelServices.connection(for: .polishing))?.name ?? L("连接配置不可用")
+            let connection = try? store.modelServices.connection(for: .polishing)
+            available = connection != nil
+            detail = connection?.name ?? L("连接配置不可用")
         } else {
-            detail = L("本地模型")
+            available = store.effectivePolishModel != nil
+            detail = available ? L("本地模型") : L("未下载")
         }
         return Node(id: "polishing", icon: "text.redaction", title: L("润色"), detail: detail,
-                    state: store.isPolishing ? .busy : .ready,
+                    state: store.isPolishing ? .busy : (available ? .ready : .attention),
                     hint: L("查看识别与润色设置")) { navigate(.polish) }
     }
 
@@ -109,8 +117,8 @@ struct InputPipelineView: View {
         let detail: String
         if !granted {
             detail = L("需要辅助功能权限")
-        } else if let remote = store.remoteApplications.first {
-            detail = "\(remote.name) · \(store.remotePasteTiming.title)"
+        } else if !store.remoteApplications.isEmpty {
+            detail = L("跟随当前输入窗口")
         } else {
             detail = L("自动写入当前应用")
         }
@@ -198,16 +206,16 @@ struct InputPipelineView: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: Privacy
+}
 
-    private var usesNetwork: Bool {
-        store.modelServices.transcriptionID != nil || (store.polishingEnabled && store.modelServices.polishingID != nil)
-    }
-
-    private var privacyText: String {
-        if usesNetwork { return L("音频或文字会发送到所选服务。") }
-        if !store.remoteApplications.isEmpty { return L("音频在本机处理；文字会经远程工具的剪贴板同步到远端。") }
-        return L("音频和文字都在本机处理。")
+extension AppStore {
+    var processingPrivacyText: String {
+        switch (modelServices.transcriptionID != nil, polishingEnabled && modelServices.polishingID != nil) {
+        case (true, true): L("音频发送到识别服务，识别后的文字发送到润色服务。")
+        case (true, false): L("音频会发送到所选识别服务。")
+        case (false, true): L("音频在本机识别，识别后的文字发送到润色服务。")
+        case (false, false): L("音频和文字都在本机处理。")
+        }
     }
 }
 

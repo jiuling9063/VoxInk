@@ -50,7 +50,6 @@ public struct PreferencesView: View {
                 }
                 Section(L("语言")) { LanguageSettingsContent(store: store) }
                 Section(L("语音输入")) { InputSettingsContent(store: store) }
-                Section(L("文字处理")) { TextProcessingContent(store: store) }
                 Section(L("隐私与帮助")) {
                     PrivacySettingsContent()
                     Button(L("查看使用引导")) { store.showSetup(); showGuide() }

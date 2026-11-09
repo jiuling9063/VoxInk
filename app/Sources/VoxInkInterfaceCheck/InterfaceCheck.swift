@@ -135,8 +135,8 @@ private actor PreviewDictionary: UserDictionaryStorage {
 
     func captureReview(at directory: URL) async throws {
         for (scenario, route) in [(Scenario.setup, "input"), (.preparation, "input"), (.localTrial, "input"), (.setupRemote, "input"), (.setupSpeech, "input"),
-                                  (.result, "input"), (.result, "history"), (.ready, "statistics"),
-                                  (.ready, "shortcut"), (.ready, "engine"), (.ready, "help")] {
+                                  (.ready, "input"), (.result, "input"), (.result, "result"), (.result, "history"), (.ready, "statistics"),
+                                  (.ready, "shortcut"), (.ready, "engine"), (.ready, "postprocess"), (.ready, "help")] {
             await show(scenario)
             guard error == nil else { throw CocoaError(.validationMissingMandatoryProperty) }
             let controller = WorkspaceWindowController(store: store, restoresFrame: false)

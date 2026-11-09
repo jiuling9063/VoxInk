@@ -24,7 +24,7 @@ struct WorkspaceHelpView: View {
                     VStack(alignment: .leading, spacing: 14) { steps(horizontal: false) }
                 }
                 Divider()
-                Label(L("Esc 随时取消 · 单次最长 60 秒"), systemImage: "keyboard")
+                Label(store.recordingLimitInstruction, systemImage: "keyboard")
                     .font(.caption).foregroundStyle(.secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
 

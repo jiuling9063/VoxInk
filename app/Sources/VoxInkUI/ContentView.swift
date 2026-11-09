@@ -4,6 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct ContentView: View {
+    private let sidebarInset: CGFloat = 12
     @Environment(\.colorScheme) private var scheme
     private var theme: VoxInkTheme { VoxInkTheme(scheme: scheme) }
     @ObservedObject private var store: AppStore
@@ -34,16 +35,19 @@ public struct ContentView: View {
                     ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         sidebarSection(L("工作空间"), top: 0)
-                        navigation(L("工作台"), icon: "rectangle.grid.2x2", destination: .input)
+                        navigation(L("工作台"), icon: "rectangle.grid.2x2", destination: .input, alsoSelectedOn: [.result])
                         navigation(L("历史"), icon: "clock", destination: .history)
                         sidebarSection(L("设置"), top: 22)
                         navigation(L("识别与润色"), icon: "waveform", destination: .engine, alsoSelectedOn: [.polish])
                         navigation(L("输入与远程"), icon: "command", destination: .shortcut)
                         navigation(L("文字与词典"), icon: "text.badge.checkmark", destination: .postprocess)
-                    }.buttonStyle(.plain).padding(12).padding(.top, 18)
+                    }.buttonStyle(.plain).padding(.vertical, 12).padding(.top, 18)
                     }.scrollIndicators(.hidden)
                     sidebarFooter
-                    }.frame(width: 192).workspaceChrome()
+                    }
+                    .labelStyle(SidebarLabelStyle())
+                    .padding(.horizontal, sidebarInset)
+                    .frame(width: 192).workspaceChrome()
                     Divider()
                 switch page {
                 case .engine, .shortcut, .postprocess, .polish, .help:
@@ -86,7 +90,10 @@ public struct ContentView: View {
                 }
                 .onChange(of: store.transcript) { _, text in
                     showingOriginal = false
-                    if !text.isEmpty { scroll.scrollTo(store.isShowingSetup ? "setup" : "activity", anchor: .top) }
+                    if !text.isEmpty { scroll.scrollTo(store.isShowingSetup ? "setup" : "result", anchor: .top) }
+                }
+                .onChange(of: preview?.id) { _, id in
+                    if id != nil { scroll.scrollTo("result", anchor: .top) }
                 }
                 .onChange(of: store.retainedAudio?.id) { _, id in
                     if id != nil { scroll.scrollTo("activity", anchor: .top) }
@@ -110,7 +117,7 @@ public struct ContentView: View {
 
     private func sidebarSection(_ title: String, top: CGFloat) -> some View {
         Text(title).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            .padding(.horizontal, 12).padding(.top, top).padding(.bottom, 6)
+            .padding(.horizontal, sidebarInset).padding(.top, top).padding(.bottom, 6)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -127,16 +134,17 @@ public struct ContentView: View {
             .foregroundStyle(page == .help ? theme.accent : Color.secondary)
             .accessibilityAddTraits(page == .help ? .isSelected : [])
             HStack(spacing: 6) {
+                Text(appVersion).font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let version = store.availableVersion {
                     Button { page = .help } label: { Image(systemName: "arrow.up.circle.fill") }
                         .buttonStyle(.plain).help(L("有新版本 \(version)")).accessibilityLabel(L("有新版本 \(version)"))
                 }
-                Text(appVersion).font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .font(.system(size: 11))
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, sidebarInset).padding(.vertical, 12)
     }
 
     private func navigation(_ title: String, icon: String, destination: WorkspacePage,
@@ -147,7 +155,7 @@ public struct ContentView: View {
         } label: {
             Label(title, systemImage: icon)
                 .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, sidebarInset).padding(.vertical, 8)
                 .foregroundStyle(selected ? theme.accent : theme.ink.opacity(0.7))
                 .background(selected ? theme.accent.opacity(0.12) : .clear,
                             in: RoundedRectangle(cornerRadius: VoxInkTheme.Radius.icon))
@@ -156,11 +164,25 @@ public struct ContentView: View {
             .help(title)
     }
 
+    private struct SidebarLabelStyle: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            HStack(spacing: 8) {
+                configuration.icon.frame(width: 16, alignment: .leading)
+                configuration.title
+            }
+        }
+    }
+
     /// Keycap guidance, the trial controls and the input pipeline: the one place that shows readiness.
     private var statusHero: some View {
         VStack(alignment: .leading, spacing: 18) {
             if store.setupHandoffVisible { Text(L("好了，以后这样用")).font(.headline) }
-            dailyInstruction
+            if store.shortcutAvailable {
+                dailyInstruction
+            } else {
+                Text(store.shortcutStatus).font(.headline)
+                Button(L("输入与远程")) { page = .shortcut }
+            }
             if !store.setupHandoffVisible { recordingControls }
             InputPipelineView(store: store) { page = $0 }
             if store.setupHandoffVisible {
@@ -193,18 +215,18 @@ public struct ContentView: View {
 
     private var recordingControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
-                if !store.canStart && store.phase != .recording { ProgressView().controlSize(.small) }
-                else {
-                    Image(systemName: store.phase == .failed ? "exclamationmark.circle" : "waveform")
-                        .foregroundStyle(store.phase == .failed ? theme.caution : theme.accent)
-                }
-                if store.phase != .ready || (store.status != store.transcriptionStatus && ![L("准备就绪"), L("准备就绪 · 本地模型已加载")].contains(store.status)) {
+            if store.phase != .ready || (store.status != store.transcriptionStatus && ![L("准备就绪"), L("准备就绪 · 本地模型已加载")].contains(store.status)) {
+                HStack(alignment: .top, spacing: 10) {
+                    if !store.canStart && store.phase != .recording { ProgressView().controlSize(.small) }
+                    else {
+                        Image(systemName: store.phase == .failed ? "exclamationmark.circle" : "waveform")
+                            .foregroundStyle(store.phase == .failed ? theme.caution : theme.accent)
+                    }
                     Text(store.status).accessibilityIdentifier("dictationStatus")
-                    .fixedSize(horizontal: false, vertical: true)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if store.phase == .recording { Text(L("\(Int(store.elapsed)) / 60 秒")).monospacedDigit() }
                 }
-                Spacer()
-                if store.phase == .recording { Text(L("\(Int(store.elapsed)) / 60 秒")).monospacedDigit() }
             }
             if store.phase == .recording { ProgressView(value: Double(store.level)).tint(theme.accent) }
             if let recovery = store.recovery {
@@ -237,7 +259,8 @@ public struct ContentView: View {
         case .fieldUnavailable: Button(L("复制结果")) { store.copyResult() }
         case .pastePermission: Button(L("允许文字写入")) { store.requestPastePermission() }.disabled(!store.canStart)
         case .chooseAudio: Button(L("选择音频…")) { importing = true }.disabled(!store.canStart)
-        case .deviceDisconnected, .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation, .configureService: EmptyView()
+        case .configureService: Button(L("识别与润色")) { page = .engine }
+        case .deviceDisconnected, .recordAgain, .checkTarget, .inspectClipboard, .checkInstallation: EmptyView()
         }
     }
 
@@ -274,12 +297,18 @@ public struct ContentView: View {
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) { resultTitle; Spacer(minLength: 8); resultControls }
-                VStack(alignment: .leading, spacing: 10) { resultTitle; HStack(spacing: 10) { resultControls } }
+                VStack(alignment: .leading, spacing: 10) {
+                    resultTitle
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { resultControls }
+                        VStack(alignment: .leading, spacing: 8) { resultControls }
+                    }
+                }
             }
             if preview == nil && store.transcript.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "text.alignleft").foregroundStyle(.tertiary).accessibilityHidden(true)
-                    Text(L("按 \(store.shortcutCombination.title) 说一句话，文字会出现在这里。"))
+                    Text(store.shortcutAvailable ? L("按 \(store.shortcutCombination.title) 说一句话，文字会出现在这里。") : L("录音或导入音频后，可在这里查看文字。"))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -293,9 +322,6 @@ public struct ContentView: View {
                     .font(.transcriptBody(size: 17)).lineSpacing(8).textSelection(.enabled)
                     .foregroundStyle(theme.ink)
                     .frame(maxWidth: .infinity, minHeight: 60, alignment: .topLeading).padding(.vertical, 6)
-                if preview == nil && showingOriginal && store.rawTranscript == store.transcript {
-                    Text(L("本次原文无需调整。")).font(.caption).foregroundStyle(.secondary)
-                }
                 if preview == nil && store.canPasteAgain {
                     Text(L("重新粘贴到 \(store.repasteTargetName ?? L("原目标应用"))，请先确认没有重复文字。"))
                         .font(.caption).foregroundStyle(.secondary)
@@ -306,7 +332,7 @@ public struct ContentView: View {
 
     private var resultTitle: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(L("识别结果")).font(.headline)
+            Text(preview == nil ? L("识别结果") : L("转录历史")).font(.headline)
             if let entry = preview ?? store.sessionHistory.first, preview != nil || !store.transcript.isEmpty {
                 Text(entry.date.formatted(date: .omitted, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
@@ -315,7 +341,10 @@ public struct ContentView: View {
     }
 
     @ViewBuilder private var resultControls: some View {
-        if preview == nil && !store.rawTranscript.isEmpty && !store.transcript.isEmpty {
+        if preview != nil {
+            Button(L("返回本次结果")) { preview = nil }
+        }
+        if preview == nil && !store.rawTranscript.isEmpty && store.rawTranscript != store.transcript && !store.transcript.isEmpty {
             Picker(L("本次结果"), selection: $showingOriginal) {
                 Text(L("整理结果")).tag(false)
                 Text(L("原文")).tag(true)
@@ -324,11 +353,11 @@ public struct ContentView: View {
             .accessibilityLabel(L("本次结果"))
         }
         if preview == nil && store.canPasteAgain {
-            Button(L("重新粘贴")) { store.pasteAgain() }
+            Button(L("重新粘贴")) { store.pasteAgain(original: showingOriginal) }
                 .help(L("上次写入目标：\(store.repasteTargetName ?? L("原目标应用"))"))
         }
         Button(L("复制"), systemImage: "doc.on.doc") {
-            if let preview { _ = store.copyHistory(preview) } else { store.copyResult() }
+            if let preview { _ = store.copyHistory(preview) } else { store.copyResult(original: showingOriginal) }
         }
             .buttonStyle(VoxInkButtonStyle(prominent: true))
             .disabled((preview == nil && store.transcript.isEmpty) || !store.canStart)
@@ -343,7 +372,7 @@ public struct ContentView: View {
                 HStack {
                     Text(L("最近")).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                     Spacer()
-                    Button(L("查看全部")) { page = .history }
+                    Button(L("查看全部")) { navigation.open("history") }
                         .buttonStyle(.plain).font(.caption).foregroundStyle(theme.accent)
                 }
                 .padding(.bottom, 6)

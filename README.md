@@ -15,7 +15,7 @@
 
 运行组件已随 App 提供，本地模式首次使用只需授权和下载模型；也可自行配置 API 服务，无需自行安装 Python、MLX 或配置命令行环境。
 
-当前正式版本：**0.1.25（构建 27）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
+当前正式版本：**0.1.26（构建 28）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
 
 ## 60 秒了解语落
 
@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 
 ## 安装与开始使用
 
-1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.25-macOS-arm64.dmg`。
+1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.26-macOS-arm64.dmg`。
    已安装 0.1.22 或更高版本时，也可在语落菜单或“使用方法”中点击“检查更新…”，按提示安装并重新启动。
 2. 打开安装盘，将 **VoxInk** 拖入 **应用程序**；更新前先退出旧版。
 3. 打开 App，按首次引导选择本机或远程输入，允许麦克风和文字写入权限，下载识别模型或配置 API 转写。
@@ -107,7 +107,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 - 历史原文对照与清理、词库搜索和删除撤销尚待完善；闲置释放后的预热提示可能滞后。
 - 尚未完成所有机型、干净系统首次安装和长期设备切换测试。当前版本直接分发，未在 Mac App Store 发布。
 
-改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.25 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.25)。
+改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.26 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.26)。
 
 ## 从源码构建
 

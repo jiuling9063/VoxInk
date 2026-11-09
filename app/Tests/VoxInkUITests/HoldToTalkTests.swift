@@ -255,6 +255,10 @@ private actor HoldTranscriber: TranscriptionService {
         #expect(recorder.stops == 1)
         #expect(paste.texts == ["软件平台，English 123。"])
         #expect(store.rawTranscript == "軟體平台，English 123。")
+        store.pasteAgain(original: true)
+        while !store.canStart { await Task.yield() }
+        #expect(paste.texts == ["软件平台，English 123。", "軟體平台，English 123。"])
+        #expect(store.transcript == "软件平台，English 123。")
     }
 
     @Test func releaseWhilePermissionPendingNeverStartsLateRecording() async {

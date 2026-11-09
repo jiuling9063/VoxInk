@@ -29,8 +29,8 @@ public enum ShortcutMode: String, CaseIterable, Sendable {
     }
     public var instruction: String {
         switch self {
-        case .holdToTalk: L("按住 ⌥ Space 录音，松开后识别并写入；Esc 取消。")
-        case .toggle: L("按 ⌥ Space 录音，再按结束并写入；Esc 取消。")
+        case .holdToTalk: L("按住 ⌥ Space 录音，松开后识别并写入。")
+        case .toggle: L("按 ⌥ Space 录音，再按结束并写入。")
         }
     }
 }
