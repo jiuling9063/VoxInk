@@ -14,14 +14,13 @@ final class UpdateUITests: XCTestCase {
         let previousPID = try XCTUnwrap(NSRunningApplication.runningApplications(
             withBundleIdentifier: "local.voxink.preview").first?.processIdentifier)
         app.activate()
-        let help = button(app, titles: ["使用方法", "How to use"])
-        XCTAssertTrue(help.waitForExistence(timeout: 30))
-        help.click()
-        let check = app.buttons.matching(NSPredicate(
-            format: "label IN %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@",
-            ["检查更新…", "Check for Updates…"], "更新到 ", "Update to "
+        let statusItem = app.descendants(matching: .statusItem).firstMatch
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 30), app.debugDescription)
+        statusItem.click()
+        let check = app.menuItems.matching(NSPredicate(
+            format: "title IN %@", ["检查更新…", "Check for Updates…"]
         )).firstMatch
-        XCTAssertTrue(check.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertTrue(check.waitForExistence(timeout: 10), app.debugDescription)
         check.click()
 
         let install = button(app, titles: ["安装更新", "Install Update"])
