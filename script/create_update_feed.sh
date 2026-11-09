@@ -18,5 +18,5 @@ trap 'rm -rf "$stage"' EXIT
 ln "$directory/$image" "$stage/$image"
 tag_url="https://github.com/jiuling9063/VoxInk/releases"
 "$tools/generate_appcast" --account local.voxink.preview --maximum-deltas 0 \
-  --download-url-prefix "$tag_url/download/v$version/" --full-release-notes-url "$tag_url/tag/v$version" "$stage"
+  --download-url-prefix "https://jiuling9063.github.io/VoxInk/v$version/" --full-release-notes-url "$tag_url/tag/v$version" "$stage"
 mv "$stage/appcast.xml" "$directory/appcast.xml"

@@ -15,7 +15,7 @@
 
 运行组件已随 App 提供，本地模式首次使用只需授权和下载模型；也可自行配置 API 服务，无需自行安装 Python、MLX 或配置命令行环境。
 
-当前正式版本：**0.1.26（构建 28）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
+当前正式版本：**0.1.27（构建 29）**，通过签名、公证的 DMG 直接分发。源码和正式安装包通过本仓库公开提供。
 
 ## 60 秒了解语落
 
@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 
 ## 安装与开始使用
 
-1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.26-macOS-arm64.dmg`。
+1. 从 [Releases](https://github.com/jiuling9063/VoxInk/releases/latest) 下载 `VoxInk-0.1.27-macOS-arm64.dmg`。
    已安装 0.1.22 或更高版本时，也可在语落菜单或“使用方法”中点击“检查更新…”，按提示安装并重新启动。
 2. 打开安装盘，将 **VoxInk** 拖入 **应用程序**；更新前先退出旧版。
 3. 打开 App，按首次引导选择本机或远程输入，允许麦克风和文字写入权限，下载识别模型或配置 API 转写。
@@ -107,7 +107,7 @@ https://github.com/user-attachments/assets/45cf0fa3-303b-4480-aefd-215ef05ab800
 - 历史原文对照与清理、词库搜索和删除撤销尚待完善；闲置释放后的预热提示可能滞后。
 - 尚未完成所有机型、干净系统首次安装和长期设备切换测试。当前版本直接分发，未在 Mac App Store 发布。
 
-改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.26 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.26)。
+改进依据见 [项目复盘](docs/项目复盘-2026-09-26.md)，本版安装包与校验清单见 [0.1.27 发布页](https://github.com/jiuling9063/VoxInk/releases/tag/v0.1.27)。
 
 ## 从源码构建
 
@@ -177,4 +177,4 @@ plans/                  阶段性方案与历史计划
 
 ### 发布应用内更新
 
-签名、公证并装订最终 DMG 后，运行 `script/create_update_feed.sh /路径/VoxInk-版本号-macOS-arm64.dmg`。使用自定义 Swift 构建目录时，传入与打包一致的 `VOXINK_APP_BUILD`。脚本使用 Sparkle 工具和钥匙串中的 `local.voxink.preview` 更新签名账户，生成绑定该安装包的签名清单。将同目录的 `appcast.xml`、DMG 和 `SHA256SUMS.txt` 一起上传到对应版本的 GitHub Release，再发布为 Latest。后续版本沿用更新公钥并递增构建号。
+签名、公证并装订最终 DMG 后，运行 `script/create_update_feed.sh /路径/VoxInk-版本号-macOS-arm64.dmg`。使用自定义 Swift 构建目录时，传入与打包一致的 `VOXINK_APP_BUILD`。脚本使用 Sparkle 工具和钥匙串中的 `local.voxink.preview` 更新签名账户，生成绑定该安装包的签名清单。将同目录的 `appcast.xml`、DMG 和 `SHA256SUMS.txt` 一起上传到草稿。以正式版发布并创建版本标签，先保留上一版为 Latest（`gh release edit v版本 --draft=false --latest=false`）。标签触发的 `Publish update site` 会校验文件，并将清单及最近两个版本的安装包部署到 GitHub Pages。部署成功后确认公开清单和安装包可下载，再设为 Latest（`gh release edit v版本 --latest`），让使用旧清单地址的 0.1.22–0.1.26 也能看到更新。后续版本沿用更新公钥并递增构建号。

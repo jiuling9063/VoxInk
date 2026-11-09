@@ -1,0 +1,42 @@
+name: Publish update site
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+concurrency:
+  group: sparkle-update-site
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Stage signed feed and versioned DMGs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 script/stage_update_site.py "$GITHUB_REF_NAME" "$RUNNER_TEMP/update-site"
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/update-site
+
+  deploy:
+    needs: stage
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy verified update site
+        id: deployment
+        uses: actions/deploy-pages@v4

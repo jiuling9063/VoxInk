@@ -122,12 +122,12 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>语落 VoxInk</string>
 <key>CFBundleIconFile</key><string>VoxInk.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.26</string>
-<key>CFBundleVersion</key><string>28</string>
+<key>CFBundleShortVersionString</key><string>0.1.27</string>
+<key>CFBundleVersion</key><string>29</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>SUFeedURL</key><string>https://github.com/jiuling9063/VoxInk/releases/latest/download/appcast.xml</string>
+<key>SUFeedURL</key><string>https://jiuling9063.github.io/VoxInk/appcast.xml</string>
 <key>SUPublicEDKey</key><string>to96OjjneqewteCgjFHaWAI/QnkPuvKKx5CuBMg/jKY=</string>
 <key>SURequireSignedFeed</key><true/>
 <key>SUVerifyUpdateBeforeExtraction</key><true/>
