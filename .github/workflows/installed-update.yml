@@ -1,0 +1,68 @@
+name: Test installed update
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ui-upgrade-2026-11-07]
+    paths:
+      - .github/workflows/installed-update.yml
+      - script/update-smoke/**
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    runs-on: macos-15
+    timeout-minutes: 18
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install the preceding public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh release view --json tagName --jq .tagName)"
+          old="$(gh release list --limit 50 --json tagName,isDraft,isPrerelease | python3 -c '
+          import json,sys
+          versions = [r["tagName"] for r in json.load(sys.stdin) if not r["isDraft"] and not r["isPrerelease"]]
+          key = lambda tag: tuple(map(int, tag.removeprefix("v").split(".")))
+          print(max((v for v in versions if key(v) < key(sys.argv[1])), key=key))' "$tag")"
+          echo "EXPECTED_VERSION=${tag#v}" >> "$GITHUB_ENV"
+          cd "$RUNNER_TEMP"
+          image="VoxInk-${old#v}-macOS-arm64.dmg"
+          gh release download "$old" -R "$GITHUB_REPOSITORY" -p "$image" -p SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+          mkdir old-release
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/old-release" "$image"
+          ditto old-release/VoxInk.app /Applications/VoxInk.app
+          hdiutil detach "$RUNNER_TEMP/old-release"
+          codesign --verify --deep --strict /Applications/VoxInk.app
+          test "$(plutil -extract CFBundleShortVersionString raw /Applications/VoxInk.app/Contents/Info.plist)" = "${old#v}"
+          echo "Testing $old -> $tag"
+      - name: Click Check for Updates in the installed app
+        run: |
+          set -euo pipefail
+          open -a /Applications/VoxInk.app voxink://help
+          cd script/update-smoke
+          xcodegen generate
+          xcodebuild test -project VoxInkUpdateSmoke.xcodeproj -scheme 'Installed Update' \
+            -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO \
+            -resultBundlePath "$RUNNER_TEMP/update.xcresult"
+      - name: Verify installed version and signature
+        run: |
+          set -eu
+          app=/Applications/VoxInk.app
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$EXPECTED_VERSION"
+          codesign --verify --deep --strict -R='anchor apple generic and certificate leaf[subject.OU] = "4DT4YN93G2"' "$app"
+          xcrun stapler validate "$app"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-update-result
+          path: ${{ runner.temp }}/update.xcresult
+          retention-days: 5

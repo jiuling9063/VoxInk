@@ -1,0 +1,19 @@
+name: VoxInkUpdateSmoke
+options:
+  bundleIdPrefix: local.voxink.qa
+targets:
+  UpdateUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources: [UpdateUITests.swift]
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      CODE_SIGN_IDENTITY: "-"
+schemes:
+  Installed Update:
+    build:
+      targets:
+        UpdateUITests: [test]
+    test:
+      targets: [UpdateUITests]
