@@ -49,6 +49,7 @@ jobs:
           set -euo pipefail
           open -a /Applications/VoxInk.app voxink://help
           cd script/update-smoke
+          command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate
           xcodebuild test -project VoxInkUpdateSmoke.xcodeproj -scheme 'Installed Update' \
             -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO \
